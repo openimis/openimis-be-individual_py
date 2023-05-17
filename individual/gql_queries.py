@@ -13,8 +13,8 @@ class IndividualGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact"],
-            "first_name": ["exact"],
-            "last_name": ["exact"],
+            "first_name": ["exact", "iexact", "startswith", "istartswith", "contains", "icontains"],
+            "last_name": ["exact", "iexact", "startswith", "istartswith", "contains", "icontains"],
             "dob": ["exact", "lt", "lte", "gt", "gte"],
 
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
