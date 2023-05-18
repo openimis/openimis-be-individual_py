@@ -1,12 +1,14 @@
 import graphene
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationMixin, BaseMutation, \
     BaseHistoryModelUpdateMutationMixin, BaseHistoryModelCreateMutationMixin
 from core.schema import OpenIMISMutation
 from individual.apps import IndividualConfig
 from individual.models import Individual
+from individual.services import IndividualService
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -34,6 +36,16 @@ class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation
                 IndividualConfig.gql_individual_create_perms):
             raise ValidationError("mutation.authentication_required")
 
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = IndividualService(user)
+        service.create(data)
+
     class Input(CreateIndividualInputType):
         pass
 
@@ -48,6 +60,18 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
         if type(user) is AnonymousUser or not user.id or not user.has_perms(
                 IndividualConfig.gql_individual_update_perms):
             raise ValidationError("mutation.authentication_required")
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "date_valid_to" not in data:
+            data['date_valid_to'] = None
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = IndividualService(user)
+        service.update(data)
 
     class Input(UpdateIndividualInputType):
         pass
@@ -64,5 +88,20 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
                 IndividualConfig.gql_individual_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = IndividualService(user)
+
+        ids = data.get('ids')
+        if ids:
+            with transaction.atomic():
+                for id in ids:
+                    service.delete({'id': id})
+
     class Input(OpenIMISMutation.Input):
-        uuids = graphene.List(graphene.UUID)
+        ids = graphene.List(graphene.UUID)
