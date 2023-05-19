@@ -3,10 +3,12 @@ This repository holds the files of the openIMIS Backend Individual reference mod
 It is dedicated to be deployed as a module of [openimis-be_py](https://github.com/openimis/openimis-be_py).
 
 ## ORM mapping:
-* tblIndividual > Individual
+* individual_individual, individual_historicalindividual > Individual
+* individual_individualdataSource, individual_historicalindividualdataSource > IndividualDataSource
 
 ## GraphQl Queries
 * individual
+* individualDataSource
 
 ## GraphQL Mutations - each mutation emits default signals and return standard error lists (cfr. openimis-be-core_py)
 * createIndividual

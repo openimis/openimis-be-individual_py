@@ -15,9 +15,6 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
     first_name = graphene.String(required=True, max_length=255)
     last_name = graphene.String(required=True, max_length=255)
     dob = graphene.Date(required=True)
-
-    date_valid_from = graphene.Date(required=False)
-    date_valid_to = graphene.Date(required=False)
     json_ext = graphene.types.json.JSONString(required=False)
 
 

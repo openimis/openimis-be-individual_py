@@ -1,14 +1,19 @@
 from django.db import models
 
 import core
-from core.models import HistoryBusinessModel
+from core.models import HistoryModel
 
 
-class Individual(HistoryBusinessModel):
-    first_name = models.CharField(db_column='FirstName', max_length=255, null=False)
-    last_name = models.CharField(db_column='LastName', max_length=255, null=False)
-    dob = core.fields.DateField(db_column='Dob', null=False)
+class Individual(HistoryModel):
+    first_name = models.CharField(max_length=255, null=False)
+    last_name = models.CharField(max_length=255, null=False)
+    dob = core.fields.DateField(null=False)
 
     class Meta:
         managed = True
-        db_table = 'tblIndividual'
+
+
+class IndividualDataSource(HistoryModel):
+    source_name = models.CharField(max_length=255, null=False)
+    source_type = models.CharField(max_length=255, null=False)
+    individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
