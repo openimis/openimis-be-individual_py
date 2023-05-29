@@ -1,7 +1,7 @@
 import graphene
 from graphene_django import DjangoObjectType
 
-from core import ExtendedConnection
+from core import prefix_filterset, ExtendedConnection
 from individual.models import Individual, IndividualDataSource
 
 
@@ -40,6 +40,6 @@ class IndividualDataSourceGQLType(DjangoObjectType):
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
-            "individual__uuid": ["exact"]
+            **prefix_filterset("individual__", IndividualGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
