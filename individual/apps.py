@@ -5,6 +5,10 @@ DEFAULT_CONFIG = {
     "gql_individual_create_perms": ["159002"],
     "gql_individual_update_perms": ["159003"],
     "gql_individual_delete_perms": ["159004"],
+    "gql_group_search_perms": ["180001"],
+    "gql_group_create_perms": ["180002"],
+    "gql_group_update_perms": ["180003"],
+    "gql_group_delete_perms": ["180004"],
 }
 
 
@@ -16,6 +20,10 @@ class IndividualConfig(AppConfig):
     gql_individual_create_perms = None
     gql_individual_update_perms = None
     gql_individual_delete_perms = None
+    gql_group_search_perms = None
+    gql_group_create_perms = None
+    gql_group_update_perms = None
+    gql_group_delete_perms = None
 
     def ready(self):
         from core.models import ModuleConfiguration
