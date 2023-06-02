@@ -8,7 +8,7 @@ from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation
-from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType
+from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual
 import graphene_django_optimizer as gql_optimizer
 
