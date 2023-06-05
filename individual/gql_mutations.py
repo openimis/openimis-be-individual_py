@@ -8,7 +8,8 @@ from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationM
 from core.schema import OpenIMISMutation
 from individual.apps import IndividualConfig
 from individual.models import Individual, Group, GroupIndividual
-from individual.services import IndividualService, GroupService, GroupIndividualService
+from individual.services import IndividualService, GroupService, GroupIndividualService, \
+    GroupFromMultipleIndividualsService
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -306,7 +307,7 @@ class CreateGroupFromMultipleIndividualsMutation(BaseHistoryModelCreateMutationM
         if "client_mutation_label" in data:
             data.pop('client_mutation_label')
 
-        service = GroupService(user)
+        service = GroupFromMultipleIndividualsService(user)
         service.create(data)
 
     class Input(CreateGroupInputType):

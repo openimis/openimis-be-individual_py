@@ -7,7 +7,7 @@ from core.utils import append_validity_filter
 from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
-    UpdateGroupIndividualMutation, DeleteGroupIndividualMutation
+    UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, CreateGroupFromMultipleIndividualsMutation
 from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual
 import graphene_django_optimizer as gql_optimizer
@@ -34,7 +34,9 @@ class Query:
         dateValidFrom__Gte=graphene.DateTime(),
         dateValidTo__Lte=graphene.DateTime(),
         applyDefaultValidityFilter=graphene.Boolean(),
-        client_mutation_id=graphene.String()
+        client_mutation_id=graphene.String(),
+        first_name=graphene.String(),
+        last_name=graphene.String()
     )
 
     group_individual = OrderedDjangoFilterConnectionField(
@@ -80,6 +82,14 @@ class Query:
         if client_mutation_id:
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
 
+        first_name = kwargs.get("first_name", None)
+        if first_name:
+            filters.append(Q(groupindividual__individual__first_name__icontains=first_name))
+
+        last_name = kwargs.get("last_name", None)
+        if last_name:
+            filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
+
         query = Group.objects.filter(*filters)
         return gql_optimizer.query(query, info)
 
@@ -114,3 +124,5 @@ class Mutation(graphene.ObjectType):
     add_individual_to_group = CreateGroupIndividualMutation.Field()
     edit_individual_in_group = UpdateGroupIndividualMutation.Field()
     remove_individual_from_group = DeleteGroupIndividualMutation.Field()
+
+    create_group_from_multiple_individuals = CreateGroupFromMultipleIndividualsMutation.Field()
