@@ -123,7 +123,7 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
 
 class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
     _mutation_class = "CreateGroupMutation"
-    _mutation_module = "social_protection"
+    _mutation_module = "individual"
     _model = Group
 
     @classmethod
@@ -148,7 +148,7 @@ class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
 
 class UpdateGroupMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
     _mutation_class = "UpdateGroupMutation"
-    _mutation_module = "social_protection"
+    _mutation_module = "individual"
     _model = Group
 
     @classmethod
@@ -206,7 +206,7 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
 
 class CreateGroupIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
     _mutation_class = "CreateGroupIndividualMutation"
-    _mutation_module = "social_protection"
+    _mutation_module = "individual"
     _model = GroupIndividual
 
     @classmethod
@@ -231,7 +231,7 @@ class CreateGroupIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMut
 
 class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
     _mutation_class = "UpdateGroupIndividualMutation"
-    _mutation_module = "social_protection"
+    _mutation_module = "individual"
     _model = GroupIndividual
 
     @classmethod
@@ -259,7 +259,7 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
 
 class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
     _mutation_class = "DeleteGroupIndividualMutation"
-    _mutation_module = "social_protection"
+    _mutation_module = "individual"
     _model = GroupIndividual
 
     @classmethod
@@ -285,3 +285,29 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)
+
+
+class CreateGroupFromMultipleIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
+    _mutation_class = "CreateGroupFromMultipleIndividualsMutation"
+    _mutation_module = "individual"
+    _model = Group
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+                IndividualConfig.gql_group_create_perms):
+            raise ValidationError("mutation.authentication_required")
+
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = GroupService(user)
+        service.create(data)
+
+    class Input(CreateGroupInputType):
+        individual_ids = graphene.List(graphene.UUID)

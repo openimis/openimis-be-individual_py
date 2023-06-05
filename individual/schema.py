@@ -111,6 +111,6 @@ class Mutation(graphene.ObjectType):
     update_group = UpdateGroupMutation.Field()
     delete_group = DeleteGroupMutation.Field()
 
-    create_group_individual = CreateGroupIndividualMutation.Field()
-    update_group_individual = UpdateGroupIndividualMutation.Field()
-    delete_group_individual = DeleteGroupIndividualMutation.Field()
+    add_individual_to_group = CreateGroupIndividualMutation.Field()
+    edit_individual_in_group = UpdateGroupIndividualMutation.Field()
+    remove_individual_from_group = DeleteGroupIndividualMutation.Field()
