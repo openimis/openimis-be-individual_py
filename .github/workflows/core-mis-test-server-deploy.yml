@@ -1,4 +1,4 @@
-name: Dispatched Workflow
+name: CoreMIS Server Deployment
 on:
   push:
     branches:
