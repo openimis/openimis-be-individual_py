@@ -8,8 +8,7 @@ from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationM
 from core.schema import OpenIMISMutation
 from individual.apps import IndividualConfig
 from individual.models import Individual, Group, GroupIndividual
-from individual.services import IndividualService, GroupService, GroupIndividualService, \
-    GroupFromMultipleIndividualsService
+from individual.services import IndividualService, GroupService, GroupIndividualService
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -288,8 +287,8 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
         ids = graphene.List(graphene.UUID)
 
 
-class CreateGroupFromMultipleIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
-    _mutation_class = "CreateGroupFromMultipleIndividualsMutation"
+class CreateGroupIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
+    _mutation_class = "CreateGroupIndividualsMutation"
     _mutation_module = "individual"
     _model = Group
 
@@ -299,7 +298,6 @@ class CreateGroupFromMultipleIndividualsMutation(BaseHistoryModelCreateMutationM
                 IndividualConfig.gql_group_create_perms):
             raise ValidationError("mutation.authentication_required")
 
-
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -307,8 +305,8 @@ class CreateGroupFromMultipleIndividualsMutation(BaseHistoryModelCreateMutationM
         if "client_mutation_label" in data:
             data.pop('client_mutation_label')
 
-        service = GroupFromMultipleIndividualsService(user)
-        service.create(data)
+        service = GroupService(user)
+        service.create_group_individuals(data)
 
     class Input(CreateGroupInputType):
         individual_ids = graphene.List(graphene.UUID)

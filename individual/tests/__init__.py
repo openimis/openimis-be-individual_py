@@ -1,4 +1,3 @@
 from .individual_service_test import IndividualServiceTest
 from .group_service_test import GroupServiceTest
 from .group_individual_service_test import GroupIndividualServiceTest
-from .group_from_multiple_individuals_service_test import GroupFromMultipleIndividualsServiceTest
