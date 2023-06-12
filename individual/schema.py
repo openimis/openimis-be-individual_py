@@ -7,7 +7,7 @@ from core.utils import append_validity_filter
 from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
-    UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, CreateGroupFromMultipleIndividualsMutation, \
+    UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation
 from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual
