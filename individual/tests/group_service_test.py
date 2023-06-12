@@ -1,0 +1,106 @@
+import copy
+
+from django.test import TestCase
+
+from individual.models import Group, Individual, GroupIndividual
+from individual.services import GroupService
+from individual.tests.data import service_group_update_payload, service_add_individual_payload
+from individual.tests.helpers import LogInHelper
+
+
+class GroupServiceTest(TestCase):
+    user = None
+    service = None
+    query_all = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        cls.user = LogInHelper().get_or_create_user_api()
+        cls.service = GroupService(cls.user)
+        cls.query_all = Group.objects.filter(is_deleted=False)
+        cls.payload = {}
+        cls.group_individual_query_all = GroupIndividual.objects.filter(is_deleted=False)
+        cls.individual1 = cls.__create_individual()
+        cls.individual2 = cls.__create_individual()
+        cls.payload_individuals = {
+            'individual_ids': [cls.individual1.id, cls.individual2.id]
+        }
+        cls.payload_individuals1 = {
+            'individual_ids': [cls.individual1.id, cls.individual2.id]
+        }
+        cls.payload_individuals2 = {
+            'individual_ids': [cls.individual1.id]
+        }
+
+    def test_add_group(self):
+        result = self.service.create(self.payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        self.assertEqual(query.count(), 1)
+
+    def test_update_group(self):
+        result = self.service.create(self.payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid')
+        update_payload = copy.deepcopy(service_group_update_payload)
+        update_payload['id'] = uuid
+        result = self.service.update(update_payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        query = self.query_all.filter(uuid=uuid)
+        self.assertEqual(query.count(), 1)
+        self.assertEqual(query.first().date_created, update_payload.get('date_created'))
+
+    def test_delete_group(self):
+        result = self.service.create(self.payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid')
+        delete_payload = {'id': uuid}
+        result = self.service.delete(delete_payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        query = self.query_all.filter(uuid=uuid)
+        self.assertEqual(query.count(), 0)
+
+    def test_create_group_individuals(self):
+        result = self.service.create_group_individuals(self.payload_individuals)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        group = query.first()
+        self.assertEqual(query.count(), 1)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 2)
+
+    def test_update_group_individuals(self):
+        result = self.service.create_group_individuals(self.payload_individuals1)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        group = query.first()
+        self.assertEqual(query.count(), 1)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 2)
+        uuid = result.get('data', {}).get('uuid')
+        update_payload = copy.deepcopy(self.payload_individuals2)
+        update_payload['id'] = uuid
+        update_result = self.service.update_group_individuals(update_payload)
+        self.assertTrue(update_result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        group = query.first()
+        self.assertEqual(query.count(), 1)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 1)
+
+    @classmethod
+    def __create_individual(cls):
+        object_data = {
+            **service_add_individual_payload
+        }
+
+        individual = Individual(**object_data)
+        individual.save(username=cls.user.username)
+
+        return individual
