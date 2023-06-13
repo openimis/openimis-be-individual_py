@@ -19,7 +19,8 @@ class Query:
         IndividualGQLType,
         orderBy=graphene.List(of_type=graphene.String),
         applyDefaultValidityFilter=graphene.Boolean(),
-        client_mutation_id=graphene.String()
+        client_mutation_id=graphene.String(),
+        groupId=graphene.String()
     )
 
     individual_data_source = OrderedDjangoFilterConnectionField(
@@ -55,6 +56,10 @@ class Query:
         client_mutation_id = kwargs.get("client_mutation_id")
         if client_mutation_id:
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        group_id = kwargs.get("group_id")
+        if group_id:
+            filters.append(Q(groupindividual__group__id=group_id))
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
