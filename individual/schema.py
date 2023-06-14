@@ -37,7 +37,8 @@ class Query:
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String(),
         first_name=graphene.String(),
-        last_name=graphene.String()
+        last_name=graphene.String(),
+        search_id=graphene.String()
     )
 
     group_individual = OrderedDjangoFilterConnectionField(
@@ -90,6 +91,10 @@ class Query:
         last_name = kwargs.get("last_name", None)
         if last_name:
             filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
+
+        search_id = kwargs.get("search_id", None)
+        if search_id:
+            filters.append(Q(id__icontains=search_id))
 
         query = Group.objects.filter(*filters)
         return gql_optimizer.query(query, info)
