@@ -16,11 +16,11 @@ from individual.models import Individual, IndividualDataSource, Group, GroupIndi
 import graphene_django_optimizer as gql_optimizer
 
 
-def patch_details(group_df: pd.DataFrame):
+def patch_details(data_df: pd.DataFrame):
     # Transform extension to DF columns
-    df_unfolded = pd.json_normalize(group_df['json_ext'])
+    df_unfolded = pd.json_normalize(data_df['json_ext'])
     # Merge unfolded DataFrame with the original DataFrame
-    df_final = pd.concat([group_df, df_unfolded], axis=1)
+    df_final = pd.concat([data_df, df_unfolded], axis=1)
     df_final = df_final.drop('json_ext', axis=1)
     return df_final
 
@@ -29,9 +29,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     export_patches = {
         'group': [
             patch_details
+        ],
+        'individual': [
+            patch_details
         ]
     }
-    exportable_fields = ['group']
+    exportable_fields = ['group', 'individual']
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
         orderBy=graphene.List(of_type=graphene.String),
