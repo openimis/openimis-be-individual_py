@@ -1,7 +1,9 @@
 import graphene
+import pandas as pd
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
 
+from core.gql.export_mixin import ExportableQueryMixin
 from core.schema import OrderedDjangoFilterConnectionField
 from core.utils import append_validity_filter
 from individual.apps import IndividualConfig
@@ -14,7 +16,25 @@ from individual.models import Individual, IndividualDataSource, Group, GroupIndi
 import graphene_django_optimizer as gql_optimizer
 
 
-class Query:
+def patch_details(data_df: pd.DataFrame):
+    # Transform extension to DF columns
+    df_unfolded = pd.json_normalize(data_df['json_ext'])
+    # Merge unfolded DataFrame with the original DataFrame
+    df_final = pd.concat([data_df, df_unfolded], axis=1)
+    df_final = df_final.drop('json_ext', axis=1)
+    return df_final
+
+
+class Query(ExportableQueryMixin, graphene.ObjectType):
+    export_patches = {
+        'group': [
+            patch_details
+        ],
+        'individual': [
+            patch_details
+        ]
+    }
+    exportable_fields = ['group', 'individual']
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
         orderBy=graphene.List(of_type=graphene.String),
