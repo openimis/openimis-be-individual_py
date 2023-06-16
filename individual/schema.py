@@ -77,7 +77,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if client_mutation_id:
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
 
-        group_id = kwargs.get("group_id")
+        group_id = kwargs.get("groupId")
         if group_id:
             filters.append(Q(groupindividual__group__id=group_id))
 
