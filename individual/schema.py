@@ -116,7 +116,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if last_name:
             filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
 
-        query = Group.objects.filter(*filters)
+        query = Group.objects.filter(*filters).distinct()
         return gql_optimizer.query(query, info)
 
     def resolve_group_individual(self, info, **kwargs):
