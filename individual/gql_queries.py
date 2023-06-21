@@ -33,6 +33,7 @@ class IndividualDataSourceUploadGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact"],
+            "status": ["iexact", "istartswith", "icontains"],
             "source_type": ["iexact", "istartswith", "icontains"],
             "source_name": ["iexact", "istartswith", "icontains"],
 
