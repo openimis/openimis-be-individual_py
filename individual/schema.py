@@ -16,7 +16,6 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
 from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
-import graphene_django_optimizer as gql_optimizer
 
 
 def patch_details(data_df: pd.DataFrame):
