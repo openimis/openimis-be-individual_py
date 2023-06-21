@@ -1,8 +1,10 @@
 import graphene
+import graphene_django_optimizer as gql_optimizer
 import pandas as pd
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
 
+from core.custom_filters import CustomFilterWizardStorage
 from core.gql.export_mixin import ExportableQueryMixin
 from core.schema import OrderedDjangoFilterConnectionField
 from core.utils import append_validity_filter
@@ -36,12 +38,17 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         ]
     }
     exportable_fields = ['group', 'individual']
+    module_name = "social_protection"
+    object_type = "BenefitPlan"
+    related_field = "beneficiary"
+
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
         orderBy=graphene.List(of_type=graphene.String),
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String(),
-        groupId=graphene.String()
+        groupId=graphene.String(),
+        customFilters=graphene.List(of_type=graphene.String)
     )
 
     individual_data_source = OrderedDjangoFilterConnectionField(
@@ -66,7 +73,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String(),
         first_name=graphene.String(),
-        last_name=graphene.String()
+        last_name=graphene.String(),
+        customFilters=graphene.List(of_type=graphene.String)
     )
 
     group_individual = OrderedDjangoFilterConnectionField(
@@ -92,6 +100,15 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
         query = Individual.objects.filter(*filters)
+        custom_filters = kwargs.get("customFilters", None)
+        if custom_filters:
+            query = CustomFilterWizardStorage.build_custom_filters_queryset(
+                Query.module_name,
+                Query.object_type,
+                custom_filters,
+                query,
+                relation=Query.related_field
+            )
         return gql_optimizer.query(query, info)
 
     def resolve_individual_data_source(self, info, **kwargs):
@@ -136,7 +153,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if last_name:
             filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
 
-        query = Group.objects.filter(*filters)
+        query = Group.objects.filter(*filters).distinct()
         return gql_optimizer.query(query, info)
 
     def resolve_group_individual(self, info, **kwargs):
