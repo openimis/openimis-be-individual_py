@@ -13,10 +13,15 @@ class Individual(HistoryModel):
         managed = True
 
 
-class IndividualDataSource(HistoryModel):
+class IndividualDataSourceUpload(HistoryModel):
     source_name = models.CharField(max_length=255, null=False)
     source_type = models.CharField(max_length=255, null=False)
     individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
+
+
+class IndividualDataSource(HistoryModel):
+    individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
+    upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=True)
 
 
 class Group(HistoryModel):
