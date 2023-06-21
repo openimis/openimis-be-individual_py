@@ -9,6 +9,8 @@ class Individual(HistoryModel):
     last_name = models.CharField(max_length=255, null=False)
     dob = core.fields.DateField(null=False)
 
+    json_ext = models.JSONField(db_column="Json_ext", default=dict)
+
     class Meta:
         managed = True
 
@@ -20,7 +22,7 @@ class IndividualDataSource(HistoryModel):
 
 
 class Group(HistoryModel):
-    pass
+    json_ext = models.JSONField(db_column="Json_ext", default=dict)
 
 
 class GroupIndividual(HistoryModel):
