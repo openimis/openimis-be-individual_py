@@ -2,7 +2,7 @@ import graphene
 from graphene_django import DjangoObjectType
 
 from core import prefix_filterset, ExtendedConnection
-from individual.models import Individual, IndividualDataSource, Group, GroupIndividual
+from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
 
 
 class IndividualGQLType(DjangoObjectType):
@@ -25,6 +25,26 @@ class IndividualGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
+class IndividualDataSourceUploadGQLType(DjangoObjectType):
+    uuid = graphene.String(source='uuid')
+
+    class Meta:
+        model = IndividualDataSourceUpload
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "status": ["iexact", "istartswith", "icontains"],
+            "source_type": ["iexact", "istartswith", "icontains"],
+            "source_name": ["iexact", "istartswith", "icontains"],
+
+            "date_created": ["exact", "lt", "lte", "gt", "gte"],
+            "date_updated": ["exact", "lt", "lte", "gt", "gte"],
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+
 class IndividualDataSourceGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
@@ -33,14 +53,13 @@ class IndividualDataSourceGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact"],
-            "source_type": ["iexact", "istartswith", "icontains"],
-            "source_name": ["iexact", "istartswith", "icontains"],
 
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
             **prefix_filterset("individual__", IndividualGQLType._meta.filter_fields),
+            **prefix_filterset("upload__", IndividualDataSourceUploadGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 
