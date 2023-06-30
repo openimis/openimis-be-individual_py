@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from core.datetimes.ad_datetime import datetime
+from individual.models import GroupIndividual
 
 service_add_individual_payload = {
     'first_name': 'TestFN',
@@ -30,4 +31,8 @@ service_update_individual_payload = {
 
 service_group_update_payload = {
     "date_created": datetime.now() - timedelta(days=1)
+}
+
+service_group_individual_payload = {
+    "role": GroupIndividual.Role.HEAD
 }

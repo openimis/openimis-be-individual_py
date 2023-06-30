@@ -44,5 +44,12 @@ class Group(HistoryModel):
 
 
 class GroupIndividual(HistoryModel):
+    class Role(models.TextChoices):
+        HEAD = 'HEAD', _('HEAD')
+        RECIPIENT = 'RECIPIENT', _('RECIPIENT')
+
     group = models.ForeignKey(Group, models.DO_NOTHING)
     individual = models.ForeignKey(Individual, models.DO_NOTHING)
+    role = models.CharField(max_length=255, choices=Role.choices, default=Role.RECIPIENT)
+
+    json_ext = models.JSONField(db_column="Json_ext", default=dict)
