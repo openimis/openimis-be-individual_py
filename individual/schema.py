@@ -34,9 +34,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         ],
         'individual': [
             patch_details
+        ],
+        'group_individual': [
+            patch_details
         ]
     }
-    exportable_fields = ['group', 'individual']
+    exportable_fields = ['group', 'individual', 'group_individual']
     module_name = "social_protection"
     object_type = "BenefitPlan"
     related_field = "beneficiary"

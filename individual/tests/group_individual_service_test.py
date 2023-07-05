@@ -2,7 +2,7 @@ from django.test import TestCase
 
 from individual.models import Individual, GroupIndividual, Group
 from individual.services import GroupIndividualService
-from individual.tests.data import service_add_individual_payload
+from individual.tests.data import service_add_individual_payload, service_group_individual_payload
 
 from individual.tests.helpers import LogInHelper
 
@@ -23,6 +23,7 @@ class GroupIndividualServiceTest(TestCase):
         cls.individual1 = cls.__create_individual()
         cls.individual2 = cls.__create_individual()
         cls.payload = {
+            **service_group_individual_payload,
             "individual_id": cls.individual1.id,
             "group_id": cls.group.id,
         }

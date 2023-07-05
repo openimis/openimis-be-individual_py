@@ -30,11 +30,18 @@ class UpdateGroupInputType(CreateGroupInputType):
 
 
 class CreateGroupIndividualInputType(OpenIMISMutation.Input):
-    group_id = graphene.UUID(required=False)
-    benefit_plan_id = graphene.UUID(required=False)
+    class RoleEnum(graphene.Enum):
+        HEAD = GroupIndividual.Role.HEAD
+        RECIPIENT = GroupIndividual.Role.RECIPIENT
+    group_id = graphene.UUID(required=True)
+    individual_id = graphene.UUID(required=True)
+    role = graphene.Field(RoleEnum, required=False)
+
+    def resolve_role(self, info):
+        return self.role
 
 
-class UpdateGroupIndividualInputType(CreateGroupInputType):
+class UpdateGroupIndividualInputType(CreateGroupIndividualInputType):
     id = graphene.UUID(required=True)
 
 
