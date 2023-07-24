@@ -31,8 +31,6 @@ class IndividualDataSourceUpload(HistoryModel):
     status = models.CharField(max_length=255, choices=Status.choices, default=Status.PENDING)
     error = models.JSONField(default=dict)
 
-    individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
-
 
 class IndividualDataSource(HistoryModel):
     individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
