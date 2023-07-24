@@ -15,10 +15,12 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
     first_name = graphene.String(required=True, max_length=255)
     last_name = graphene.String(required=True, max_length=255)
     dob = graphene.Date(required=True)
+    json_ext = graphene.types.json.JSONString(required=False)
 
 
 class UpdateIndividualInputType(CreateIndividualInputType):
     id = graphene.UUID(required=True)
+    json_ext = graphene.types.json.JSONString(required=False)
 
 
 class CreateGroupInputType(OpenIMISMutation.Input):
