@@ -20,7 +20,6 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
 
 class UpdateIndividualInputType(CreateIndividualInputType):
     id = graphene.UUID(required=True)
-    json_ext = graphene.types.json.JSONString(required=False)
 
 
 class CreateGroupInputType(OpenIMISMutation.Input):
