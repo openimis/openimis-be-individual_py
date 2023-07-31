@@ -102,11 +102,15 @@ jobs:
       - name: Debug
         run: |
           ls 
+          echo "------"
           ls openimis
+          echo "------"
           ls openimis/openIMIS
         continue-on-error: True 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: ./openimis/openIMIS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
