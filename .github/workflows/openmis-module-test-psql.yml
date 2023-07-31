@@ -106,11 +106,15 @@ jobs:
           ls openimis
           echo "------"
           ls openimis/openIMIS
-        continue-on-error: True 
+        continue-on-error: True
+      - name: Copy results to module repo 
+        run: | 
+          mv ./openimis/openIMIS/coverage.xml ./current-module/coverage.xml
+          mv ./openimis/openIMIS/flake8-report.txt ./current-module/flake8-report.txt 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         with:
-          projectBaseDir: ./openimis/openIMIS
+          projectBaseDir: ./current-module
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
