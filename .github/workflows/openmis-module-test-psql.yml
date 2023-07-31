@@ -91,6 +91,7 @@ jobs:
           #DEV_SERVER: true
           SITE_ROOT: api
           REMOTE_USER_AUTHENTICATION: True
+          DB_ENGINE: django.db.backends.postgresql
       - name: Coverage results    
         uses: actions/upload-artifact@v3
         with:
