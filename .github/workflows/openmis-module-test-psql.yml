@@ -98,16 +98,11 @@ jobs:
           cat ./openimis/openIMIS/coverage.xml
           mv ./openimis/openIMIS/coverage.xml ./current-module/coverage.xml
           mv ./openimis/openIMIS/flake8-report.txt ./current-module/flake8-report.txt 
-      - name: Coverage results    
+      - name: Persist module    
         uses: actions/upload-artifact@v3
         with:
-          name: coverage.xml
-          path: ./current-module/coverage.xml
-      - name: Flake8 results    
-        uses: actions/upload-artifact@v3
-        with:
-          name: flake8-report.txt
-          path: ./current-module/flake8-report.txt
+          name: module
+          path: ./current-module/
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         with:
