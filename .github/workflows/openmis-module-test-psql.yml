@@ -62,14 +62,11 @@ jobs:
           cat modules-requirements.txt
           pip install -r modules-requirements.txt
       - name: Run Flake8
-        working-directory: ./openimis
-        run: flake8 --format='%(path)s:%(row)d:%(col)d:%(code)s:%(text)s' --output-file=flake8-report.txt || true
-      - name: Flake8 report artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: flake8-report.txt
-          path: ./openimis/flake8-report.txt
-
+        working-directory: ./openimis/openIMIS
+        run: |
+          export MODULE_NAME="$(echo $GITHUB_REPOSITORY | sed 's#^openimis/openimis-be-\(.*\)_py$#\1#')"
+          flake8 ../../current-module/${X}/ --output-file=flake8-report.txt
+        continue-on-error: true
       - name: Django tests
         working-directory: ./openimis/openIMIS
         run: |
@@ -97,10 +94,21 @@ jobs:
         with:
           name: coverage.xml
           path: ./openimis/openIMIS/coverage.xml
+      - name: Flake8 results    
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage.xml
+          path: ./openimis/openIMIS/flake8-report.txt
+      - name: Debug
+        run: |
+          ls 
+          ls openimis
+          ls openimis/openIMIS
+        continue-on-error: True 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         with:
-          projectBaseDir: ./current-module
+          projectBaseDir: ./openIMIS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
