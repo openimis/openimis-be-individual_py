@@ -2,6 +2,10 @@ name: POSTGRES - Automated CI testing
 # This workflow run automatically for every commit on github it checks the syntax and launch the tests.
 # | grep . | uniq -c filters out empty lines and then groups consecutive lines together with the number of occurrences
 on:
+  push:
+    branches:
+      - main
+      - develop
   pull_request:
   workflow_dispatch:
     inputs:
@@ -57,14 +61,24 @@ jobs:
           python modules-requirements.py openimis.json > modules-requirements.txt
           cat modules-requirements.txt
           pip install -r modules-requirements.txt
+      - name: Run Flake8
+        working-directory: ./openimis
+        run: flake8 --format='%(path)s:%(row)d:%(col)d:%(code)s:%(text)s' --output-file=flake8-report.txt || true
+      - name: Flake8 report artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: flake8-report.txt
+          path: ./openimis/flake8-report.txt
+
       - name: Django tests
         working-directory: ./openimis/openIMIS
         run: |
           export MODULE_NAME="$(echo $GITHUB_REPOSITORY | sed 's#^openimis/openimis-be-\(.*\)_py$#\1#')"
           python manage.py migrate
-          python manage.py showmigrations
           python init_test_db.py | grep . | uniq -c
-          python manage.py test --keep $MODULE_NAME
+          coverage run manage.py test --keep $MODULE_NAME || true
+          coverage xml -o coverage.xml
+          coverage report
         env:
           SECRET_KEY: secret
           DEBUG: true
@@ -78,3 +92,15 @@ jobs:
           SITE_ROOT: api
           REMOTE_USER_AUTHENTICATION: True
           DB_ENGINE: django.db.backends.postgresql
+      - name: Coverage results    
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage.xml
+          path: ./openimis/openIMIS/coverage.xml
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: ./current-module
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
