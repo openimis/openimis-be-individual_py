@@ -91,9 +91,10 @@ jobs:
           DB_ENGINE: django.db.backends.postgresql
       - name: Copy results to module repo 
         run: | 
-          export MODULE_NAME="$(echo $GITHUB_REPOSITORY | sed 's#^openimis/openimis-be-\(.*\)_py$#\1#')"
+          MODULE_NAME="individual"
+          REPLACE_STRING="s|/opt/hostedtoolcache/Python/3.8.17/x64/lib/python3.8/site-packages/$MODULE_NAME|/current-module|g"
           # Fix paths for the coverage report, for some reason sonar doesn't handle coverage paths as expected
-          sed -i 's|/opt/hostedtoolcache/Python/3.8.17/x64/lib/python3.8/site-packages/$MODULE_NAME/|/current-module/|g'  ./openimis/openIMIS/coverage.xml
+          sed "$REPLACE_STRING" ./coverage.xml > x.xml
           cat ./openimis/openIMIS/coverage.xml
           mv ./openimis/openIMIS/coverage.xml ./current-module/coverage.xml
           mv ./openimis/openIMIS/flake8-report.txt ./current-module/flake8-report.txt 
