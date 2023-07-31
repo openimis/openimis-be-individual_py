@@ -89,28 +89,20 @@ jobs:
           SITE_ROOT: api
           REMOTE_USER_AUTHENTICATION: True
           DB_ENGINE: django.db.backends.postgresql
-      - name: Coverage results    
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage.xml
-          path: ./openimis/openIMIS/coverage.xml
-      - name: Flake8 results    
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage.xml
-          path: ./openimis/openIMIS/flake8-report.txt
-      - name: Debug
-        run: |
-          ls 
-          echo "------"
-          ls openimis
-          echo "------"
-          ls openimis/openIMIS
-        continue-on-error: True
       - name: Copy results to module repo 
         run: | 
           mv ./openimis/openIMIS/coverage.xml ./current-module/coverage.xml
           mv ./openimis/openIMIS/flake8-report.txt ./current-module/flake8-report.txt 
+      - name: Coverage results    
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage.xml
+          path: ./current-module/coverage.xml
+      - name: Flake8 results    
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage.xml
+          path: ./current-module/flake8-report.txt
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         with:
