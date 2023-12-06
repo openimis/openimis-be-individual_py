@@ -66,6 +66,7 @@ class IndividualDataSourceGQLType(DjangoObjectType):
 
 class GroupGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
+
     head = graphene.Field(IndividualGQLType)
 
     def resolve_head(self, info):
