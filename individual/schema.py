@@ -45,6 +45,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     related_field = "beneficiary"
     related_field_groupbeneficiary = "groupbeneficiary"
 
+    related_field_groupbeneficiary = "groupbeneficiary"
+
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
         orderBy=graphene.List(of_type=graphene.String),
@@ -157,6 +159,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
 
         query = Group.objects.filter(*filters).distinct()
+
         custom_filters = kwargs.get("customFilters", None)
         if custom_filters:
             query = CustomFilterWizardStorage.build_custom_filters_queryset(
