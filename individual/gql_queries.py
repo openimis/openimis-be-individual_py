@@ -67,6 +67,14 @@ class IndividualDataSourceGQLType(DjangoObjectType):
 class GroupGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
+    head = graphene.Field(IndividualGQLType)
+
+    def resolve_head(self, info):
+        return Individual.objects.filter(
+            groupindividual__group__id=self.id,
+            groupindividual__role=GroupIndividual.Role.HEAD
+        ).first()
+
     class Meta:
         model = Group
         interfaces = (graphene.relay.Node,)
