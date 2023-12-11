@@ -43,6 +43,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     module_name = "social_protection"
     object_type = "BenefitPlan"
     related_field = "beneficiary"
+    related_field_groupbeneficiary = "groupbeneficiary"
 
     related_field_groupbeneficiary = "groupbeneficiary"
 
