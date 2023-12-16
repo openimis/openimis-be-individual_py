@@ -47,6 +47,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
     related_field_groupbeneficiary = "groupbeneficiary"
 
+
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
         orderBy=graphene.List(of_type=graphene.String),
@@ -169,6 +170,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 query,
                 relation=Query.related_field_groupbeneficiary
             )
+
         return gql_optimizer.query(query, info)
 
     def resolve_group_individual(self, info, **kwargs):
