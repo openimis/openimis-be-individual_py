@@ -1,5 +1,6 @@
 import graphene
 import graphene_django_optimizer as gql_optimizer
+from graphene_django.filter import DjangoFilterConnectionField
 import pandas as pd
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
@@ -13,7 +14,7 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation
-from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
+from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
 
@@ -51,6 +52,14 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id=graphene.String(),
         groupId=graphene.String(),
         customFilters=graphene.List(of_type=graphene.String)
+    )
+
+    individual_history = OrderedDjangoFilterConnectionField(
+        IndividualHistoryGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        applyDefaultValidityFilter=graphene.Boolean(),
+        client_mutation_id=graphene.String(),
+        groupId=graphene.String()
     )
 
     individual_data_source = OrderedDjangoFilterConnectionField(
@@ -112,6 +121,9 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 relation=Query.related_field
             )
         return gql_optimizer.query(query, info)
+
+    def resolve_individual_history(self, info, **kwargs):
+        return Individual.history.filter(**kwargs)
 
     def resolve_individual_data_source(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)

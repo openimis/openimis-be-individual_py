@@ -25,6 +25,26 @@ class IndividualGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
+class IndividualHistoryGQLType(DjangoObjectType):
+    uuid = graphene.String(source='uuid')
+
+    class Meta:
+        model = Individual.history.model
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "first_name": ["iexact", "istartswith", "icontains"],
+            "last_name": ["iexact", "istartswith", "icontains"],
+            "dob": ["exact", "lt", "lte", "gt", "gte"],
+
+            "date_created": ["exact", "lt", "lte", "gt", "gte"],
+            "date_updated": ["exact", "lt", "lte", "gt", "gte"],
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+
 class IndividualDataSourceUploadGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
