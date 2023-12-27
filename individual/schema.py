@@ -123,7 +123,16 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         return gql_optimizer.query(query, info)
 
     def resolve_individual_history(self, info, **kwargs):
-        return Individual.history.filter(**kwargs)
+        filters = append_validity_filter(**kwargs)
+
+        client_mutation_id = kwargs.get("client_mutation_id")
+        if client_mutation_id:
+            filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+        query = Individual.history.filter(*filters)
+        return gql_optimizer.query(query, info)
 
     def resolve_individual_data_source(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
