@@ -1,5 +1,6 @@
 import graphene
 import graphene_django_optimizer as gql_optimizer
+from graphene_django.filter import DjangoFilterConnectionField
 import pandas as pd
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
@@ -14,7 +15,7 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation
 from individual.gql_queries import IndividualGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
-    IndividualDataSourceUploadGQLType
+    IndividualDataSourceUploadGQLType, GroupHistoryGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
 
 
@@ -80,6 +81,13 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         first_name=graphene.String(),
         last_name=graphene.String(),
         customFilters=graphene.List(of_type=graphene.String)
+    )
+
+    group_history = OrderedDjangoFilterConnectionField(
+        GroupHistoryGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        applyDefaultValidityFilter=graphene.Boolean(),
+        client_mutation_id=graphene.String()
     )
 
     group_individual = OrderedDjangoFilterConnectionField(
@@ -169,6 +177,18 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 query,
                 relation=Query.related_field_groupbeneficiary
             )
+        return gql_optimizer.query(query, info)
+
+    def resolve_group_history(self, info, **kwargs):
+        filters = append_validity_filter(**kwargs)
+
+        client_mutation_id = kwargs.get("client_mutation_id")
+        if client_mutation_id:
+            filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_group_search_perms)
+        query = Group.history.filter(*filters)
         return gql_optimizer.query(query, info)
 
     def resolve_group_individual(self, info, **kwargs):
