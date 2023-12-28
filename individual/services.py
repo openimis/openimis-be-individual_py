@@ -9,11 +9,12 @@ from individual.validation import IndividualValidation, IndividualDataSourceVali
     GroupValidation
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
+from tasks_management.services import UpdateCheckerLogicServiceMixin
 
 logger = logging.getLogger(__name__)
 
 
-class IndividualService(BaseService):
+class IndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     @register_service_signal('individual_service.create')
     def create(self, obj_data):
         return super().create(obj_data)
