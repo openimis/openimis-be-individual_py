@@ -87,6 +87,29 @@ class GroupGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
+class GroupHistoryGQLType(DjangoObjectType):
+    uuid = graphene.String(source='uuid')
+    head = graphene.Field(IndividualGQLType)
+
+    def resolve_head(self, info):
+        return Individual.objects.filter(
+            groupindividual__group__id=self.id,
+            groupindividual__role=GroupIndividual.Role.HEAD
+        ).first()
+
+    class Meta:
+        model = Group.history.model
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "date_created": ["exact", "lt", "lte", "gt", "gte"],
+            "date_updated": ["exact", "lt", "lte", "gt", "gte"],
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+
 class GroupIndividualGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
