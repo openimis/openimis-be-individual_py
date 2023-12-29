@@ -15,6 +15,7 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
     first_name = graphene.String(required=True, max_length=255)
     last_name = graphene.String(required=True, max_length=255)
     dob = graphene.Date(required=True)
+    json_ext = graphene.types.json.JSONString(required=False)
 
 
 class UpdateIndividualInputType(CreateIndividualInputType):
@@ -91,7 +92,10 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
             data.pop('client_mutation_label')
 
         service = IndividualService(user)
-        service.update(data)
+        if IndividualConfig.gql_check_individual_update:
+            service.create_update_task(data)
+        else:
+            service.update(data)
 
     class Input(UpdateIndividualInputType):
         pass
