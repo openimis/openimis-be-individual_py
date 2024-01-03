@@ -4,6 +4,7 @@ from django.db import transaction
 
 from core.services import BaseService
 from core.signals import register_service_signal
+from django.utils.translation import gettext as _
 from individual.models import Individual, IndividualDataSource, GroupIndividual, Group
 from individual.validation import IndividualValidation, IndividualDataSourceValidation, GroupIndividualValidation, \
     GroupValidation
@@ -121,8 +122,37 @@ class GroupIndividualService(BaseService):
         return super().create(obj_data)
 
     @register_service_signal('group_individual.update')
+    @check_authentication
     def update(self, obj_data):
-        return super().update(obj_data)
+        try:
+            with transaction.atomic():
+                obj_data = self._adjust_update_payload(obj_data)
+                self.validation_class.validate_update(self.user, **obj_data)
+                obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
+                self._handle_change_head(obj_data)
+                [setattr(obj_, key, obj_data[key]) for key in obj_data]
+                result = self.save_instance(obj_)
+                self._handle_group_update(obj_)
+                return result
+        except Exception as exc:
+            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
+
+    def _handle_change_head(self, obj_data):
+        group_id = obj_data.get('group_id')
+        group_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
+        old_head = group_queryset.first()
+        if old_head:
+            old_head.role = GroupIndividual.Role.RECIPIENT
+            old_head.save(username=self.user.username)
+
+        if group_queryset.exists():
+            raise ValueError(_("more_than_one_head_in_group"))
+
+    def _handle_group_update(self, obj_):
+        group = Group.objects.filter(groupindividual=obj_).first()
+        if group:
+            group.json_ext['head'] = f'{obj_.individual.first_name} {obj_.individual.last_name}'
+            group.save(username=self.user.username)
 
     @register_service_signal('group_individual.delete')
     def delete(self, obj_data):
