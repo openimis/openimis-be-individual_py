@@ -35,6 +35,7 @@ class IndividualDataSourceUpload(HistoryModel):
 class IndividualDataSource(HistoryModel):
     individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=True)
+    validations = models.JSONField(default=dict)
 
 
 class Group(HistoryModel):
