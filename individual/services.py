@@ -129,30 +129,36 @@ class GroupIndividualService(BaseService):
                 obj_data = self._adjust_update_payload(obj_data)
                 self.validation_class.validate_update(self.user, **obj_data)
                 obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
-                self._handle_change_head(obj_data)
+                self._handle_head_change(obj_data, obj_)
                 [setattr(obj_, key, obj_data[key]) for key in obj_data]
-                result = self.save_instance(obj_)
-                self._handle_group_update(obj_)
-                return result
+                return self.save_instance(obj_)
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
-    def _handle_change_head(self, obj_data):
-        group_id = obj_data.get('group_id')
-        group_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
-        old_head = group_queryset.first()
-        if old_head:
-            old_head.role = GroupIndividual.Role.RECIPIENT
-            old_head.save(username=self.user.username)
+    def _handle_head_change(self, obj_data, obj_):
+        with transaction.atomic():
+            if obj_.role == GroupIndividual.Role.RECIPIENT and obj_data['role'] == GroupIndividual.Role.HEAD:
+                self._change_head(obj_data)
+                self._update_group_json_ext(obj_)
 
-        if group_queryset.exists():
-            raise ValueError(_("more_than_one_head_in_group"))
+    def _change_head(self, obj_data):
+        with transaction.atomic():
+            group_id = obj_data.get('group_id')
+            group_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
+            old_head = group_queryset.first()
+            if old_head:
+                old_head.role = GroupIndividual.Role.RECIPIENT
+                old_head.save(username=self.user.username)
 
-    def _handle_group_update(self, obj_):
-        group = Group.objects.filter(groupindividual=obj_).first()
-        if group:
-            group.json_ext['head'] = f'{obj_.individual.first_name} {obj_.individual.last_name}'
-            group.save(username=self.user.username)
+            if group_queryset.exists():
+                raise ValueError(_("more_than_one_head_in_group"))
+
+    def _update_group_json_ext(self, obj_):
+        with transaction.atomic():
+            group = Group.objects.filter(groupindividual=obj_).first()
+            if group:
+                group.json_ext['head'] = f'{obj_.individual.first_name} {obj_.individual.last_name}'
+                group.save(username=self.user.username)
 
     @register_service_signal('group_individual.delete')
     def delete(self, obj_data):
