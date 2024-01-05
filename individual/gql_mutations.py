@@ -261,7 +261,10 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
             data.pop('client_mutation_label')
 
         service = GroupIndividualService(user)
-        service.update(data)
+        if IndividualConfig.gql_check_group_individual_update:
+            service.create_update_task(data)
+        else:
+            service.update(data)
 
     class Input(UpdateGroupIndividualInputType):
         pass

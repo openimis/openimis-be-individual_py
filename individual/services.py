@@ -111,7 +111,7 @@ class GroupService(BaseService):
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
 
-class GroupIndividualService(BaseService):
+class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     OBJECT_TYPE = GroupIndividual
 
     def __init__(self, user, validation_class=GroupIndividualValidation):
