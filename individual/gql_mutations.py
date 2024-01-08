@@ -65,7 +65,8 @@ class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation
             data.pop('client_mutation_label')
 
         service = IndividualService(user)
-        service.create(data)
+        result = service.create(data)
+        return result if not result['success'] else None
 
     class Input(CreateIndividualInputType):
         pass
@@ -93,9 +94,10 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
 
         service = IndividualService(user)
         if IndividualConfig.gql_check_individual_update:
-            service.create_update_task(data)
+            result = service.create_update_task(data)
         else:
-            service.update(data)
+            result = service.update(data)
+        return result if not result['success'] else None
 
     class Input(UpdateIndividualInputType):
         pass
@@ -150,7 +152,8 @@ class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
             data.pop('client_mutation_label')
 
         service = GroupService(user)
-        service.create(data)
+        result = service.create(data)
+        return result if not result['success'] else None
 
     class Input(CreateGroupInputType):
         pass
@@ -178,7 +181,8 @@ class UpdateGroupMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
             data.pop('client_mutation_label')
 
         service = GroupService(user)
-        service.update(data)
+        result = service.update(data)
+        return result if not result['success'] else None
 
     class Input(UpdateGroupInputType):
         pass
@@ -233,7 +237,8 @@ class CreateGroupIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMut
             data.pop('client_mutation_label')
 
         service = GroupIndividualService(user)
-        service.create(data)
+        result = service.create(data)
+        return result if not result['success'] else None
 
     class Input(CreateGroupIndividualInputType):
         pass
@@ -262,9 +267,10 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
 
         service = GroupIndividualService(user)
         if IndividualConfig.gql_check_group_individual_update:
-            service.create_update_task(data)
+            result = service.create_update_task(data)
         else:
-            service.update(data)
+            result = service.update(data)
+        return result if not result['success'] else None
 
     class Input(UpdateGroupIndividualInputType):
         pass
@@ -319,7 +325,8 @@ class CreateGroupIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMu
             data.pop('client_mutation_label')
 
         service = GroupService(user)
-        service.create_group_individuals(data)
+        result = service.create_group_individuals(data)
+        return result if not result['success'] else None
 
     class Input(CreateGroupInputType):
         individual_ids = graphene.List(graphene.UUID)
