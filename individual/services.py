@@ -163,3 +163,10 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     @register_service_signal('group_individual.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
+
+    def _data_for_json_ext_update(self, obj_data):
+        group_individual = GroupIndividual.objects.get(id=obj_data.get("id"))
+        individual = group_individual.individual
+        individual_identity_string = f'{individual.first_name} {individual.last_name}'
+        json_ext_data = {"individual_identity": individual_identity_string}
+        return json_ext_data
