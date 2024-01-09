@@ -129,9 +129,12 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 obj_data = self._adjust_update_payload(obj_data)
                 self.validation_class.validate_update(self.user, **obj_data)
                 obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
+                group_id_before_update = obj_.group.id
                 self._handle_head_change(obj_data, obj_)
                 [setattr(obj_, key, obj_data[key]) for key in obj_data]
-                return self.save_instance(obj_)
+                result = self.save_instance(obj_)
+                self._handle_members_change(group_id_before_update, obj_)
+                return result
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
@@ -140,6 +143,32 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             if obj_.role == GroupIndividual.Role.RECIPIENT and obj_data['role'] == GroupIndividual.Role.HEAD:
                 self._change_head(obj_data)
                 self._update_group_json_ext(obj_)
+
+    def _handle_members_change(self, group_id_before_update, obj_):
+
+        with transaction.atomic():
+            new_group = Group.objects.filter(id=group_id_before_update).first()
+            new_group_individuals = GroupIndividual.objects.filter(group_id=group_id_before_update)
+
+            new_group_members = {
+                str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
+                for individual in new_group_individuals
+            }
+
+            new_group.json_ext["members"] = new_group_members
+            new_group.save(username=self.user.username)
+
+            if group_id_before_update != obj_.group.id:
+                old_group = Group.objects.filter(id=obj_.group.id).first()
+                old_group_individuals = GroupIndividual.objects.filter(group_id=obj_.group.id)
+
+                old_group_members = {
+                    str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
+                    for individual in old_group_individuals
+                }
+
+                old_group.json_ext["members"] = old_group_members
+                old_group.save(username=self.user.username)
 
     def _change_head(self, obj_data):
         with transaction.atomic():
