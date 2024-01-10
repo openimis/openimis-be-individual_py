@@ -117,11 +117,11 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     def __init__(self, user, validation_class=GroupIndividualValidation):
         super().__init__(user, validation_class)
 
-    @register_service_signal('group_individual_service.create')
+    @register_service_signal('groupindividual_service.create')
     def create(self, obj_data):
         return super().create(obj_data)
 
-    @register_service_signal('group_individual.update')
+    @register_service_signal('groupindividual_service.update')
     @check_authentication
     def update(self, obj_data):
         try:
@@ -183,7 +183,7 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             group.json_ext.update(changes_to_save)
             group.save(username=self.user.username)
 
-    @register_service_signal('group_individual.delete')
+    @register_service_signal('groupindividual_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
 
