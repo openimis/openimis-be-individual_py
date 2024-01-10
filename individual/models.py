@@ -13,6 +13,9 @@ class Individual(HistoryModel):
 
     json_ext = models.JSONField(db_column="Json_ext", default=dict)
 
+    def __str__(self):
+        return f'{self.first_name} {self.last_name}'
+
     class Meta:
         managed = True
 
