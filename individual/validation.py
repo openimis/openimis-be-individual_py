@@ -20,6 +20,7 @@ class GroupValidation(BaseModelValidation):
     OBJECT_TYPE = Group
 
     def validate_update_group_individuals(cls, user, **data):
+        super().validate_update(user, **data)
         errors = []
         allowed_fields = {'id', 'individual_ids'}
         extra_fields = set(data.keys()) - allowed_fields
