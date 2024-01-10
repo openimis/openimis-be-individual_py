@@ -25,3 +25,6 @@ msgstr "Invalid field(s) found: %(fields)"
 #: individual/validation.py:28
 msgid "individual.validation.validate_update_group_individuals.missing_fields"
 msgstr "Missing field(s) found: %(fields)"
+
+msgid "individual.validation.validate_group_task_pending"
+msgstr "There is one task pending for the group %(group_id)."
