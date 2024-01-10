@@ -2,6 +2,7 @@ import graphene
 from graphene_django import DjangoObjectType
 
 from core import prefix_filterset, ExtendedConnection
+from core.gql_queries import UserGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
 
 
@@ -27,6 +28,10 @@ class IndividualGQLType(DjangoObjectType):
 
 class IndividualHistoryGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
+    user_updated = graphene.Field(UserGQLType)
+
+    def resolve_user_updated(self, info):
+        return self.user_updated
 
     class Meta:
         model = Individual.history.model
@@ -109,13 +114,10 @@ class GroupGQLType(DjangoObjectType):
 
 class GroupHistoryGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
-    head = graphene.Field(IndividualGQLType)
+    user_updated = graphene.Field(UserGQLType)
 
-    def resolve_head(self, info):
-        return Individual.objects.filter(
-            groupindividual__group__id=self.id,
-            groupindividual__role=GroupIndividual.Role.HEAD
-        ).first()
+    def resolve_user_updated(self, info):
+        return self.user_updated
 
     class Meta:
         model = Group.history.model
