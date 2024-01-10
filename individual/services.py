@@ -128,7 +128,7 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             with transaction.atomic():
                 obj_data = self._adjust_update_payload(obj_data)
                 self.validation_class.validate_update(self.user, **obj_data)
-                obj_ = self.OBJECT_TYPE.objects.select_related('group').filter(id=obj_data['id']).first()
+                obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
                 group_id_before_update = obj_.group.id
                 self._handle_head_change(obj_data, obj_)
                 [setattr(obj_, key, obj_data[key]) for key in obj_data]
