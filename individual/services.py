@@ -4,6 +4,7 @@ from django.db import transaction
 
 from core.services import BaseService
 from core.signals import register_service_signal
+from django.utils.translation import gettext as _
 from individual.models import Individual, IndividualDataSource, GroupIndividual, Group
 from individual.validation import IndividualValidation, IndividualDataSourceValidation, GroupIndividualValidation, \
     GroupValidation
@@ -110,20 +111,85 @@ class GroupService(BaseService):
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
 
-class GroupIndividualService(BaseService):
+class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     OBJECT_TYPE = GroupIndividual
 
     def __init__(self, user, validation_class=GroupIndividualValidation):
         super().__init__(user, validation_class)
 
-    @register_service_signal('group_individual_service.create')
+    @register_service_signal('groupindividual_service.create')
     def create(self, obj_data):
         return super().create(obj_data)
 
-    @register_service_signal('group_individual.update')
+    @register_service_signal('groupindividual_service.update')
+    @check_authentication
     def update(self, obj_data):
-        return super().update(obj_data)
+        try:
+            with transaction.atomic():
+                obj_data = self._adjust_update_payload(obj_data)
+                self.validation_class.validate_update(self.user, **obj_data)
+                obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
+                group_id_before_update = obj_.group.id
+                self._handle_head_change(obj_data, obj_)
+                [setattr(obj_, key, obj_data[key]) for key in obj_data]
+                result = self.save_instance(obj_)
+                self._handle_json_ext(group_id_before_update, obj_)
+                return result
+        except Exception as exc:
+            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
-    @register_service_signal('group_individual.delete')
+    def _handle_head_change(self, obj_data, obj_):
+        with transaction.atomic():
+            if obj_.role == GroupIndividual.Role.RECIPIENT and obj_data['role'] == GroupIndividual.Role.HEAD:
+                self._change_head(obj_data)
+
+    def _change_head(self, obj_data):
+        with transaction.atomic():
+            group_id = obj_data.get('group_id')
+            group_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
+            old_head = group_queryset.first()
+            if old_head:
+                old_head.role = GroupIndividual.Role.RECIPIENT
+                old_head.save(username=self.user.username)
+
+            if group_queryset.exists():
+                raise ValueError(_("more_than_one_head_in_group"))
+
+    def _handle_json_ext(self, group_id_before_update, obj_):
+        self._update_json_ext_for_group(group_id_before_update)
+        if group_id_before_update != obj_.group.id:
+            self._update_json_ext_for_group(obj_.group.id)
+
+    def _update_json_ext_for_group(self, group_id):
+        group = Group.objects.filter(id=group_id).first()
+        group_individuals = GroupIndividual.objects.filter(group_id=group_id)
+        head = group_individuals.filter(role=GroupIndividual.Role.HEAD).first()
+
+        group_members = {
+            str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
+            for individual in group_individuals
+        }
+        head_str = f'{head.individual.first_name} {head.individual.last_name}' if head else None
+
+        changes_to_save = {}
+
+        if group.json_ext.get("members") != group_members:
+            changes_to_save["members"] = group_members
+
+        if group.json_ext.get("head") != head_str:
+            changes_to_save["head"] = head_str
+
+        if changes_to_save:
+            group.json_ext.update(changes_to_save)
+            group.save(username=self.user.username)
+
+    @register_service_signal('groupindividual_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
+
+    def _data_for_json_ext_update(self, obj_data):
+        group_individual = GroupIndividual.objects.get(id=obj_data.get("id"))
+        individual = group_individual.individual
+        individual_identity_string = f'{individual.first_name} {individual.last_name}'
+        json_ext_data = {"individual_identity": individual_identity_string}
+        return json_ext_data
