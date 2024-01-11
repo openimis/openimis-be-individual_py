@@ -21,13 +21,11 @@ from individual.models import Individual, IndividualDataSource, Group, GroupIndi
 
 def patch_details(data_df: pd.DataFrame):
     # Transform extension to DF columns
-    if 'json_ext' in data_df:
-        df_unfolded = pd.json_normalize(data_df['json_ext'])
-        # Merge unfolded DataFrame with the original DataFrame
-        df_final = pd.concat([data_df, df_unfolded], axis=1)
-        df_final = df_final.drop('json_ext', axis=1)
-        return df_final
-    return data_df
+    df_unfolded = pd.json_normalize(data_df['json_ext'])
+    # Merge unfolded DataFrame with the original DataFrame
+    df_final = pd.concat([data_df, df_unfolded], axis=1)
+    df_final = df_final.drop('json_ext', axis=1)
+    return df_final
 
 
 class Query(ExportableQueryMixin, graphene.ObjectType):
@@ -46,6 +44,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     module_name = "social_protection"
     object_type = "BenefitPlan"
     related_field = "beneficiary"
+    related_field_groupbeneficiary = "groupbeneficiary"
+
     related_field_groupbeneficiary = "groupbeneficiary"
 
     individual = OrderedDjangoFilterConnectionField(
