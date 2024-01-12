@@ -93,6 +93,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
     group_history = OrderedDjangoFilterConnectionField(
         GroupHistoryGQLType,
+        json_ext_head__icontains=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String()
@@ -205,6 +206,10 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id = kwargs.get("client_mutation_id")
         if client_mutation_id:
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        json_ext_head_icontains = kwargs.get("json_ext_head__icontains")
+        if json_ext_head_icontains:
+            filters.append(Q(json_ext__head__icontains=json_ext_head_icontains))
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_group_search_perms)

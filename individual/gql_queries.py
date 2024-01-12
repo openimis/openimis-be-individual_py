@@ -46,6 +46,7 @@ class IndividualHistoryGQLType(DjangoObjectType):
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+            **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 
@@ -128,6 +129,7 @@ class GroupHistoryGQLType(DjangoObjectType):
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+            **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 
