@@ -8,7 +8,8 @@ from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationM
 from core.schema import OpenIMISMutation
 from individual.apps import IndividualConfig
 from individual.models import Individual, Group, GroupIndividual
-from individual.services import IndividualService, GroupService, GroupIndividualService
+from individual.services import IndividualService, GroupService, GroupIndividualService, \
+    CreateGroupAndMoveIndividualService
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -53,7 +54,8 @@ class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_individual_create_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -79,7 +81,8 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_individual_update_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -108,7 +111,8 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_individual_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -138,7 +142,8 @@ class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -165,7 +170,7 @@ class UpdateGroupMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
     @classmethod
     def _validate_mutation(cls, user, **data):
         super()._validate_mutation(user, **data)
-        if type(user) is AnonymousUser or not user.has_perms(
+        if not user.has_perms(
                 IndividualConfig.gql_group_update_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -191,7 +196,8 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_group_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -221,7 +227,8 @@ class CreateGroupIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMut
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -248,7 +255,7 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
     @classmethod
     def _validate_mutation(cls, user, **data):
         super()._validate_mutation(user, **data)
-        if type(user) is AnonymousUser or not user.has_perms(
+        if not user.has_perms(
                 IndividualConfig.gql_group_update_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -277,7 +284,8 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_group_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -307,7 +315,8 @@ class CreateGroupIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMu
 
     @classmethod
     def _validate_mutation(cls, user, **data):
-        if type(user) is AnonymousUser or not user.id or not user.has_perms(
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
             raise ValidationError("mutation.authentication_required")
 
@@ -323,4 +332,39 @@ class CreateGroupIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMu
         return result if not result['success'] else None
 
     class Input(CreateGroupInputType):
-        individual_ids = graphene.List(graphene.UUID)
+        individual_ids = graphene.List(graphene.UUID, required=True)
+
+
+class CreateGroupAndMoveIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
+    _mutation_class = "CreateGroupAndMoveIndividualMutation"
+    _mutation_module = "individual"
+    _model = Group
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        super()._validate_mutation(user, **data)
+
+        required_perms = [
+            IndividualConfig.gql_group_create_perms,
+            IndividualConfig.gql_group_update_perms
+        ]
+
+        if not any(user.has_perms(perm) for perm in required_perms):
+            raise ValidationError("mutation.authentication_required")
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = CreateGroupAndMoveIndividualService(user)
+        if IndividualConfig.gql_check_group_individual_update:
+            result = service.create_create_task(data)
+        else:
+            result = service.create(data)
+        return result if not result['success'] else None
+
+    class Input(CreateGroupInputType):
+        group_individual_id = graphene.UUID(required=True)
