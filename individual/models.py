@@ -13,6 +13,9 @@ class Individual(HistoryModel):
 
     json_ext = models.JSONField(db_column="Json_ext", default=dict)
 
+    def __str__(self):
+        return f'{self.first_name} {self.last_name}'
+
     class Meta:
         managed = True
 
@@ -23,6 +26,8 @@ class IndividualDataSourceUpload(HistoryModel):
         TRIGGERED = 'TRIGGERED', _('Triggered')
         IN_PROGRESS = 'IN_PROGRESS', _('In progress')
         SUCCESS = 'SUCCESS', _('Success')
+        PARTIAL_SUCCESS = 'PARTIAL_SUCCESS', _('Partial Success')
+        WAITING_FOR_VERIFICATION = 'WAITING_FOR_VERIFICATION', _('WAITING_FOR_VERIFICATION')
         FAIL = 'FAIL', _('Fail')
 
     source_name = models.CharField(max_length=255, null=False)
@@ -35,6 +40,7 @@ class IndividualDataSourceUpload(HistoryModel):
 class IndividualDataSource(HistoryModel):
     individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=True)
+    validations = models.JSONField(default=dict)
 
 
 class Group(HistoryModel):
