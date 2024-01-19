@@ -1,16 +1,14 @@
-from uuid import UUID
-
 import graphene
 import graphene_django_optimizer as gql_optimizer
-from graphene_django.filter import DjangoFilterConnectionField
 import pandas as pd
+
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
 
 from core.custom_filters import CustomFilterWizardStorage
 from core.gql.export_mixin import ExportableQueryMixin
 from core.schema import OrderedDjangoFilterConnectionField
-from core.utils import append_validity_filter
+from core.utils import append_validity_filter, is_valid_uuid
 from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
@@ -19,7 +17,6 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
-from individual.utils import is_valid_uuid
 
 
 def patch_details(data_df: pd.DataFrame):

@@ -1,5 +1,4 @@
 import graphene
-from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -35,6 +34,7 @@ class CreateGroupIndividualInputType(OpenIMISMutation.Input):
     class RoleEnum(graphene.Enum):
         HEAD = GroupIndividual.Role.HEAD
         RECIPIENT = GroupIndividual.Role.RECIPIENT
+
     group_id = graphene.UUID(required=True)
     individual_id = graphene.UUID(required=True)
     role = graphene.Field(RoleEnum, required=False)
@@ -94,7 +94,7 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
             data.pop('client_mutation_label')
 
         service = IndividualService(user)
-        if IndividualConfig.gql_check_individual_update:
+        if IndividualConfig.check_individual_update:
             result = service.create_update_task(data)
         else:
             result = service.update(data)
@@ -267,7 +267,7 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
             data.pop('client_mutation_label')
 
         service = GroupIndividualService(user)
-        if IndividualConfig.gql_check_group_individual_update:
+        if IndividualConfig.check_group_individual_update:
             result = service.create_update_task(data)
         else:
             result = service.update(data)
@@ -344,12 +344,8 @@ class CreateGroupAndMoveIndividualMutation(BaseHistoryModelCreateMutationMixin, 
     def _validate_mutation(cls, user, **data):
         super()._validate_mutation(user, **data)
 
-        required_perms = [
-            IndividualConfig.gql_group_create_perms,
-            IndividualConfig.gql_group_update_perms
-        ]
-
-        if not any(user.has_perms(perm) for perm in required_perms):
+        required_perms = IndividualConfig.gql_group_create_perms + IndividualConfig.gql_group_update_perms
+        if not user.has_perms(required_perms):
             raise ValidationError("mutation.authentication_required")
 
     @classmethod
@@ -360,7 +356,7 @@ class CreateGroupAndMoveIndividualMutation(BaseHistoryModelCreateMutationMixin, 
             data.pop('client_mutation_label')
 
         service = CreateGroupAndMoveIndividualService(user)
-        if IndividualConfig.gql_check_group_individual_update:
+        if IndividualConfig.check_group_individual_update or IndividualConfig.check_group_create:
             result = service.create_create_task(data)
         else:
             result = service.create(data)
