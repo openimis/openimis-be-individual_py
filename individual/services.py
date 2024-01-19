@@ -2,6 +2,7 @@ import logging
 
 from django.db import transaction
 
+from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.utils.translation import gettext as _
@@ -10,7 +11,8 @@ from individual.validation import IndividualValidation, IndividualDataSourceVali
     GroupValidation
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
-from tasks_management.services import UpdateCheckerLogicServiceMixin
+from tasks_management.models import Task
+from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ class IndividualDataSourceService(BaseService):
         super().__init__(user, validation_class)
 
 
-class GroupService(BaseService):
+class GroupService(BaseService, CreateCheckerLogicServiceMixin):
     OBJECT_TYPE = Group
 
     def __init__(self, user, validation_class=GroupValidation):
@@ -69,21 +71,29 @@ class GroupService(BaseService):
 
     @register_service_signal('group_service.delete')
     def delete(self, obj_data):
-        return super().delete(obj_data)
+        with transaction.atomic():
+            group_id = obj_data.get('id')
+            group = Group.objects.filter(id=group_id).first()
+            for group_individual in group.groupindividual_set.all():
+                # cant use .delete() on query since it will completely remove instances from db instead of marking
+                # them as isDeleted
+                group_individual.delete(username=self.user.username)
+            return super().delete(obj_data)
 
     @check_authentication
     @register_service_signal('group_service.create_group_individuals')
     def create_group_individuals(self, obj_data):
         try:
             with transaction.atomic():
+                self.validation_class.validate_create_group_individuals(self.user, **obj_data)
                 individual_ids = obj_data.pop('individual_ids')
                 group = self.create(obj_data)
                 group_id = group['data']['id']
                 service = GroupIndividualService(self.user)
-                individual_ids_list = [service.create({'group_id': group_id,
-                                                       'individual_id': individual_id})
-                                       for individual_id in individual_ids]
-                group_and_individuals_message = {**group, 'detail': individual_ids_list}
+                group_individual_ids = [service.create({'group_id': group_id,
+                                                        'individual_id': individual_id})
+                                        for individual_id in individual_ids]
+                group_and_individuals_message = {**group, 'detail': group_individual_ids}
                 return group_and_individuals_message
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="create", exception=exc)
@@ -93,7 +103,7 @@ class GroupService(BaseService):
     def update_group_individuals(self, obj_data):
         try:
             with transaction.atomic():
-                self.validation_class.validate_update(self.user, **obj_data)
+                self.validation_class.validate_update_group_individuals(self.user, **obj_data)
                 individual_ids = obj_data.pop('individual_ids')
                 group_id = obj_data.pop('id')
                 obj_ = self.OBJECT_TYPE.objects.filter(id=group_id).first()
@@ -109,6 +119,39 @@ class GroupService(BaseService):
                 return group_and_individuals_message
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
+
+
+class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
+    OBJECT_TYPE = Group
+
+    def __init__(self, user, validation_class=GroupValidation):
+        self.user = user
+        self.validation_class = validation_class
+
+    @check_authentication
+    @register_service_signal('create_group_and_move_individual.create')
+    def create(self, obj_data):
+        try:
+            with transaction.atomic():
+                self.validation_class.validate_create_group_and_move_individual(self.user, **obj_data)
+                group_individual_id = obj_data.pop('group_individual_id')
+                group = GroupService(self.user).create(obj_data)
+                group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
+                group_id = group['data']['id']
+                service = GroupIndividualService(self.user)
+                service.update({
+                    'group_id': group_id, "id": group_individual_id, "role": group_individual.role
+                })
+                group_and_individuals_message = {**group, 'detail': group_individual_id}
+                return group_and_individuals_message
+        except Exception as exc:
+            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="create", exception=exc)
+
+    def _business_data_serializer(self, key, value):
+        if key == 'group_individual_id':
+            group_individual = GroupIndividual.objects.get(id=value)
+            return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
+        return value
 
 
 class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
@@ -137,6 +180,10 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 return result
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
+
+    @register_service_signal('groupindividual_service.delete')
+    def delete(self, obj_data):
+        return super().delete(obj_data)
 
     def _handle_head_change(self, obj_data, obj_):
         with transaction.atomic():
@@ -183,13 +230,35 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             group.json_ext.update(changes_to_save)
             group.save(username=self.user.username)
 
-    @register_service_signal('groupindividual_service.delete')
-    def delete(self, obj_data):
-        return super().delete(obj_data)
+    def _business_data_serializer(self, key, value):
+        if key == 'id':
+            group_individual = GroupIndividual.objects.get(id=value)
+            return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
+        return value
 
-    def _data_for_json_ext_update(self, obj_data):
-        group_individual = GroupIndividual.objects.get(id=obj_data.get("id"))
-        individual = group_individual.individual
-        individual_identity_string = f'{individual.first_name} {individual.last_name}'
-        json_ext_data = {"individual_identity": individual_identity_string}
-        return json_ext_data
+
+def group_on_task_complete_service_handler(service_type):
+    operations = []
+    if issubclass(service_type, CreateCheckerLogicServiceMixin):
+        operations.append('create')
+
+    def func(**kwargs):
+        try:
+            result = kwargs.get('result', {})
+            task = result['data']['task']
+            business_event = task['business_event']
+            service_match = business_event.startswith(f"{service_type.__name__}.")
+            if result and result['success'] \
+                    and task['status'] == Task.Status.COMPLETED \
+                    and service_match:
+                operation = business_event.split(".")[1]
+                if operation in operations:
+                    user = User.objects.get(id=result['data']['user']['id'])
+                    data = task['data']['incoming_data']
+                    getattr(service_type(user), operation)(data)
+        except Exception as e:
+            logger.error("Error while executing on_task_complete", exc_info=e)
+            return [str(e)]
+
+    return func
+

@@ -19,6 +19,23 @@ class IndividualDataSourceValidation(BaseModelValidation):
 class GroupValidation(BaseModelValidation):
     OBJECT_TYPE = Group
 
+    @classmethod
+    def validate_create_group_individuals(cls, user, **data):
+        super().validate_create(user, **data)
+        errors = []
+        individual_ids = data.get('individual_ids')
+
+        existing_individual_ids = set(Individual.objects.filter(id__in=individual_ids).values_list('id', flat=True))
+        missing_individual_ids = set(individual_ids) - existing_individual_ids
+
+        if missing_individual_ids:
+            errors += [_("individual.validation.validate_create_group_individuals.wrong_individual_ids") % {
+                'invalid_ids': {", ".join(map(str, missing_individual_ids))}
+            }]
+
+        return errors
+
+    @classmethod
     def validate_update_group_individuals(cls, user, **data):
         super().validate_update(user, **data)
         errors = []
@@ -38,6 +55,18 @@ class GroupValidation(BaseModelValidation):
 
         if errors:
             raise ValidationError(errors)
+
+    @classmethod
+    def validate_create_group_and_move_individual(cls, user, **data):
+        super().validate_create(user, **data)
+        errors = []
+        group_individual_id = data.get('group_individual_id')
+        group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
+
+        if not group_individual:
+            errors += [_("individual.validation.validate_create_group_and_individual.group_individual_does_not_exist")]
+
+        return errors
 
 
 class GroupIndividualValidation(BaseModelValidation):

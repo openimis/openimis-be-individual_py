@@ -1,19 +1,19 @@
 import graphene
 import graphene_django_optimizer as gql_optimizer
-from graphene_django.filter import DjangoFilterConnectionField
 import pandas as pd
+
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q
 
 from core.custom_filters import CustomFilterWizardStorage
 from core.gql.export_mixin import ExportableQueryMixin
 from core.schema import OrderedDjangoFilterConnectionField
-from core.utils import append_validity_filter
+from core.utils import append_validity_filter, is_valid_uuid
 from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
-    CreateGroupIndividualsMutation
+    CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
@@ -222,6 +222,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             IndividualConfig.gql_group_search_perms
         )
         filters = append_validity_filter(**kwargs)
+
+        group_id = kwargs.get("group__id")
+        if not group_id or group_id and not is_valid_uuid(group_id):
+            # it will result in empty query
+            filters.append(Q(id__lt=0))
+
         client_mutation_id = kwargs.get("client_mutation_id", None)
         if client_mutation_id:
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
@@ -249,3 +255,4 @@ class Mutation(graphene.ObjectType):
     remove_individual_from_group = DeleteGroupIndividualMutation.Field()
 
     create_group_individuals = CreateGroupIndividualsMutation.Field()
+    create_group_and_move_individual = CreateGroupAndMoveIndividualMutation.Field()

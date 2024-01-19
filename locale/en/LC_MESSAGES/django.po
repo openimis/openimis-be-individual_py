@@ -28,3 +28,9 @@ msgstr "Missing field(s) found: %(fields)"
 
 msgid "individual.validation.validate_group_task_pending"
 msgstr "There is one task pending for the group %(group_id)."
+
+msgid "individual.validation.validate_create_group_and_individual.group_individual_does_not_exist"
+msgstr "GroupIndividual does not exist."
+
+msgid "individual.validation.validate_create_group_individuals.wrong_individual_ids"
+msgstr "Invalid Individual ids %(invalid_ids)"
