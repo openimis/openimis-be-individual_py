@@ -30,12 +30,23 @@ class IndividualConfig(AppConfig):
     check_individual_update = None
     check_group_individual_update = None
     check_group_create = None
+    python_individual_import_workflow_group = None
+    python_individual_import_workflow_name = None
 
     def ready(self):
         from core.models import ModuleConfiguration
 
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
+
+
+        from workflow.systems.python import PythonWorkflowAdaptor
+        from individual.workflows import import_individual_workflow
+        PythonWorkflowAdaptor.register_workflow(
+            "example-import-individual",
+            "individual-import-group",
+            import_individual_workflow
+        )
 
     @classmethod
     def __load_config(cls, cfg):
