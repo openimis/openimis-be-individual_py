@@ -25,7 +25,7 @@ if 'opensearch_reports' in apps.app_configs:
         class Django:
             model = Individual
             fields = [
-                'id', 'first_name', 'last_name', 'dob'
+                'id', 'first_name', 'last_name'
             ]
             queryset_pagination = 5000
 
