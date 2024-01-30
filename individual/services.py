@@ -1,3 +1,4 @@
+import copy
 import logging
 
 from django.db import transaction
@@ -12,7 +13,8 @@ from individual.validation import IndividualValidation, IndividualDataSourceVali
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
 from tasks_management.models import Task
-from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin
+from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
+    crud_business_data_builder
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +149,16 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="create", exception=exc)
 
-    def _business_data_serializer(self, key, value):
-        if key == 'group_individual_id':
-            group_individual = GroupIndividual.objects.get(id=value)
-            return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
-        return value
+    def _business_data_serializer(self, data):
+        def serialize(key, value):
+            if key == 'group_individual_id':
+                group_individual = GroupIndividual.objects.get(id=value)
+                return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
+            return value
+
+        serialized_data = crud_business_data_builder(data, serialize)
+        serialized_data['incoming_data']["id"] = 'NEW_GROUP'
+        return serialized_data
 
 
 class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
@@ -230,11 +237,16 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             group.json_ext.update(changes_to_save)
             group.save(username=self.user.username)
 
-    def _business_data_serializer(self, key, value):
-        if key == 'id':
-            group_individual = GroupIndividual.objects.get(id=value)
-            return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
-        return value
+    def _business_data_serializer(self, data):
+        def serialize(key, value):
+            if key == 'id':
+                group_individual = GroupIndividual.objects.get(id=value)
+                return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
+            return value
+
+        serialized_data = crud_business_data_builder(data, serialize)
+        return serialized_data
+
 
 
 def group_on_task_complete_service_handler(service_type):
