@@ -1,4 +1,8 @@
+import logging
+
 from django.apps import AppConfig
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
     "gql_individual_search_perms": ["159001"],
@@ -12,6 +16,7 @@ DEFAULT_CONFIG = {
     "check_individual_update": True,
     "check_group_individual_update": True,
     "check_group_create": True,
+    "individual_schema": "{}",
 }
 
 
@@ -30,12 +35,14 @@ class IndividualConfig(AppConfig):
     check_individual_update = None
     check_group_individual_update = None
     check_group_create = None
+    individual_schema = None
 
     def ready(self):
         from core.models import ModuleConfiguration
 
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
+        self.__validate_individual_schema(cfg)
 
     @classmethod
     def __load_config(cls, cfg):
@@ -45,3 +52,15 @@ class IndividualConfig(AppConfig):
         for field in cfg:
             if hasattr(IndividualConfig, field):
                 setattr(IndividualConfig, field, cfg[field])
+
+    def __validate_individual_schema(self, cfg):
+        if 'individual_schema' not in cfg:
+            logging.error('No individual_schema in individual module config.')
+            return
+
+        from core.utils import validate_json_schema
+        errors = validate_json_schema(cfg['individual_schema'])
+
+        if errors:
+            error_messages = [error['message'] for error in errors]
+            logging.error('Schema validation errors in individual schema: %s', ', '.join(error_messages))
