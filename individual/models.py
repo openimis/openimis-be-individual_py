@@ -34,13 +34,13 @@ class IndividualDataSourceUpload(HistoryModel):
     source_type = models.CharField(max_length=255, null=False)
 
     status = models.CharField(max_length=255, choices=Status.choices, default=Status.PENDING)
-    error = models.JSONField(default=dict)
+    error = models.JSONField(blank = True, default=dict)
 
 
 class IndividualDataSource(HistoryModel):
-    individual = models.ForeignKey(Individual, models.DO_NOTHING, null=True)
-    upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=True)
-    validations = models.JSONField(default=dict)
+    individual = models.ForeignKey(Individual, models.DO_NOTHING,  blank=True, null=True)
+    upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING,  blank=True, null=True)
+    validations = models.JSONField(blank = True, default=dict)
 
 
 class Group(HistoryModel):
