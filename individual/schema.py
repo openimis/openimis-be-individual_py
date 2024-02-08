@@ -46,7 +46,6 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     module_name = "individual"
     object_type = "Individual"
     object_type_group = "Group"
-    related_field = "beneficiary"
     related_field_individual = "groupindividual__individual"
 
     individual = OrderedDjangoFilterConnectionField(
