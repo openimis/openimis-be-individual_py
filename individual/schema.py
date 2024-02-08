@@ -43,10 +43,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         ]
     }
     exportable_fields = ['group', 'individual', 'group_individual']
-    module_name = "social_protection"
-    object_type = "BenefitPlan"
+    module_name = "individual"
+    object_type = "Individual"
+    object_type_group = "Group"
     related_field = "beneficiary"
-    related_field_groupbeneficiary = "groupbeneficiary"
+    related_field_individual = "groupindividual__individual"
 
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
@@ -129,7 +130,6 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 Query.object_type,
                 custom_filters,
                 query,
-                relation=Query.related_field
             )
         return gql_optimizer.query(query, info)
 
@@ -196,7 +196,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 Query.object_type,
                 custom_filters,
                 query,
-                relation=Query.related_field_groupbeneficiary
+                relation=Query.related_field_individual
             )
         return gql_optimizer.query(query, info)
 
