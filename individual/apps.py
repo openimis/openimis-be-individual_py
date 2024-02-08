@@ -2,6 +2,8 @@ import logging
 
 from django.apps import AppConfig
 
+from core.custom_filters import CustomFilterRegistryPoint
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
@@ -43,6 +45,7 @@ class IndividualConfig(AppConfig):
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
         self.__validate_individual_schema(cfg)
+        self.__initialize_custom_filters()
 
     @classmethod
     def __load_config(cls, cfg):
@@ -53,6 +56,7 @@ class IndividualConfig(AppConfig):
             if hasattr(IndividualConfig, field):
                 setattr(IndividualConfig, field, cfg[field])
 
+    @classmethod
     def __validate_individual_schema(self, cfg):
         if 'individual_schema' not in cfg:
             logging.error('No individual_schema in individual module config.')
@@ -64,3 +68,11 @@ class IndividualConfig(AppConfig):
         if errors:
             error_messages = [error['message'] for error in errors]
             logging.error('Schema validation errors in individual schema: %s', ', '.join(error_messages))
+
+    @classmethod
+    def __initialize_custom_filters(cls):
+        from individual.custom_filters import IndividualCustomFilterWizard
+        CustomFilterRegistryPoint.register_custom_filters(
+            module_name=cls.name,
+            custom_filter_class_list=[IndividualCustomFilterWizard]
+        )
