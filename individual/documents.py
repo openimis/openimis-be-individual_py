@@ -43,4 +43,3 @@ if 'opensearch_reports' in apps.app_configs:
                 else:
                     items[new_key] = v
             return items
-

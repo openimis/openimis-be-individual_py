@@ -3,18 +3,21 @@ import logging
 
 from django.db import transaction
 
+from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.utils.translation import gettext as _
+from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, GroupIndividual, Group
 from individual.validation import IndividualValidation, IndividualDataSourceValidation, GroupIndividualValidation, \
     GroupValidation
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
+from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
 from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
-    crud_business_data_builder
+    crud_business_data_builder, TaskService, _get_std_task_data_payload
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,21 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     @register_service_signal('individual_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
+
+    @register_service_signal('individual_service.select_individuals_to_benefit_plan')
+    def select_individuals_to_benefit_plan(self, custom_filters, benefit_plan):
+        individual_query = Individual.objects.filter(is_deleted=False)
+        individual_query_with_filters = CustomFilterWizardStorage.build_custom_filters_queryset(
+            "individual",
+            "Individual",
+            custom_filters,
+            individual_query,
+        )
+        self.create_accept_enrolment_task(individual_query_with_filters, benefit_plan)
+
+    @register_service_signal('individual_service.create_accept_enrolment_task')
+    def create_accept_enrolment_task(self, individual_queryset, benefit_plan):
+        pass
 
     OBJECT_TYPE = Individual
 

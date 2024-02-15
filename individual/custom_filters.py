@@ -3,6 +3,7 @@ import logging
 import re
 
 from collections import namedtuple
+from django.apps import apps
 from django.db.models.query import QuerySet
 from typing import List
 
@@ -23,6 +24,13 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
 
     def load_definition(self, tuple_type: type, **kwargs) -> List[namedtuple]:
         individual_schema = IndividualConfig.individual_schema
+        additional_params = kwargs.get('additional_params', None)
+        benefit_plan_id = additional_params.get("benefitPlan", None)
+        if benefit_plan_id and 'social_protection' in apps.app_configs:
+            from social_protection.models import BenefitPlan
+            benefit_plan = BenefitPlan.objects.get(id=benefit_plan_id)
+            if benefit_plan.beneficiary_data_schema and benefit_plan.beneficiary_data_schema != '{}':
+                return self.__process_schema_and_build_tuple(benefit_plan.beneficiary_data_schema, tuple_type)
         if individual_schema:
             individual_schema_dict = json.loads(individual_schema)
             return self.__process_schema_and_build_tuple(individual_schema_dict, tuple_type)
