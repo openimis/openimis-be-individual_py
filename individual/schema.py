@@ -110,7 +110,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
     individual_enrollment_summary = graphene.Field(
         IndividualSummaryEnrollmentGQLType,
-        customFilters=graphene.List(of_type=graphene.String)
+        customFilters=graphene.List(of_type=graphene.String),
+        benefitPlanId=graphene.String()
     )
 
     def resolve_individual(self, info, **kwargs):
@@ -142,6 +143,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                                  IndividualConfig.gql_individual_search_perms)
         query = Individual.objects.filter(is_deleted=False)
         custom_filters = kwargs.get("customFilters", None)
+        benefit_plan_id = kwargs.get("benefitPlanId", None)
         if custom_filters:
             query = CustomFilterWizardStorage.build_custom_filters_queryset(
                 Query.module_name,
@@ -158,11 +160,17 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             filter(is_deleted=False, beneficiary__benefit_plan_id__isnull=True).count()
         individuals_assigned_to_programme = number_of_selected_individuals - individuals_not_assigned_to_programme
 
+        individuals_assigned_to_selected_programme = "0"
+        if benefit_plan_id:
+            individuals_assigned_to_selected_programme = query. \
+                filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id).count()
+
         return IndividualSummaryEnrollmentGQLType(
             number_of_selected_individuals=number_of_selected_individuals,
             total_number_of_individuals=total_number_of_individuals,
             number_of_individuals_not_assigned_to_programme=individuals_not_assigned_to_programme,
-            number_of_individuals_assigned_to_programme=individuals_assigned_to_programme
+            number_of_individuals_assigned_to_programme=individuals_assigned_to_programme,
+            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme
         )
 
     def resolve_individual_history(self, info, **kwargs):
