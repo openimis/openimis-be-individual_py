@@ -36,7 +36,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin):
         return super().delete(obj_data)
 
     @register_service_signal('individual_service.select_individuals_to_benefit_plan')
-    def select_individuals_to_benefit_plan(self, custom_filters, benefit_plan):
+    def select_individuals_to_benefit_plan(self, custom_filters, benefit_plan_id, status, user):
         individual_query = Individual.objects.filter(is_deleted=False)
         individual_query_with_filters = CustomFilterWizardStorage.build_custom_filters_queryset(
             "individual",
@@ -44,10 +44,25 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             custom_filters,
             individual_query,
         )
-        self.create_accept_enrolment_task(individual_query_with_filters, benefit_plan)
+        if benefit_plan_id:
+            individuals_assigned_to_selected_programme = individual_query_with_filters. \
+                filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id)
+            individuals_not_assigned_to_selected_programme = individual_query_with_filters.exclude(
+                id__in=individuals_assigned_to_selected_programme.values_list('id', flat=True)
+            )
+            output = {
+                "individuals_assigned_to_selected_programme": individuals_assigned_to_selected_programme,
+                "individuals_not_assigned_to_selected_programme": individuals_not_assigned_to_selected_programme,
+                "individual_query_with_filters": individual_query_with_filters,
+                "benefit_plan_id": benefit_plan_id,
+                "status": status,
+                "user": user,
+            }
+            return output
+        return None
 
     @register_service_signal('individual_service.create_accept_enrolment_task')
-    def create_accept_enrolment_task(self, individual_queryset, benefit_plan):
+    def create_accept_enrolment_task(self, individual_queryset, benefit_plan_id):
         pass
 
     OBJECT_TYPE = Individual

@@ -13,7 +13,7 @@ from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
-    CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation
+    CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
@@ -296,3 +296,5 @@ class Mutation(graphene.ObjectType):
 
     create_group_individuals = CreateGroupIndividualsMutation.Field()
     create_group_and_move_individual = CreateGroupAndMoveIndividualMutation.Field()
+
+    confirm_individual_enrollment = ConfirmIndividualEnrollmentMutation.Field()
