@@ -15,7 +15,7 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
-    IndividualDataSourceUploadGQLType, GroupHistoryGQLType
+    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
 
 
@@ -108,6 +108,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id=graphene.String()
     )
 
+    individual_enrollment_summary = graphene.Field(
+        IndividualSummaryEnrollmentGQLType,
+        customFilters=graphene.List(of_type=graphene.String)
+    )
+
     def resolve_individual(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
 
@@ -131,6 +136,34 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 query,
             )
         return gql_optimizer.query(query, info)
+
+    def resolve_individual_enrollment_summary(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+        query = Individual.objects.filter(is_deleted=False)
+        custom_filters = kwargs.get("customFilters", None)
+        if custom_filters:
+            query = CustomFilterWizardStorage.build_custom_filters_queryset(
+                Query.module_name,
+                Query.object_type,
+                custom_filters,
+                query,
+            )
+        # Aggregation for selected individuals
+        number_of_selected_individuals = query.count()
+
+        # Aggregation for total number of individuals
+        total_number_of_individuals = Individual.objects.filter(is_deleted=False).count()
+        individuals_not_assigned_to_programme = Individual.objects.\
+            filter(is_deleted=False, beneficiary__benefit_plan_id__isnull=True).count()
+        individuals_assigned_to_programme = total_number_of_individuals - individuals_not_assigned_to_programme
+
+        return IndividualSummaryEnrollmentGQLType(
+            number_of_selected_individuals=number_of_selected_individuals,
+            total_number_of_individuals=total_number_of_individuals,
+            number_of_individuals_not_assigned_to_programme=individuals_not_assigned_to_programme,
+            number_of_individuals_assigned_to_programme=individuals_assigned_to_programme
+        )
 
     def resolve_individual_history(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
