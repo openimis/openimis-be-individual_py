@@ -154,9 +154,9 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         # Aggregation for total number of individuals
         total_number_of_individuals = Individual.objects.filter(is_deleted=False).count()
-        individuals_not_assigned_to_programme = Individual.objects.\
+        individuals_not_assigned_to_programme = query.\
             filter(is_deleted=False, beneficiary__benefit_plan_id__isnull=True).count()
-        individuals_assigned_to_programme = total_number_of_individuals - individuals_not_assigned_to_programme
+        individuals_assigned_to_programme = number_of_selected_individuals - individuals_not_assigned_to_programme
 
         return IndividualSummaryEnrollmentGQLType(
             number_of_selected_individuals=number_of_selected_individuals,
