@@ -394,13 +394,13 @@ class ConfirmIndividualEnrollmentMutation(BaseHistoryModelCreateMutationMixin, B
         benefit_plan_id = data.pop('benefit_plan_id', None)
         status = data.pop('status', "ACTIVE")
         service = IndividualService(user)
-        result = service.select_individuals_to_benefit_plan(
+        service.select_individuals_to_benefit_plan(
             custom_filters,
             benefit_plan_id,
             status,
             user,
         )
-        return result if not result['success'] else None
+        return None
 
     class Input(ConfirmIndividualEnrollmentInputType):
         pass
