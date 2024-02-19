@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "check_group_individual_update": True,
     "check_group_create": True,
     "individual_schema": "{}",
+    "individual_accept_enrolment": "individual_service.create_accept_enrolment_task"
 }
 
 
@@ -37,7 +38,10 @@ class IndividualConfig(AppConfig):
     check_individual_update = None
     check_group_individual_update = None
     check_group_create = None
+    python_individual_import_workflow_group = None
+    python_individual_import_workflow_name = None
     individual_schema = None
+    individual_accept_enrolment = None
 
     def ready(self):
         from core.models import ModuleConfiguration
@@ -46,6 +50,15 @@ class IndividualConfig(AppConfig):
         self.__load_config(cfg)
         self.__validate_individual_schema(cfg)
         self.__initialize_custom_filters()
+
+
+        from workflow.systems.python import PythonWorkflowAdaptor
+        from individual.workflows import import_individual_workflow
+        PythonWorkflowAdaptor.register_workflow(
+            "example-import-individual",
+            "individual-import-group",
+            import_individual_workflow
+        )
 
     @classmethod
     def __load_config(cls, cfg):

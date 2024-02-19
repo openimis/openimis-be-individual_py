@@ -151,3 +151,11 @@ class GroupIndividualGQLType(DjangoObjectType):
             **prefix_filterset("group__", GroupGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+
+class IndividualSummaryEnrollmentGQLType(graphene.ObjectType):
+    number_of_selected_individuals = graphene.String()
+    total_number_of_individuals = graphene.String()
+    number_of_individuals_not_assigned_to_programme = graphene.String()
+    number_of_individuals_assigned_to_programme = graphene.String()
+    number_of_individuals_assigned_to_selected_programme = graphene.String()

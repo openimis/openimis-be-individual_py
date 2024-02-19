@@ -13,9 +13,9 @@ from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
-    CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation
+    CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
-    IndividualDataSourceUploadGQLType, GroupHistoryGQLType
+    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
 
 
@@ -108,6 +108,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id=graphene.String()
     )
 
+    individual_enrollment_summary = graphene.Field(
+        IndividualSummaryEnrollmentGQLType,
+        customFilters=graphene.List(of_type=graphene.String),
+        benefitPlanId=graphene.String()
+    )
+
     def resolve_individual(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
 
@@ -131,6 +137,41 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 query,
             )
         return gql_optimizer.query(query, info)
+
+    def resolve_individual_enrollment_summary(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+        query = Individual.objects.filter(is_deleted=False)
+        custom_filters = kwargs.get("customFilters", None)
+        benefit_plan_id = kwargs.get("benefitPlanId", None)
+        if custom_filters:
+            query = CustomFilterWizardStorage.build_custom_filters_queryset(
+                Query.module_name,
+                Query.object_type,
+                custom_filters,
+                query,
+            )
+        # Aggregation for selected individuals
+        number_of_selected_individuals = query.count()
+
+        # Aggregation for total number of individuals
+        total_number_of_individuals = Individual.objects.filter(is_deleted=False).count()
+        individuals_not_assigned_to_programme = query.\
+            filter(is_deleted=False, beneficiary__benefit_plan_id__isnull=True).count()
+        individuals_assigned_to_programme = number_of_selected_individuals - individuals_not_assigned_to_programme
+
+        individuals_assigned_to_selected_programme = "0"
+        if benefit_plan_id:
+            individuals_assigned_to_selected_programme = query. \
+                filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id).count()
+
+        return IndividualSummaryEnrollmentGQLType(
+            number_of_selected_individuals=number_of_selected_individuals,
+            total_number_of_individuals=total_number_of_individuals,
+            number_of_individuals_not_assigned_to_programme=individuals_not_assigned_to_programme,
+            number_of_individuals_assigned_to_programme=individuals_assigned_to_programme,
+            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme
+        )
 
     def resolve_individual_history(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
@@ -255,3 +296,5 @@ class Mutation(graphene.ObjectType):
 
     create_group_individuals = CreateGroupIndividualsMutation.Field()
     create_group_and_move_individual = CreateGroupAndMoveIndividualMutation.Field()
+
+    confirm_individual_enrollment = ConfirmIndividualEnrollmentMutation.Field()
