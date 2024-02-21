@@ -15,8 +15,9 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
-    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType
-from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
+    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType
+from individual.models import Individual, IndividualDataSource, Group, \
+    GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords
 
 
 def patch_details(data_df: pd.DataFrame):
@@ -112,6 +113,15 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         IndividualSummaryEnrollmentGQLType,
         customFilters=graphene.List(of_type=graphene.String),
         benefitPlanId=graphene.String()
+    )
+
+    individual_data_upload_history = OrderedDjangoFilterConnectionField(
+        IndividualDataUploadQGLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        dateValidFrom__Gte=graphene.DateTime(),
+        dateValidTo__Lte=graphene.DateTime(),
+        applyDefaultValidityFilter=graphene.Boolean(),
+        client_mutation_id=graphene.String()
     )
 
     def resolve_individual(self, info, **kwargs):
@@ -273,6 +283,20 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
 
         query = GroupIndividual.objects.filter(*filters)
+        return gql_optimizer.query(query, info)
+
+    def resolve_individual_data_upload_history(self, info, **kwargs):
+        filters = append_validity_filter(**kwargs)
+
+        client_mutation_id = kwargs.get("client_mutation_id", None)
+        if client_mutation_id:
+            filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        Query._check_permissions(
+            info.context.user,
+            IndividualConfig.gql_individual_search_perms
+        )
+        query = IndividualDataUploadRecords.objects.filter(*filters)
         return gql_optimizer.query(query, info)
 
     @staticmethod

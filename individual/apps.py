@@ -19,7 +19,13 @@ DEFAULT_CONFIG = {
     "check_group_individual_update": True,
     "check_group_create": True,
     "individual_schema": "{}",
-    "individual_accept_enrolment": "individual_service.create_accept_enrolment_task"
+    "individual_accept_enrolment": "individual_service.create_accept_enrolment_task",
+    "validation_import_valid_items_workflow": "individual-import-valid-items",
+    "validation_calculation_uuid": "4362f958-5894-435b-9bda-df6cadf88352",
+    "validation_import_valid_items": "validation.import_valid_items",
+    "unique_class_validation": "DeduplicationIndividualValidationStrategy",
+
+    "enable_python_workflows": True
 }
 
 
@@ -42,6 +48,12 @@ class IndividualConfig(AppConfig):
     python_individual_import_workflow_name = None
     individual_schema = None
     individual_accept_enrolment = None
+    validation_calculation_uuid = None
+    validation_import_valid_items_workflow = None
+    validation_import_valid_items = None
+    unique_class_validation = None
+
+    enable_python_workflows = None
 
     def ready(self):
         from core.models import ModuleConfiguration
@@ -50,15 +62,7 @@ class IndividualConfig(AppConfig):
         self.__load_config(cfg)
         self.__validate_individual_schema(cfg)
         self.__initialize_custom_filters()
-
-
-        from workflow.systems.python import PythonWorkflowAdaptor
-        from individual.workflows import import_individual_workflow
-        PythonWorkflowAdaptor.register_workflow(
-            "example-import-individual",
-            "individual-import-group",
-            import_individual_workflow
-        )
+        self._set_up_workflows()
 
     @classmethod
     def __load_config(cls, cfg):
@@ -89,3 +93,19 @@ class IndividualConfig(AppConfig):
             module_name=cls.name,
             custom_filter_class_list=[IndividualCustomFilterWizard]
         )
+
+    def _set_up_workflows(self):
+        from workflow.systems.python import PythonWorkflowAdaptor
+        from individual.workflows import process_import_individual_workflow
+
+        if self.enable_python_workflows:
+            PythonWorkflowAdaptor.register_workflow(
+                'Python Import Individual',
+                'individual',
+                process_import_individual_workflow
+            )
+
+        # Replace default setup for invalid workflow to be python one
+        if self.enable_python_workflows is True and \
+                self.validation_import_valid_items_workflow == DEFAULT_CONFIG['validation_import_valid_items_workflow']:
+            self.validation_import_valid_items_workflow = 'Python Import Individual'
