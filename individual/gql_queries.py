@@ -195,3 +195,4 @@ class IndividualSummaryEnrollmentGQLType(graphene.ObjectType):
     number_of_individuals_not_assigned_to_programme = graphene.String()
     number_of_individuals_assigned_to_programme = graphene.String()
     number_of_individuals_assigned_to_selected_programme = graphene.String()
+    number_of_individuals_to_upload = graphene.String()

@@ -171,16 +171,19 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         individuals_assigned_to_programme = number_of_selected_individuals - individuals_not_assigned_to_programme
 
         individuals_assigned_to_selected_programme = "0"
+        number_of_individuals_to_upload = number_of_selected_individuals
         if benefit_plan_id:
             individuals_assigned_to_selected_programme = query. \
                 filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id).count()
+            number_of_individuals_to_upload = number_of_individuals_to_upload - individuals_assigned_to_selected_programme
 
         return IndividualSummaryEnrollmentGQLType(
             number_of_selected_individuals=number_of_selected_individuals,
             total_number_of_individuals=total_number_of_individuals,
             number_of_individuals_not_assigned_to_programme=individuals_not_assigned_to_programme,
             number_of_individuals_assigned_to_programme=individuals_assigned_to_programme,
-            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme
+            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme,
+            number_of_individuals_to_upload=number_of_individuals_to_upload
         )
 
     def resolve_individual_history(self, info, **kwargs):
