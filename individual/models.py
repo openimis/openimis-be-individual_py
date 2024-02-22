@@ -43,6 +43,14 @@ class IndividualDataSource(HistoryModel):
     validations = models.JSONField(blank = True, default=dict)
 
 
+class IndividualDataUploadRecords(HistoryModel):
+    data_upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=False)
+    workflow = models.CharField(max_length=50)
+
+    def __str__(self):
+        return f"{self.data_upload.source_name} {self.workflow} {self.date_created}"
+
+
 class Group(HistoryModel):
     json_ext = models.JSONField(db_column="Json_ext", blank=True,default=dict)
 

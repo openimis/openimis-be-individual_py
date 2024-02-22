@@ -1,9 +1,27 @@
 import graphene
+from django.contrib.auth.models import AnonymousUser
 from graphene_django import DjangoObjectType
 
 from core import prefix_filterset, ExtendedConnection
 from core.gql_queries import UserGQLType
-from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
+from individual.apps import IndividualConfig
+from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
+    IndividualDataSourceUpload, IndividualDataUploadRecords
+
+
+def _have_permissions(user, permission):
+    if isinstance(user, AnonymousUser):
+        return False
+    if not user.id:
+        return False
+    return user.has_perms(permission)
+
+
+class JsonExtMixin:
+    def resolve_json_ext(self, info):
+        if _have_permissions(info.context.user, IndividualConfig.gql_individual_search_perms):
+            return self.json_ext
+        return None
 
 
 class IndividualGQLType(DjangoObjectType):
@@ -153,9 +171,28 @@ class GroupIndividualGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
+class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
+    uuid = graphene.String(source='uuid')
+
+    class Meta:
+        model = IndividualDataUploadRecords
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "date_created": ["exact", "lt", "lte", "gt", "gte"],
+            "date_updated": ["exact", "lt", "lte", "gt", "gte"],
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+            "workflow": ["exact", "iexact", "startswith", "istartswith", "contains", "icontains"],
+            **prefix_filterset("data_upload__", IndividualDataSourceUploadGQLType._meta.filter_fields),
+        }
+        connection_class = ExtendedConnection
+
+
 class IndividualSummaryEnrollmentGQLType(graphene.ObjectType):
     number_of_selected_individuals = graphene.String()
     total_number_of_individuals = graphene.String()
     number_of_individuals_not_assigned_to_programme = graphene.String()
     number_of_individuals_assigned_to_programme = graphene.String()
     number_of_individuals_assigned_to_selected_programme = graphene.String()
+    number_of_individuals_to_upload = graphene.String()

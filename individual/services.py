@@ -1,23 +1,42 @@
-import copy
 import logging
+import json
+import uuid
+import pandas as pd
 
+from pandas import DataFrame
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
+from django.db.models import Q, Value, Func, F
 
+from calculation.services import get_calculation_object
 from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.utils.translation import gettext as _
 from individual.apps import IndividualConfig
-from individual.models import Individual, IndividualDataSource, GroupIndividual, Group
-from individual.validation import IndividualValidation, IndividualDataSourceValidation, GroupIndividualValidation, \
+from individual.models import (
+    Individual,
+    IndividualDataSource,
+    GroupIndividual,
+    Group,
+    IndividualDataUploadRecords,
+    IndividualDataSourceUpload
+)
+from social_protection.utils import load_dataframe
+from individual.validation import (
+    IndividualValidation,
+    IndividualDataSourceValidation,
+    GroupIndividualValidation,
     GroupValidation
+)
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
 from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
 from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
     crud_business_data_builder, TaskService, _get_std_task_data_payload
+from workflow.systems.base import WorkflowHandler
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +299,234 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
         serialized_data = crud_business_data_builder(data, serialize)
         return serialized_data
 
+
+class IndividualImportService:
+    import_loaders = {
+        # .csv
+        'text/csv': lambda f: pd.read_csv(f),
+        # .xlsx
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': lambda f: pd.read_excel(f),
+        # .xls
+        'application/vnd.ms-excel': lambda f: pd.read_excel(f),
+        # .ods
+        'application/vnd.oasis.opendocument.spreadsheet': lambda f: pd.read_excel(f),
+    }
+
+    def __init__(self, user):
+        super().__init__()
+        self.user = user
+
+    @register_service_signal('individual.import_individuals')
+    def import_individuals(self,
+                             import_file: InMemoryUploadedFile,
+                             workflow: WorkflowHandler):
+        upload = self._save_sources(import_file)
+        self._trigger_workflow(workflow, upload)
+        return {'success': True, 'data': {'upload_uuid': upload.uuid}}
+
+    @transaction.atomic
+    def _save_sources(self, import_file):
+        # Method separated as workflow execution must be independent of the atomic transaction.
+        upload = self._create_upload_entry(import_file.name)
+        dataframe = self._load_import_file(import_file)
+        self._validate_dataframe(dataframe)
+        self._save_data_source(dataframe, upload)
+        return upload
+
+    def validate_import_individuals(self, upload_id: uuid, individual_sources):
+        dataframe = self._load_dataframe(individual_sources)
+        validated_dataframe, invalid_items = self._validate_possible_individuals(
+            dataframe,
+            upload_id
+        )
+        return {'success': True, 'data': validated_dataframe, 'summary_invalid_items': invalid_items}
+
+    def create_task_with_importing_valid_items(self, upload_id: uuid):
+        self._create_import_valid_items_task(upload_id, self.user)
+
+    def synchronize_data_for_reporting(self, upload_id: uuid):
+        self._synchronize_individual(upload_id)
+
+    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
+        schema_dict = json.loads(IndividualConfig.individual_schema)
+        properties = schema_dict.get("properties", {})
+        validated_dataframe = []
+
+        def validate_row(row):
+            field_validation = {'row': row.to_dict(), 'validations': {}}
+            for field, field_properties in properties.items():
+                if "validationCalculation" in field_properties:
+                    field_validation['validations'][f'{field}'] = self._handle_validation_calculation(
+                        row, field, field_properties
+                    )
+                if "uniqueness" in field_properties:
+                    field_validation['validations'][f'{field}_uniqueness'] = self._handle_uniqueness(
+                        row, field, field_properties, dataframe
+                    )
+            validated_dataframe.append(field_validation)
+            self.__save_validation_error_in_data_source(row, field_validation)
+            return row
+
+        dataframe.apply(validate_row, axis='columns')
+        invalid_items = self.__fetch_summary_of_broken_items(upload_id)
+        return validated_dataframe, invalid_items
+
+    def _handle_uniqueness(self, row, field, field_properties, dataframe):
+        unique_class_validation = IndividualConfig.unique_class_validation
+        calculation_uuid = IndividualConfig.validation_calculation_uuid
+        calculation = get_calculation_object(calculation_uuid)
+        result_row = calculation.calculate_if_active_for_object(
+            unique_class_validation,
+            calculation_uuid,
+            field,
+            row[field],
+            incoming_data=dataframe
+        )
+        return result_row
+
+    def _handle_validation_calculation(self, row, field, field_properties):
+        validation_calculation = field_properties.get("validationCalculation", {}).get("name")
+        if not validation_calculation:
+            raise ValueError("Missing validation name")
+        calculation_uuid = IndividualConfig.validation_calculation_uuid
+        calculation = get_calculation_object(calculation_uuid)
+        result_row = calculation.calculate_if_active_for_object(
+            validation_calculation,
+            calculation_uuid,
+            field,
+            row[field]
+        )
+        return result_row
+
+    def _create_upload_entry(self, filename):
+        upload = IndividualDataSourceUpload(source_name=filename, source_type='individual import')
+        upload.save(username=self.user.login_name)
+        return upload
+
+    def _validate_dataframe(self, dataframe: pd.DataFrame):
+        if dataframe is None:
+            raise ValueError("Unknown error while loading import file")
+        if dataframe.empty:
+            raise ValueError("Import file is empty")
+
+    def _load_import_file(self, import_file) -> pd.DataFrame:
+        if import_file.content_type not in self.import_loaders:
+            raise ValueError("Unsupported content type: {}".format(import_file.content_type))
+
+        return self.import_loaders[import_file.content_type](import_file)
+
+    def _save_data_source(self, dataframe: pd.DataFrame, upload: IndividualDataSourceUpload):
+        dataframe.apply(self._save_row, axis='columns', args=(upload,))
+
+    def _save_row(self, row, upload):
+        ds = IndividualDataSource(upload=upload, json_ext=json.loads(row.to_json()), validations={})
+        ds.save(username=self.user.login_name)
+
+    def _load_dataframe(self, individual_sources) -> pd.DataFrame:
+        return load_dataframe(individual_sources)
+
+    def _trigger_workflow(self,
+                          workflow: WorkflowHandler,
+                          upload: IndividualDataSourceUpload):
+        try:
+            # Before the run in order to avoid racing conditions
+            upload.status = IndividualDataSourceUpload.Status.TRIGGERED
+            upload.save(username=self.user.login_name)
+
+            result = workflow.run({
+                # Core user UUID required
+                'user_uuid': str(User.objects.get(username=self.user.login_name).id),
+                'upload_uuid': str(upload.uuid),
+            })
+
+            # Conditions are safety measure for workflows. Usually handles like PythonHandler or LightningHandler
+            #  should follow this pattern but return type is not determined in workflow.run abstract.
+            if result and isinstance(result, dict) and result.get('success') is False:
+                raise ValueError(result.get('message', 'Unexpected error during the workflow execution'))
+        except ValueError as e:
+            upload.status = IndividualDataSourceUpload.Status.FAIL
+            upload.error = {'workflow': str(e)}
+            upload.save(username=self.user.login_name)
+            return upload
+
+    def __save_validation_error_in_data_source(self, row, field_validation):
+        error_fields = []
+        for key, value in field_validation['validations'].items():
+            if not value['success']:
+                error_fields.append({
+                    "field_name": value['field_name'],
+                    "note": value['note']
+                })
+        individual_data_source = IndividualDataSource.objects.get(id=row['id'])
+        validation_column = {'validation_errors': error_fields}
+        individual_data_source.validations = validation_column
+        individual_data_source.save(username=self.user.username)
+
+    @register_service_signal('individual_validation.create_task')
+    def _create_import_valid_items_task(self, upload_id, user):
+        from individual.apps import IndividualConfig
+        from tasks_management.services import TaskService
+        from tasks_management.apps import TasksManagementConfig
+        from tasks_management.models import Task
+        upload_record = IndividualDataUploadRecords.objects.get(
+            data_upload_id=upload_id,
+            is_deleted=False
+        )
+        json_ext = {
+            'source_name': upload_record.data_upload.source_name,
+            'workflow': upload_record.workflow,
+            'percentage_of_invalid_items': self.__calculate_percentage_of_invalid_items(upload_id),
+        }
+        TaskService(user).create({
+            'source': 'import_valid_items',
+            'entity': upload_record,
+            'status': Task.Status.RECEIVED,
+            'executor_action_event': TasksManagementConfig.default_executor_event,
+            'business_event': IndividualConfig.validation_import_valid_items,
+            'json_ext': json_ext
+        })
+        upload = IndividualDataSourceUpload.objects.get(id=upload_id)
+        upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
+        upload.save(username=self.user.login_name)
+
+    def _synchronize_individual(self, upload_id):
+        synch_status = {'report_synch': 'true'}
+        individuals_to_update = Individual.objects.filter(
+            individualdatasource__upload=upload_id
+        )
+        for individual in individuals_to_update:
+            if individual.json_ext:
+                individual.json_ext.update(synch_status)
+            else:
+                individual.json_ext = synch_status
+            individual.save(username=self.user.username)
+
+    def __fetch_summary_of_broken_items(self, upload_id):
+        return list(IndividualDataSource.objects.filter(
+            Q(is_deleted=False) &
+            Q(upload_id=upload_id) &
+            ~Q(validations__validation_errors=[])
+        ).values_list('uuid', flat=True))
+
+    def __fetch_summary_of_valid_items(self, upload_id):
+        return list(IndividualDataSource.objects.filter(
+            Q(is_deleted=False) &
+            Q(upload_id=upload_id) &
+            Q(validations__validation_errors=[])
+        ).values_list('uuid', flat=True))
+
+    def __calculate_percentage_of_invalid_items(self, upload_id):
+        number_of_valid_items = len(self.__fetch_summary_of_valid_items(upload_id))
+        number_of_invalid_items = len(self.__fetch_summary_of_broken_items(upload_id))
+        total_items = number_of_invalid_items + number_of_valid_items
+
+        if total_items == 0:
+            percentage_of_invalid_items = 0
+        else:
+            percentage_of_invalid_items = (number_of_invalid_items / total_items) * 100
+
+        percentage_of_invalid_items = round(percentage_of_invalid_items, 2)
+        return percentage_of_invalid_items
 
 
 def group_on_task_complete_service_handler(service_type):

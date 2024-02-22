@@ -15,8 +15,9 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
-    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType
-from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, IndividualDataSourceUpload
+    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType
+from individual.models import Individual, IndividualDataSource, Group, \
+    GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords
 
 
 def patch_details(data_df: pd.DataFrame):
@@ -114,6 +115,15 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         benefitPlanId=graphene.String()
     )
 
+    individual_data_upload_history = OrderedDjangoFilterConnectionField(
+        IndividualDataUploadQGLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        dateValidFrom__Gte=graphene.DateTime(),
+        dateValidTo__Lte=graphene.DateTime(),
+        applyDefaultValidityFilter=graphene.Boolean(),
+        client_mutation_id=graphene.String()
+    )
+
     def resolve_individual(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
 
@@ -161,16 +171,19 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         individuals_assigned_to_programme = number_of_selected_individuals - individuals_not_assigned_to_programme
 
         individuals_assigned_to_selected_programme = "0"
+        number_of_individuals_to_upload = number_of_selected_individuals
         if benefit_plan_id:
             individuals_assigned_to_selected_programme = query. \
                 filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id).count()
+            number_of_individuals_to_upload = number_of_individuals_to_upload - individuals_assigned_to_selected_programme
 
         return IndividualSummaryEnrollmentGQLType(
             number_of_selected_individuals=number_of_selected_individuals,
             total_number_of_individuals=total_number_of_individuals,
             number_of_individuals_not_assigned_to_programme=individuals_not_assigned_to_programme,
             number_of_individuals_assigned_to_programme=individuals_assigned_to_programme,
-            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme
+            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme,
+            number_of_individuals_to_upload=number_of_individuals_to_upload
         )
 
     def resolve_individual_history(self, info, **kwargs):
@@ -273,6 +286,20 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
 
         query = GroupIndividual.objects.filter(*filters)
+        return gql_optimizer.query(query, info)
+
+    def resolve_individual_data_upload_history(self, info, **kwargs):
+        filters = append_validity_filter(**kwargs)
+
+        client_mutation_id = kwargs.get("client_mutation_id", None)
+        if client_mutation_id:
+            filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        Query._check_permissions(
+            info.context.user,
+            IndividualConfig.gql_individual_search_perms
+        )
+        query = IndividualDataUploadRecords.objects.filter(*filters)
         return gql_optimizer.query(query, info)
 
     @staticmethod

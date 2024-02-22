@@ -14,7 +14,7 @@ _full_name_field = 'nome'
 _dob_field = 'data_de_nascimento'
 
 
-def import_individual_workflow(*args, user_uuid=None, upload_uuid=None, **kwargs):
+def example_import_individual_workflow(*args, user_uuid=None, upload_uuid=None, **kwargs):
     try:
         with transaction.atomic():
             user = User.objects.get(id=user_uuid)

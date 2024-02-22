@@ -64,3 +64,13 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 
 ## openIMIS Modules Dependencies
 - core
+
+
+## Enabling Python Workflows
+Module comes with simple workflows for individual data upload. 
+They should be used for the development purposes, not in production environment. 
+To activate these Python workflows, a configuration change is required. 
+Specifically, the `enable_python_workflows` parameter to `true` within module config.
+
+Workflows: 
+ * individual upload
