@@ -48,7 +48,7 @@ class IndividualDataUploadRecords(HistoryModel):
     workflow = models.CharField(max_length=50)
 
     def __str__(self):
-        return f"{self.data_upload.source_name} {self.workflow} {self.date_created}"
+        return f"Individual Import - {self.data_upload.source_name} {self.workflow} {self.date_created}"
 
 
 class Group(HistoryModel):
