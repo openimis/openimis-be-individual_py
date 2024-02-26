@@ -9,6 +9,10 @@ from individual.apps import IndividualConfig
 from individual.models import Individual, Group, GroupIndividual
 from individual.services import IndividualService, GroupService, GroupIndividualService, \
     CreateGroupAndMoveIndividualService
+from individual.tasks import (
+    task_import_individual_workflow,
+    task_import_individual_workflow_valid
+)
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
