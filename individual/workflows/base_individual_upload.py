@@ -65,7 +65,7 @@ def import_individual_workflow(user_uuid, upload_uuid):
     )
 
     try:
-        if validation_response['summary_invalid_items']:
+        if validation_response['summary_invalid_items'] or IndividualConfig.enable_maker_checker_logic_import:
             # If some records were not validated, call the task creation service
             import_service.create_task_with_importing_valid_items(upload_uuid)
         else:
@@ -80,10 +80,10 @@ def import_individual_workflow(user_uuid, upload_uuid):
         raise PythonWorkflowHandlerException(str(e))
 
 
-def import_individual_workflow_valid(user_uuid, upload_uuid):
+def import_individual_workflow_valid(user_uuid, upload_uuid, percentage_of_invalid_items):
     user = User.objects.get(id=user_uuid)
     import_service = IndividualImportService(user)
-    execute_sql_logic_valid_items(upload_uuid, user_uuid)
+    execute_sql_logic_valid_items(upload_uuid, user_uuid, percentage_of_invalid_items)
     import_service.synchronize_data_for_reporting(upload_uuid)
 
 
@@ -168,10 +168,12 @@ END $$;
         # Process the cursor results or handle exceptions
 
 
-def execute_sql_logic_valid_items(upload_uuid, user_uuid):
+def execute_sql_logic_valid_items(upload_uuid, user_uuid, percentage_invalid_items):
     with connection.cursor() as cursor:
         current_upload_id = upload_uuid
         userUUID = user_uuid
+        percentage_invalid_items = percentage_invalid_items
+        print(percentage_invalid_items)
         # The SQL logic here needs to be carefully translated or executed directly
         # The provided SQL is complex and may require breaking down into multiple steps or ORM operations
         cursor.execute("""
@@ -179,6 +181,7 @@ DO $$
         declare
             current_upload_id UUID := %s::UUID;
             userUUID UUID := %s::UUID;
+            percentage_invalid_items Decimal(5,2) := %s::Decimal(5,2);
             failing_entries UUID[];
             failing_entries_invalid_json UUID[];
             failing_entries_first_name UUID[];
@@ -237,8 +240,13 @@ DO $$
                     and individual_individualdatasource."Json_ext" = new_entry."Json_ext"  -- match on Json_ext
                     and validations ->> 'validation_errors' = '[]';
 
-
-                    update individual_individualdatasourceupload set status='PARTIAL_SUCCESS', error='{}' where "UUID" = current_upload_id;
+                    UPDATE individual_individualdatasourceupload
+                    SET 
+                      status = CASE 
+                        WHEN percentage_invalid_items > 0 THEN 'PARTIAL_SUCCESS' 
+                        ELSE 'SUCCESS' 
+                      END
+                    WHERE "UUID" = current_upload_id;
                     EXCEPTION
                     WHEN OTHERS then
 
@@ -253,7 +261,7 @@ DO $$
                 END;
             END IF;
         END $$
-        """, [current_upload_id, userUUID])
+        """, [current_upload_id, userUUID, percentage_invalid_items])
         # Process the cursor results or handle exceptions
 
 
@@ -261,5 +269,9 @@ def process_import_individual_workflow(user_uuid, upload_uuid):
     task_import_individual_workflow.delay(user_uuid=user_uuid, upload_uuid=upload_uuid)
 
 
-def process_import_individual_workflow_valid(user_uuid, upload_uuid):
-    task_import_individual_workflow_valid.delay(user_uuid=user_uuid, upload_uuid=upload_uuid)
+def process_import_individual_workflow_valid(user_uuid, upload_uuid, percentage_of_invalid_items):
+    task_import_individual_workflow_valid.delay(
+        user_uuid=user_uuid,
+        upload_uuid=upload_uuid,
+        percentage_of_invalid_items=percentage_of_invalid_items
+    )
