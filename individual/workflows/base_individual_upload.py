@@ -22,7 +22,7 @@ from workflow.exceptions import PythonWorkflowHandlerException
 logger = logging.getLogger(__name__)
 
 
-def validate_dataframe_headers(df, schema):
+def validate_dataframe_headers(df, schema, upload_id, user):
     """
     Validates if DataFrame headers:
     1. Are included in the JSON schema properties.
@@ -46,6 +46,7 @@ def validate_dataframe_headers(df, schema):
             )
 
     if errors:
+        update_individual_upload_data_source(upload_id, user, {'file_structure': "\n".join(errors)})
         raise PythonWorkflowHandlerException("\n".join(errors))
 
 
@@ -57,7 +58,7 @@ def import_individual_workflow(user_uuid, upload_uuid):
     df = load_dataframe(IndividualDataSource.objects.filter(upload_id=upload_uuid))
     # Valid headers are necessary conditions, breaking whole update. If file is invalid then
     # upload is aborted because no record can be uploaded.
-    validate_dataframe_headers(df, schema)
+    validate_dataframe_headers(df, schema, upload_uuid, user)
 
     validation_response = import_service.validate_import_individuals(
         upload_id=upload_uuid,
@@ -74,10 +75,19 @@ def import_individual_workflow(user_uuid, upload_uuid):
             import_service.synchronize_data_for_reporting(upload_uuid)
     except ProgrammingError as e:
         # The exception on procedure execution is handled by the procedure itself.
+        update_individual_upload_data_source(upload_uuid, user, {'programming_error': str(e)})
         logger.log(logging.WARNING, F'Error during individual upload workflow, details:\n{str(e)}')
         return
     except Exception as e:
+        update_individual_upload_data_source(upload_uuid, user, {'exception': str(e)})
         raise PythonWorkflowHandlerException(str(e))
+
+
+def update_individual_upload_data_source(upload_id, user, error):
+    upload = IndividualDataSourceUpload.objects.get(id=upload_id)
+    upload.status = IndividualDataSourceUpload.Status.FAIL
+    upload.error = error
+    upload.save(username=user.login_name)
 
 
 def import_individual_workflow_valid(user_uuid, upload_uuid, percentage_of_invalid_items):
