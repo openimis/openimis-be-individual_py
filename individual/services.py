@@ -356,13 +356,15 @@ class IndividualImportService:
             field_validation = {'row': row.to_dict(), 'validations': {}}
             for field, field_properties in properties.items():
                 if "validationCalculation" in field_properties:
-                    field_validation['validations'][f'{field}'] = self._handle_validation_calculation(
-                        row, field, field_properties
-                    )
+                    if field in row:
+                        field_validation['validations'][f'{field}'] = self._handle_validation_calculation(
+                            row, field, field_properties
+                        )
                 if "uniqueness" in field_properties:
-                    field_validation['validations'][f'{field}_uniqueness'] = self._handle_uniqueness(
-                        row, field, field_properties, dataframe
-                    )
+                    if field in row:
+                        field_validation['validations'][f'{field}_uniqueness'] = self._handle_uniqueness(
+                            row, field, field_properties, dataframe
+                        )
             validated_dataframe.append(field_validation)
             self.__save_validation_error_in_data_source(row, field_validation)
             return row
