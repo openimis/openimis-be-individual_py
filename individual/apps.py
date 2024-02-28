@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
     "individual_accept_enrolment": "individual_service.create_accept_enrolment_task",
     "validation_import_valid_items_workflow": "individual-import-valid-items",
     "validation_calculation_uuid": "4362f958-5894-435b-9bda-df6cadf88352",
-    "validation_import_valid_items": "validation.import_valid_items",
+    "validation_import_valid_items": "individual_validation.import_valid_items",
     "unique_class_validation": "DeduplicationIndividualValidationStrategy",
     "enable_python_workflows": True,
     "enable_maker_checker_logic_import": True,
