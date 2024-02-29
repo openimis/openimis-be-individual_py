@@ -23,7 +23,7 @@ from individual.models import (
     IndividualDataUploadRecords,
     IndividualDataSourceUpload
 )
-from social_protection.utils import load_dataframe
+from individual.utils import load_dataframe
 from individual.validation import (
     IndividualValidation,
     IndividualDataSourceValidation,
