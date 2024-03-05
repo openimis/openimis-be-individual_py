@@ -171,6 +171,30 @@ class GroupIndividualGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
+class GroupIndividualHistoryGQLType(DjangoObjectType):
+    uuid = graphene.String(source='uuid')
+    user_updated = graphene.Field(UserGQLType)
+
+    def resolve_user_updated(self, info):
+        return self.user_updated
+
+    class Meta:
+        model = GroupIndividual.history.model
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "date_created": ["exact", "lt", "lte", "gt", "gte"],
+            "date_updated": ["exact", "lt", "lte", "gt", "gte"],
+            "role": ["exact", "iexact", "istartswith", "icontains"],
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+            **prefix_filterset("individual__", IndividualGQLType._meta.filter_fields),
+            **prefix_filterset("group__", GroupGQLType._meta.filter_fields),
+            **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
+        }
+        connection_class = ExtendedConnection
+
+
 class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
     uuid = graphene.String(source='uuid')
 
