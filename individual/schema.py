@@ -15,7 +15,9 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
-    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType
+    IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
+    IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType, \
+    GroupIndividualHistoryGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords
 
@@ -108,6 +110,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         dateValidTo__Lte=graphene.DateTime(),
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String()
+    )
+
+    group_individual_history = OrderedDjangoFilterConnectionField(
+        GroupIndividualHistoryGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        applyDefaultValidityFilter=graphene.Boolean(),
     )
 
     individual_enrollment_summary = graphene.Field(
@@ -294,6 +302,13 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
 
         query = GroupIndividual.objects.filter(*filters)
+        return gql_optimizer.query(query, info)
+
+    def resolve_group_individual_history(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_group_search_perms)
+        filters = append_validity_filter(**kwargs)
+        query = GroupIndividual.history.filter(*filters)
         return gql_optimizer.query(query, info)
 
     def resolve_individual_data_upload_history(self, info, **kwargs):
