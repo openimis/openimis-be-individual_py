@@ -110,3 +110,10 @@ class IndividualConfig(AppConfig):
         if self.enable_python_workflows is True and \
                 self.validation_import_valid_items_workflow == DEFAULT_CONFIG['validation_import_valid_items_workflow']:
             self.validation_import_valid_items_workflow = 'Python Import Individual'
+
+
+    @staticmethod
+    def get_individual_upload_file_path(filename):
+        if filename:
+            return f"individual_upload/{filename}"
+        return f"individual_upload"

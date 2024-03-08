@@ -4,9 +4,11 @@ import numpy as np
 import pandas as pd
 from django.db.models import Q
 from django.http import HttpResponse, StreamingHttpResponse
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from core.utils import DefaultStorageFileHandler
 from im_export.views import check_user_rights
 from individual.apps import IndividualConfig
 from individual.models import IndividualDataSource
@@ -39,6 +41,7 @@ def load_spreadsheet(file: InMemoryUploadedFile, **kwargs) -> pd.DataFrame:
 @api_view(["POST"])
 @permission_classes([check_user_rights(IndividualConfig.gql_individual_create_perms, )])
 def import_individuals(request):
+    import_file = None
     try:
         user = request.user
         import_file = request.FILES.get('file', None)
@@ -47,6 +50,8 @@ def import_individuals(request):
 
         if not (import_file and workflow_name and workflow_group):
             raise ValueError("invalid args")
+
+        _handle_file_upload(import_file)
 
         from workflow.services import WorkflowService
         result = WorkflowService.get_workflows(workflow_name, workflow_group)
@@ -61,14 +66,20 @@ def import_individuals(request):
 
         return Response(result)
     except ValueError as e:
+        if import_file:
+            _remove_file(import_file)
         logger.error("Error while uploading individuals", exc_info=e)
-        return Response({'success': False, 'error': str(e)}, status=400)
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except FileExistsError as e:
+        logger.error("Error while saving file", exc_info=e)
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_409_CONFLICT)
     except Exception as e:
         logger.error("Unexpected error while uploading individuals", exc_info=e)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
+@permission_classes([check_user_rights(IndividualConfig.gql_individual_search_perms, )])
 def download_invalid_items(request):
     try:
         upload_id = request.query_params.get('upload_id')
@@ -107,3 +118,38 @@ def download_invalid_items(request):
     except Exception as exc:
         logger.error("Unexpected error", exc_info=exc)
         return Response({'success': False, 'error': str(exc)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([check_user_rights(IndividualConfig.gql_individual_search_perms, )])
+def download_individual_upload(request):
+    try:
+        filename = request.query_params.get('filename')
+        target_file_path = IndividualConfig.get_individual_upload_file_path(filename)
+        file_handler = DefaultStorageFileHandler(target_file_path)
+        return file_handler.get_file_response_csv(filename)
+
+    except ValueError as exc:
+        logger.error("Error while fetching data", exc_info=exc)
+        return Response({'success': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except FileNotFoundError as exc:
+        logger.error("Error while getting file", exc_info=exc)
+        return Response({'success': False, 'error': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        logger.error("Unexpected error", exc_info=exc)
+        return Response({'success': False, 'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _handle_file_upload(file):
+    try:
+        target_file_path = IndividualConfig.get_individual_upload_file_path(file.name)
+        file_handler = DefaultStorageFileHandler(target_file_path)
+        file_handler.save_file(file)
+    except FileExistsError as exc:
+        raise exc
+
+
+def _remove_file(file):
+    target_file_path = IndividualConfig.get_individual_upload_file_path(file.name)
+    file_handler = DefaultStorageFileHandler(target_file_path)
+    file_handler.remove_file()
