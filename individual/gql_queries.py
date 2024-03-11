@@ -13,7 +13,7 @@ class IndividualGQLType(DjangoObjectType):
         model = Individual
         interfaces = (graphene.relay.Node,)
         filter_fields = {
-            "id": ["exact"],
+            "id": ["exact", "isnull"],
             "first_name": ["iexact", "istartswith", "icontains"],
             "last_name": ["iexact", "istartswith", "icontains"],
             "dob": ["exact", "lt", "lte", "gt", "gte"],
@@ -78,7 +78,7 @@ class IndividualDataSourceGQLType(DjangoObjectType):
         model = IndividualDataSource
         interfaces = (graphene.relay.Node,)
         filter_fields = {
-            "id": ["exact"],
+            "id": ["exact", "isnull"],
 
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
