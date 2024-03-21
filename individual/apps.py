@@ -24,8 +24,12 @@ DEFAULT_CONFIG = {
     "validation_calculation_uuid": "4362f958-5894-435b-9bda-df6cadf88352",
     "validation_import_valid_items": "individual_validation.import_valid_items",
     "unique_class_validation": "DeduplicationIndividualValidationStrategy",
+    "validation_upload_valid_items": "validation.upload_valid_items",
+    "validation_upload_valid_items_workflow": "individual-upload-valid-items.individual-upload-valid-items",
     "enable_python_workflows": True,
     "enable_maker_checker_logic_import": True,
+    "enable_maker_checker_for_individual_upload": True,
+    "enable_maker_checker_for_individual_update": True,
 }
 
 
@@ -55,6 +59,12 @@ class IndividualConfig(AppConfig):
 
     enable_python_workflows = None
     enable_maker_checker_logic_import = None
+
+    validation_upload_valid_items_workflow = None
+    validation_upload_valid_items = None
+
+    enable_maker_checker_for_individual_upload = None
+    enable_maker_checker_for_individual_update = None
 
     def ready(self):
         from core.models import ModuleConfiguration
@@ -97,20 +107,46 @@ class IndividualConfig(AppConfig):
 
     def _set_up_workflows(self):
         from workflow.systems.python import PythonWorkflowAdaptor
-        from individual.workflows import process_import_individual_workflow
+        from individual.workflows import process_import_individuals_workflow, \
+            process_update_valid_individuals_workflow, \
+            process_import_valid_individuals_workflow, \
+            process_update_individuals_workflow
 
         if self.enable_python_workflows:
             PythonWorkflowAdaptor.register_workflow(
-                'Python Import Individual',
+                'Python Import Individuals',
                 'individual',
-                process_import_individual_workflow
+                process_import_individuals_workflow
+            )
+            PythonWorkflowAdaptor.register_workflow(
+                'Python Update Individuals',
+                'individual',
+                process_update_individuals_workflow
+            )
+            PythonWorkflowAdaptor.register_workflow(
+                'Python Valid Upload Individuals',
+                'individual',
+                process_import_valid_individuals_workflow
+            )
+            PythonWorkflowAdaptor.register_workflow(
+                'Python Valid Update Individuals',
+                'individual',
+                process_update_valid_individuals_workflow
             )
 
-        # Replace default setup for invalid workflow to be python one
-        if self.enable_python_workflows is True and \
-                self.validation_import_valid_items_workflow == DEFAULT_CONFIG['validation_import_valid_items_workflow']:
-            self.validation_import_valid_items_workflow = 'Python Import Individual'
+            # Replace default setup for invalid workflow to be python one
+            if IndividualConfig.enable_python_workflows is True:
 
+                # Resolve Maker-Checker Workflows Overwrite
+                if self.validation_import_valid_items_workflow == DEFAULT_CONFIG[
+                    'validation_import_valid_items_workflow']:
+                    IndividualConfig.validation_import_valid_items_workflow \
+                        = 'individual.Python Valid Upload Individuals'
+
+                if self.validation_upload_valid_items_workflow == DEFAULT_CONFIG[
+                    'validation_upload_valid_items_workflow']:
+                    IndividualConfig.validation_upload_valid_items_workflow \
+                        = 'individual.Python Valid Update Individuals'
 
     @staticmethod
     def get_individual_upload_file_path(filename):
