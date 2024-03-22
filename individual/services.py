@@ -474,7 +474,6 @@ class IndividualImportService:
         individual_data_source.validations = validation_column
         individual_data_source.save(username=self.user.username)
 
-    # new code
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         IndividualTaskCreatorService(self.user) \
             .create_task_with_importing_valid_items(upload_id)
@@ -509,14 +508,16 @@ class IndividualImportService:
                 record.data_upload.id,
                 self.user
             ).run_workflow()
-    # end new code
 
     def _synchronize_individual(self, upload_id):
-        synch_status = {'report_synch': 'true'}
         individuals_to_update = Individual.objects.filter(
             individualdatasource__upload=upload_id
         )
         for individual in individuals_to_update:
+            synch_status = {
+                'report_synch': 'true',
+                'version': individual.version + 1,
+            }
             if individual.json_ext:
                 individual.json_ext.update(synch_status)
             else:
