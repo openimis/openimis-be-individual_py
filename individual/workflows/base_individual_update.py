@@ -1,15 +1,19 @@
 import logging
 
+from core.models import User
 from individual.workflows.utils import DataUpdateWorkflow
+from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
 
 
 def process_update_individuals_workflow(user_uuid, upload_uuid):
     # Call the records validation service directly with the provided arguments
+    user = User.objects.get(id=user_uuid)
     service = DataUpdateWorkflow(upload_uuid, user_uuid)
     service.validate_dataframe_headers(True)
     service.execute(update_sql)
+    IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
 update_sql = """

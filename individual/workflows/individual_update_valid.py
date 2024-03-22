@@ -1,17 +1,21 @@
 import logging
 
+from core.models import User
 from individual.workflows.utils import SqlProcedurePythonWorkflow
+from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
 
 
 def process_update_valid_individuals_workflow(user_uuid, upload_uuid, accepted=None):
+    user = User.objects.get(id=user_uuid)
     service = SqlProcedurePythonWorkflow(upload_uuid, user_uuid, accepted)
     service.validate_dataframe_headers(True)
     if isinstance(accepted, list):
         service.execute(upload_sql_partial, [upload_uuid, user_uuid, accepted])
     else:
         service.execute(upload_sql, [upload_uuid, user_uuid])
+    IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
 upload_sql = """     
