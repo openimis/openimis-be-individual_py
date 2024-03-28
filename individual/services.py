@@ -23,7 +23,11 @@ from individual.models import (
     IndividualDataUploadRecords,
     IndividualDataSourceUpload
 )
-from individual.utils import load_dataframe
+from individual.utils import (
+    load_dataframe,
+    fetch_summary_of_valid_items,
+    fetch_summary_of_broken_items
+)
 from individual.validation import (
     IndividualValidation,
     IndividualDataSourceValidation,
@@ -321,6 +325,7 @@ class IndividualImportService:
                              import_file: InMemoryUploadedFile,
                              workflow: WorkflowHandler):
         upload = self._save_sources(import_file)
+        self._create_individual_data_upload_records(workflow, upload)
         self._trigger_workflow(workflow, upload)
         return {'success': True, 'data': {'upload_uuid': upload.uuid}}
 
@@ -333,6 +338,14 @@ class IndividualImportService:
         self._save_data_source(dataframe, upload)
         return upload
 
+    @transaction.atomic
+    def _create_individual_data_upload_records(self, workflow, upload):
+        record = IndividualDataUploadRecords(
+            data_upload=upload,
+            workflow=workflow.name
+        )
+        record.save(username=self.user.username)
+
     def validate_import_individuals(self, upload_id: uuid, individual_sources):
         dataframe = self._load_dataframe(individual_sources)
         validated_dataframe, invalid_items = self._validate_possible_individuals(
@@ -340,9 +353,6 @@ class IndividualImportService:
             upload_id
         )
         return {'success': True, 'data': validated_dataframe, 'summary_invalid_items': invalid_items}
-
-    def create_task_with_importing_valid_items(self, upload_id: uuid):
-        self._create_import_valid_items_task(upload_id, self.user)
 
     def synchronize_data_for_reporting(self, upload_id: uuid):
         self._synchronize_individual(upload_id)
@@ -370,7 +380,7 @@ class IndividualImportService:
             return row
 
         dataframe.apply(validate_row, axis='columns')
-        invalid_items = self.__fetch_summary_of_broken_items(upload_id)
+        invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
 
     def _handle_uniqueness(self, row, field, field_properties, dataframe):
@@ -464,9 +474,71 @@ class IndividualImportService:
         individual_data_source.validations = validation_column
         individual_data_source.save(username=self.user.username)
 
-    @register_service_signal('individual_validation.create_task')
-    def _create_import_valid_items_task(self, upload_id, user):
-        from individual.apps import IndividualConfig
+    def create_task_with_importing_valid_items(self, upload_id: uuid):
+        IndividualTaskCreatorService(self.user) \
+            .create_task_with_importing_valid_items(upload_id)
+
+        record = IndividualDataUploadRecords.objects.get(
+            data_upload_id=upload_id,
+            is_deleted=False
+        )
+        if not IndividualConfig.enable_maker_checker_for_individual_upload:
+            from individual.signals.on_validation_import_valid_items import ItemsUploadTaskCompletionEvent
+            ItemsUploadTaskCompletionEvent(
+                IndividualConfig.validation_import_valid_items_workflow,
+                record,
+                record.data_upload.id,
+                self.user
+            ).run_workflow()
+
+    def create_task_with_update_valid_items(self, upload_id: uuid):
+        IndividualTaskCreatorService(self.user) \
+            .create_task_with_update_valid_items(upload_id)
+
+        record = IndividualDataUploadRecords.objects.get(
+            data_upload_id=upload_id,
+            is_deleted=False
+        )
+        # Resolve automatically if maker-checker not enabled
+        if not IndividualConfig.enable_maker_checker_for_individual_update:
+            from individual.signals.on_validation_import_valid_items import ItemsUploadTaskCompletionEvent
+            ItemsUploadTaskCompletionEvent(
+                IndividualConfig.validation_upload_valid_items_workflow,
+                record,
+                record.data_upload.id,
+                self.user
+            ).run_workflow()
+
+    def _synchronize_individual(self, upload_id):
+        individuals_to_update = Individual.objects.filter(
+            individualdatasource__upload=upload_id
+        )
+        for individual in individuals_to_update:
+            synch_status = {
+                'report_synch': 'true',
+                'version': individual.version + 1,
+            }
+            if individual.json_ext:
+                individual.json_ext.update(synch_status)
+            else:
+                individual.json_ext = synch_status
+            individual.save(username=self.user.username)
+
+
+class IndividualTaskCreatorService:
+
+    def __init__(self, user):
+        self.user = user
+
+    def create_task_with_importing_valid_items(self, upload_id: uuid):
+        self._create_task(upload_id, IndividualConfig.validation_import_valid_items)
+
+    def create_task_with_update_valid_items(self, upload_id: uuid):
+        self._create_task(upload_id, IndividualConfig.validation_upload_valid_items)
+
+    @register_service_signal('individual.update_task')
+    @transaction.atomic()
+    def _create_task(self, upload_id, business_event):
         from tasks_management.services import TaskService
         from tasks_management.apps import TasksManagementConfig
         from tasks_management.models import Task
@@ -478,48 +550,24 @@ class IndividualImportService:
             'source_name': upload_record.data_upload.source_name,
             'workflow': upload_record.workflow,
             'percentage_of_invalid_items': self.__calculate_percentage_of_invalid_items(upload_id),
+            'data_upload_id': upload_id
         }
-        TaskService(user).create({
+        TaskService(self.user).create({
             'source': 'import_valid_items',
             'entity': upload_record,
             'status': Task.Status.RECEIVED,
             'executor_action_event': TasksManagementConfig.default_executor_event,
-            'business_event': IndividualConfig.validation_import_valid_items,
+            'business_event': business_event,
             'json_ext': json_ext
         })
-        upload = IndividualDataSourceUpload.objects.get(id=upload_id)
-        upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
-        upload.save(username=self.user.login_name)
 
-    def _synchronize_individual(self, upload_id):
-        synch_status = {'report_synch': 'true'}
-        individuals_to_update = Individual.objects.filter(
-            individualdatasource__upload=upload_id
-        )
-        for individual in individuals_to_update:
-            if individual.json_ext:
-                individual.json_ext.update(synch_status)
-            else:
-                individual.json_ext = synch_status
-            individual.save(username=self.user.username)
-
-    def __fetch_summary_of_broken_items(self, upload_id):
-        return list(IndividualDataSource.objects.filter(
-            Q(is_deleted=False) &
-            Q(upload_id=upload_id) &
-            ~Q(validations__validation_errors=[])
-        ).values_list('uuid', flat=True))
-
-    def __fetch_summary_of_valid_items(self, upload_id):
-        return list(IndividualDataSource.objects.filter(
-            Q(is_deleted=False) &
-            Q(upload_id=upload_id) &
-            Q(validations__validation_errors=[])
-        ).values_list('uuid', flat=True))
+        data_upload = upload_record.data_upload
+        data_upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
+        data_upload.save(username=self.user.username)
 
     def __calculate_percentage_of_invalid_items(self, upload_id):
-        number_of_valid_items = len(self.__fetch_summary_of_valid_items(upload_id))
-        number_of_invalid_items = len(self.__fetch_summary_of_broken_items(upload_id))
+        number_of_valid_items = len(fetch_summary_of_valid_items(upload_id))
+        number_of_invalid_items = len(fetch_summary_of_broken_items(upload_id))
         total_items = number_of_invalid_items + number_of_valid_items
 
         if total_items == 0:
