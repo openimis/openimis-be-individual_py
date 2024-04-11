@@ -82,14 +82,16 @@ BEGIN
         begin 
             -- Update individual_individual
           with updated_individuals as ( UPDATE individual_individual
-            SET first_name = COALESCE(f."Json_ext"->>'first_name', first_name),
-            last_name = COALESCE(f."Json_ext"->>'last_name', last_name),
-            dob = COALESCE(to_date(f."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
+            SET first_name = COALESCE(ids."Json_ext"->>'first_name', first_name),
+            last_name = COALESCE(ids."Json_ext"->>'last_name', last_name),
+            dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
             "DateUpdated" = NOW(),
-            "Json_ext" = f."Json_ext"
-            FROM individual_individualdatasource f 
-            WHERE individual_individual."UUID" = (f."Json_ext" ->> 'ID')::UUID
-            returning individual_individual."UUID", f."UUID" as "individualdatasource_id")
+            "Json_ext" = ids."Json_ext"
+            FROM individual_individualdatasource ids 
+            WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID
+            AND ids.upload_id = current_upload_id
+            AND validations ->> 'validation_errors' = '[]'
+            returning individual_individual."UUID", ids."UUID" as "individualdatasource_id")
 
             UPDATE individual_individualdatasource
       SET individual_id = u."UUID"
@@ -138,6 +140,14 @@ BEGIN
 
 upload_sql_partial = """
 -- Setup 
+DO $$ BEGIN
+            CREATE TYPE failing_entry_individual_upload AS (
+            uuids TEXT[],
+            ordinals INT[]
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
 CREATE OR REPLACE FUNCTION filter_jsonb(data jsonb, schema jsonb)
 RETURNS jsonb AS $$
 DECLARE
@@ -155,38 +165,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DO $$ BEGIN
-            CREATE TYPE failing_entry_beneficiary_upload AS (
-            uuids TEXT[],
-            ordinals INT[]
-            );
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-
 DO $$
 DECLARE
     current_upload_id UUID := %s::UUID;
     userUUID UUID := %s::UUID;
-    benefitPlan UUID := %s::UUID;
     failing_entries UUID[];
     json_schema jsonb;
     accepted UUID[] := %s::UUID[];
-    failing_entries_invalid_id failing_entry_beneficiary_upload;
+    failing_entries_invalid_id failing_entry_individual_upload;
 BEGIN
     -- existing code for finding failing_entries_first_name, failing_entries_last_name, failing_entries_dob
-
-    -- Check if any entries have invalid Json_ext according to the schema
-    SELECT beneficiary_data_schema INTO json_schema FROM social_protection_benefitplan WHERE "UUID" = benefitPlan;
-
     SELECT ARRAY_AGG("UUID") AS "UUID", ARRAY_AGG("ordinal") AS "ORDINALS" INTO failing_entries_invalid_id
     FROM (
-        SELECT ("Json_ext" ->> 'ID')::UUID as beneficiary_uuid,  row_number() OVER (ORDER BY "UUID") AS ordinal, "UUID"
+        SELECT ("Json_ext" ->> 'ID')::UUID as individual_uuid,  row_number() OVER (ORDER BY "UUID") AS ordinal, "UUID"
         FROM individual_individualdatasource
         WHERE upload_id = current_upload_id
         AND ("UUID" = ANY(accepted)) /* Filter based on accepted if not NULL */
     ) AS f
-    WHERE not beneficiary_uuid in (select "UUID" from social_protection_beneficiary spb where benefit_plan_id = benefitPlan);
+    WHERE not individual_uuid in (select "UUID" from individual_individual ii);
 
     IF failing_entries_invalid_id IS NOT NULL THEN
         UPDATE individual_individualdatasourceupload
@@ -199,21 +195,22 @@ BEGIN
         WHERE "UUID" = current_upload_id;
 
        UPDATE individual_individualdatasourceupload SET status='FAIL' WHERE "UUID" = current_upload_id;
-
     ELSE
-        BEGIN 
-            -- Update social_protection_beneficiary
-          WITH  updated_individuals AS ( 
+      BEGIN 
+          WITH updated_individuals AS ( 
             UPDATE individual_individual
-            SET first_name = COALESCE(f."Json_ext"->>'first_name', first_name),
-                last_name = COALESCE(f."Json_ext"->>'last_name', last_name),
-                dob = COALESCE(to_date(f."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
+            SET first_name = COALESCE(ids."Json_ext"->>'first_name', first_name),
+                last_name = COALESCE(ids."Json_ext"->>'last_name', last_name),
+                dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
                 "DateUpdated" = NOW(),
-                "Json_ext" = f."Json_ext"
-            FROM updated_beneficiaries f 
-            WHERE individual_individual."UUID" = (f."Json_ext" ->> 'ID')::UUID
-            returning individual_individual."UUID", f."UUID" as "individualdatasource_id")
-
+                "Json_ext" = ids."Json_ext"
+            FROM individual_individualdatasource ids
+            WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID 
+            AND ids.upload_id = current_upload_id
+            AND (ids."UUID" = ANY(accepted))
+            AND validations ->> 'validation_errors' = '[]'
+            RETURNING individual_individual."UUID", ids."UUID" as individualdatasource_id)
+           
           UPDATE individual_individualdatasource
           SET individual_id = u."UUID"
           FROM updated_individuals u
@@ -221,9 +218,9 @@ BEGIN
             AND individual_individualdatasource.individual_id IS NULL 
             AND "isDeleted" = False 
             AND individual_individualdatasource."UUID" = u.individualdatasource_id
-            AND (individual_individualdatasource."UUID" = ANY(accepted)) /* Filter based on accepted if not NULL */
+            AND (individual_individualdatasource."UUID" = ANY(accepted))
             AND validations ->> 'validation_errors' = '[]';
-
+            
           EXCEPTION
             WHEN OTHERS THEN
               UPDATE individual_individualdatasourceupload SET status = 'FAIL' WHERE "UUID" = current_upload_id;
@@ -234,7 +231,8 @@ BEGIN
                               'upload_id', current_upload_id::text
                           ))
               WHERE "UUID" = current_upload_id;
-        END;
+      END;
     END IF;
+    
 END $$
 """

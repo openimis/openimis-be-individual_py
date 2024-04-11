@@ -173,14 +173,20 @@ def _resolve_task_n(_task, _user):
 
 def on_task_resolve(**kwargs):
     from tasks_management.apps import TasksManagementConfig
+    from individual.apps import IndividualConfig
     """
     Partial approval requires custom resolve policy that doesn't rely on default APPROVE value in businessStatus.
     """
     try:
         result = kwargs.get('result', None)
+        task_data = result['data']['task']
         if result and result['success'] \
-                and result['data']['task']['status'] == Task.Status.ACCEPTED \
-                and result['data']['task']['executor_action_event'] == TasksManagementConfig.default_executor_event:
+                and task_data['status'] == Task.Status.ACCEPTED \
+                and task_data['executor_action_event'] == TasksManagementConfig.default_executor_event \
+                and task_data['business_event'] in [
+                    IndividualConfig.validation_import_valid_items,
+                    IndividualConfig.validation_upload_valid_items
+                ]:
             data = kwargs.get("result").get("data")
             task = Task.objects.select_related('task_group').prefetch_related('task_group__taskexecutor_set').get(
                 id=data["task"]["id"])
