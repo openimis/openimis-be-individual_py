@@ -12,7 +12,6 @@ def process_import_valid_individuals_workflow(user_uuid, upload_uuid, accepted=N
     service = SqlProcedurePythonWorkflow(upload_uuid, user_uuid, accepted)
     service.validate_dataframe_headers()
     if isinstance(accepted, list):
-        print(accepted)
         service.execute(upload_sql_partial, [upload_uuid, user_uuid, accepted])
     else:
         service.execute(upload_sql, [upload_uuid, user_uuid])
