@@ -58,7 +58,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id=graphene.String(),
         groupId=graphene.String(),
         customFilters=graphene.List(of_type=graphene.String),
-        benefitPlanToEnroll=graphene.String()
+        benefitPlanToEnroll=graphene.String(),
+        benefitPlanId=graphene.String(),
     )
 
     individual_history = OrderedDjangoFilterConnectionField(
@@ -149,6 +150,13 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             filters.append(
                 Q(is_deleted=False) &
                 ~Q(beneficiary__benefit_plan_id=benefit_plan_to_enroll)
+            )
+
+        benefit_plan_id = kwargs.get("benefitPlanId")
+        if benefit_plan_id:
+            filters.append(
+                Q(is_deleted=False) &
+                Q(beneficiary__benefit_plan_id=benefit_plan_id)
             )
 
         Query._check_permissions(info.context.user,
