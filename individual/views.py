@@ -16,6 +16,8 @@ from individual.services import IndividualImportService
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
+from workflow.services import WorkflowService
+
 logger = logging.getLogger(__name__)
 
 _import_loaders = {
@@ -44,23 +46,9 @@ def import_individuals(request):
     import_file = None
     try:
         user = request.user
-        import_file = request.FILES.get('file', None)
-        workflow_name = request.POST.get('workflow_name', None)
-        workflow_group = request.POST.get('workflow_group', None)
-
-        if not (import_file and workflow_name and workflow_group):
-            raise ValueError("invalid args")
-
+        import_file, workflow = _resolve_import_individuals_args(request)
         _handle_file_upload(import_file)
-
-        from workflow.services import WorkflowService
-        result = WorkflowService.get_workflows(workflow_name, workflow_group)
-        workflows = result.get('data', {}).get('workflows', [])
-
-        if not workflows:
-            raise ValueError('workflow not found')
-
-        result = IndividualImportService(user).import_individuals(import_file, workflows[0])
+        result = IndividualImportService(user).import_individuals(import_file, workflow)
         if not result.get('success'):
             raise ValueError('{}: {}'.format(result.get("message"), result.get("details")))
 
@@ -153,3 +141,31 @@ def _remove_file(file):
     target_file_path = IndividualConfig.get_individual_upload_file_path(file.name)
     file_handler = DefaultStorageFileHandler(target_file_path)
     file_handler.remove_file()
+
+
+def _resolve_import_individuals_args(request):
+    import_file = request.FILES.get('file')
+    workflow_name = request.POST.get('workflow_name')
+    workflow_group = request.POST.get('workflow_group')
+
+    if not import_file:
+        raise ValueError(f'Import file not provided')
+    if not workflow_name:
+        raise ValueError(f'Workflow name not provided')
+    if not workflow_group:
+        raise ValueError(f'Workflow group not provided')
+
+    result = WorkflowService.get_workflows(workflow_name, workflow_group)
+    if not result.get('success'):
+        raise ValueError('{}: {}'.format(result.get("message"), result.get("details")))
+
+    workflows = result.get('data', {}).get('workflows')
+
+    if not workflows:
+        raise ValueError('Workflow not found: group={} name={}'.format(workflow_group, workflow_name))
+    if len(workflows) > 1:
+        raise ValueError('Multiple workflows found: group={} name={}'.format(workflow_group, workflow_name))
+
+    workflow = workflows[0]
+
+    return import_file, workflow
