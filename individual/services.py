@@ -390,8 +390,8 @@ class IndividualImportService:
         result_row = calculation.calculate_if_active_for_object(
             unique_class_validation,
             calculation_uuid,
-            field,
-            row[field],
+            field_name=field,
+            field_value=row[field],
             incoming_data=dataframe
         )
         return result_row
@@ -405,8 +405,8 @@ class IndividualImportService:
         result_row = calculation.calculate_if_active_for_object(
             validation_calculation,
             calculation_uuid,
-            field,
-            row[field]
+            field_name=field,
+            field_value=row[field],
         )
         return result_row
 
