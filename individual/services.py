@@ -50,6 +50,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
 
     @register_service_signal('individual_service.update')
     def update(self, obj_data):
+        self._update_json_ext(obj_data)
         return super().update(obj_data)
 
     @register_service_signal('individual_service.delete')
@@ -102,6 +103,22 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     @register_service_signal('individual_service.create_accept_enrolment_task')
     def create_accept_enrolment_task(self, individual_queryset, benefit_plan_id):
         pass
+
+    def _update_json_ext(self, obj_data):
+        if not obj_data or 'json_ext' not in obj_data:
+            return
+
+        json_ext = obj_data['json_ext']
+        if not json_ext:
+            return
+
+        for field in ('first_name', 'last_name', 'dob'):
+            individual_field_value = obj_data.get(field)
+            json_ext_value = json_ext.get(field)
+            if json_ext_value and json_ext_value != individual_field_value:
+                json_ext[field] = individual_field_value
+
+        obj_data['json_ext'] = json_ext
 
     OBJECT_TYPE = Individual
 
