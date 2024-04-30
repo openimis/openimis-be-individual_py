@@ -4,12 +4,25 @@ from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 
 from individual.models import Individual, IndividualDataSource, GroupIndividual, Group
-from core.validation import BaseModelValidation
+from core.validation import BaseModelValidation, ObjectExistsValidationMixin
 from tasks_management.models import Task
 
 
-class IndividualValidation(BaseModelValidation):
+class IndividualValidation(BaseModelValidation, ObjectExistsValidationMixin):
     OBJECT_TYPE = Individual
+
+    @classmethod
+    def validate_undo_delete(cls, data):
+        errors = []
+        individual_id = data.get('id')
+        cls.validate_object_exists(individual_id)
+        is_deleted = Individual.objects.filter(id=individual_id, is_deleted=True).exists()
+        if not is_deleted:
+            errors += [_("individual.validation.validate_undo_delete.individual_not_deleted") % {
+                'id': individual_id
+            }]
+
+        return errors
 
 
 class IndividualDataSourceValidation(BaseModelValidation):

@@ -9,10 +9,6 @@ from individual.apps import IndividualConfig
 from individual.models import Individual, Group, GroupIndividual
 from individual.services import IndividualService, GroupService, GroupIndividualService, \
     CreateGroupAndMoveIndividualService
-from individual.tasks import (
-    task_import_individual_workflow,
-    task_import_individual_workflow_valid
-)
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -139,7 +135,42 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
         if ids:
             with transaction.atomic():
                 for id in ids:
-                    service.delete({'id': id})
+                    obj_data = {'id': id}
+                    if IndividualConfig.check_individual_delete:
+                        service.create_delete_task(obj_data)
+                    else:
+                        service.delete(obj_data)
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.UUID)
+
+
+class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
+    _mutation_class = "UndoDeleteIndividualMutation"
+    _mutation_module = "individual"
+    _model = Individual
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
+                IndividualConfig.gql_individual_undo_delete_perms):
+            raise ValidationError("mutation.authentication_required")
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = IndividualService(user)
+
+        ids = data.get('ids')
+        if ids:
+            with transaction.atomic():
+                for id in ids:
+                    service.undo_delete({'id': id})
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)
