@@ -6,7 +6,6 @@ import pandas as pd
 from pandas import DataFrame
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
-from django.db.models import Q, Value, Func, F
 
 from calculation.services import get_calculation_object
 from core.custom_filters import CustomFilterWizardStorage
@@ -36,27 +35,44 @@ from individual.validation import (
 )
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
-from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
 from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
-    crud_business_data_builder, TaskService, _get_std_task_data_payload
+    crud_business_data_builder, DeleteCheckerLogicServiceMixin
 from workflow.systems.base import WorkflowHandler
 
 logger = logging.getLogger(__name__)
 
 
-class IndividualService(BaseService, UpdateCheckerLogicServiceMixin):
+class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheckerLogicServiceMixin):
     @register_service_signal('individual_service.create')
     def create(self, obj_data):
         return super().create(obj_data)
 
     @register_service_signal('individual_service.update')
     def update(self, obj_data):
+        self._update_json_ext(obj_data)
         return super().update(obj_data)
 
     @register_service_signal('individual_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
+
+    @register_service_signal('individual_service.undo_delete')
+    @check_authentication
+    def undo_delete(self, obj_data):
+        try:
+            with transaction.atomic():
+                self.validation_class.validate_undo_delete(obj_data)
+                obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
+                obj_.is_deleted = False
+                obj_.save(username=self.user.username)
+                return {
+                    "success": True,
+                    "message": "Ok",
+                    "detail": "Undo Delete",
+                }
+        except Exception as exc:
+            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="undo_delete", exception=exc)
 
     @register_service_signal('individual_service.select_individuals_to_benefit_plan')
     def select_individuals_to_benefit_plan(self, custom_filters, benefit_plan_id, status, user):
@@ -87,6 +103,22 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     @register_service_signal('individual_service.create_accept_enrolment_task')
     def create_accept_enrolment_task(self, individual_queryset, benefit_plan_id):
         pass
+
+    def _update_json_ext(self, obj_data):
+        if not obj_data or 'json_ext' not in obj_data:
+            return
+
+        json_ext = obj_data['json_ext']
+        if not json_ext:
+            return
+
+        for field in ('first_name', 'last_name', 'dob'):
+            individual_field_value = obj_data.get(field)
+            json_ext_value = json_ext.get(field)
+            if json_ext_value and json_ext_value != individual_field_value:
+                json_ext[field] = individual_field_value
+
+        obj_data['json_ext'] = json_ext
 
     OBJECT_TYPE = Individual
 
