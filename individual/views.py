@@ -46,9 +46,9 @@ def import_individuals(request):
     import_file = None
     try:
         user = request.user
-        import_file, workflow = _resolve_import_individuals_args(request)
+        import_file, workflow, group_aggregation_column = _resolve_import_individuals_args(request)
         _handle_file_upload(import_file)
-        result = IndividualImportService(user).import_individuals(import_file, workflow)
+        result = IndividualImportService(user).import_individuals(import_file, workflow, group_aggregation_column)
         if not result.get('success'):
             raise ValueError('{}: {}'.format(result.get("message"), result.get("details")))
 
@@ -147,6 +147,7 @@ def _resolve_import_individuals_args(request):
     import_file = request.FILES.get('file')
     workflow_name = request.POST.get('workflow_name')
     workflow_group = request.POST.get('workflow_group')
+    group_aggregation_column = request.POST.get('group_aggregation_column')
 
     if not import_file:
         raise ValueError(f'Import file not provided')
@@ -168,4 +169,4 @@ def _resolve_import_individuals_args(request):
 
     workflow = workflows[0]
 
-    return import_file, workflow
+    return import_file, workflow, group_aggregation_column

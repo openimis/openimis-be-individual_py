@@ -354,10 +354,11 @@ class IndividualImportService:
 
     @register_service_signal('individual.import_individuals')
     def import_individuals(self,
-                             import_file: InMemoryUploadedFile,
-                             workflow: WorkflowHandler):
+                           import_file: InMemoryUploadedFile,
+                           workflow: WorkflowHandler,
+                           group_aggregation_column: str):
         upload = self._save_sources(import_file)
-        self._create_individual_data_upload_records(workflow, upload)
+        self._create_individual_data_upload_records(workflow, upload, group_aggregation_column)
         self._trigger_workflow(workflow, upload)
         return {'success': True, 'data': {'upload_uuid': upload.uuid}}
 
@@ -371,10 +372,11 @@ class IndividualImportService:
         return upload
 
     @transaction.atomic
-    def _create_individual_data_upload_records(self, workflow, upload):
+    def _create_individual_data_upload_records(self, workflow, upload, group_aggregation_column):
         record = IndividualDataUploadRecords(
             data_upload=upload,
-            workflow=workflow.name
+            workflow=workflow.name,
+            json_ext={"group_aggregation_column": group_aggregation_column}
         )
         record.save(username=self.user.username)
 
@@ -507,16 +509,16 @@ class IndividualImportService:
         individual_data_source.save(username=self.user.username)
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
-        IndividualTaskCreatorService(self.user) \
-            .create_task_with_importing_valid_items(upload_id)
-
-        record = IndividualDataUploadRecords.objects.get(
-            data_upload_id=upload_id,
-            is_deleted=False
-        )
-        if not IndividualConfig.enable_maker_checker_for_individual_upload:
-            from individual.signals.on_validation_import_valid_items import ItemsUploadTaskCompletionEvent
-            ItemsUploadTaskCompletionEvent(
+        if IndividualConfig.enable_maker_checker_for_individual_upload:
+            IndividualTaskCreatorService(self.user) \
+                .create_task_with_importing_valid_items(upload_id)
+        else:
+            record = IndividualDataUploadRecords.objects.get(
+                data_upload_id=upload_id,
+                is_deleted=False
+            )
+            from individual.signals.on_validation_import_valid_items import IndividualItemsImportTaskCompletionEvent
+            IndividualItemsImportTaskCompletionEvent(
                 IndividualConfig.validation_import_valid_items_workflow,
                 record,
                 record.data_upload.id,
@@ -524,15 +526,15 @@ class IndividualImportService:
             ).run_workflow()
 
     def create_task_with_update_valid_items(self, upload_id: uuid):
-        IndividualTaskCreatorService(self.user) \
-            .create_task_with_update_valid_items(upload_id)
-
-        record = IndividualDataUploadRecords.objects.get(
-            data_upload_id=upload_id,
-            is_deleted=False
-        )
         # Resolve automatically if maker-checker not enabled
-        if not IndividualConfig.enable_maker_checker_for_individual_update:
+        if IndividualConfig.enable_maker_checker_for_individual_update:
+            IndividualTaskCreatorService(self.user) \
+                .create_task_with_update_valid_items(upload_id)
+        else:
+            record = IndividualDataUploadRecords.objects.get(
+                data_upload_id=upload_id,
+                is_deleted=False
+            )
             from individual.signals.on_validation_import_valid_items import ItemsUploadTaskCompletionEvent
             ItemsUploadTaskCompletionEvent(
                 IndividualConfig.validation_upload_valid_items_workflow,
@@ -582,7 +584,11 @@ class IndividualTaskCreatorService:
             'source_name': upload_record.data_upload.source_name,
             'workflow': upload_record.workflow,
             'percentage_of_invalid_items': self.__calculate_percentage_of_invalid_items(upload_id),
-            'data_upload_id': upload_id
+            'data_upload_id': upload_id,
+            'group_aggregation_column':
+                upload_record.json_ext.get('group_aggregation_column')
+                if isinstance(upload_record.json_ext, dict)
+                else None,
         }
         TaskService(self.user).create({
             'source': 'import_valid_items',
@@ -635,4 +641,3 @@ def group_on_task_complete_service_handler(service_type):
             return [str(e)]
 
     return func
-

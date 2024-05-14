@@ -76,6 +76,7 @@ class IndividualConfig(AppConfig):
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
         self.__validate_individual_schema(cfg)
+        self.__add_recipient_info_to_individual_schema(cfg)
         self.__initialize_custom_filters()
         self._set_up_workflows()
 
@@ -89,7 +90,7 @@ class IndividualConfig(AppConfig):
                 setattr(IndividualConfig, field, cfg[field])
 
     @classmethod
-    def __validate_individual_schema(self, cfg):
+    def __validate_individual_schema(cls, cfg):
         if 'individual_schema' not in cfg:
             logging.error('No individual_schema in individual module config.')
             return
@@ -100,6 +101,19 @@ class IndividualConfig(AppConfig):
         if errors:
             error_messages = [error['message'] for error in errors]
             logging.error('Schema validation errors in individual schema: %s', ', '.join(error_messages))
+
+    @classmethod
+    def __add_recipient_info_to_individual_schema(cls, cfg):
+        schema = cfg['individual_schema']
+        import json
+        schema_parsed = json.loads(schema)
+        if 'recipient_info' not in schema_parsed.get('properties', {}):
+            schema_parsed['properties'] = schema_parsed.get('properties', {})
+            schema_parsed['properties']['recipient_info'] = {
+                "type": "string",
+                "enum": ["", "0", "1", "2"]
+            }
+        cls.individual_schema = json.dumps(schema_parsed)
 
     @classmethod
     def __initialize_custom_filters(cls):
