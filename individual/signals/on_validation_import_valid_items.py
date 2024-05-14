@@ -1,11 +1,14 @@
 import logging
 from typing import List
 
+from django.contrib.postgres.aggregates import ArrayAgg
+from django.db.models import Count
+
 from core.models import User
 from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataSource,
-    IndividualDataUploadRecords
+    IndividualDataUploadRecords, Group, GroupIndividual, Individual
 )
 from tasks_management.models import Task
 from workflow.services import WorkflowService
@@ -55,6 +58,70 @@ class ItemsUploadTaskCompletionEvent:
         self.accepted = accepted
 
 
+class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
+    def run_workflow(self):
+        super().run_workflow()
+
+        if not self.upload_record:
+            return
+
+        upload_record_json_ext = self.upload_record.json_ext or {}
+        group_aggregation_column = upload_record_json_ext.get('group_aggregation_column')
+
+        if not group_aggregation_column:
+            return
+
+        individuals = self._get_individuals()
+
+        grouped_individuals = self._get_grouped_individuals(individuals, group_aggregation_column)
+
+        self._create_groups(grouped_individuals)
+
+    def _get_individuals(self):
+        return IndividualDataSource.objects.filter(
+            upload__id=self.upload_id, individual__isnull=False, is_deleted=False
+        ).prefetch_related('individual')
+
+    def _get_grouped_individuals(self, individuals_qs, group_aggregation_column):
+        return (
+            individuals_qs
+            .values(f'json_ext__{group_aggregation_column}')
+            .annotate(
+                record_ids=ArrayAgg('individual_id'),
+                num_records=Count('id')
+            )
+            .filter(num_records__gt=1)
+        )
+
+    def _create_groups(self, grouped_individuals):
+        for individual_group in grouped_individuals:
+            ids = individual_group['record_ids']
+            group = Group()
+            group.save(username=self.user.username)
+            self._add_individuals_to_group(ids, group)
+
+    def _add_individuals_to_group(self, ids, group):
+        for individual_id in ids:
+            if GroupIndividual.objects.filter(id=individual_id).exists():
+                continue
+            self._create_group_individual(individual_id, group)
+
+    def _create_group_individual(self, individual_id, group):
+        group_individual = GroupIndividual(individual_id=individual_id, group_id=group.id)
+        individual = Individual.objects.filter(id=individual_id).first()
+        if individual:
+            self._set_group_individual_role(group_individual, individual)
+        group_individual.save(username=self.user.username)
+
+    def _set_group_individual_role(self, group_individual, individual):
+        individual_json_ext = individual.json_ext or {}
+        recipient_info = individual_json_ext.get('recipient_info')
+        if recipient_info in [1, '1']:
+            group_individual.role = GroupIndividual.Role.HEAD
+        elif recipient_info in [2, '2']:
+            group_individual.role = GroupIndividual.Role.RECIPIENT
+
+
 def on_task_complete_action(business_event, **kwargs):
     from individual.apps import IndividualConfig
 
@@ -78,16 +145,22 @@ def on_task_complete_action(business_event, **kwargs):
         upload_record = IndividualDataUploadRecords.objects.get(id=task['entity_id'])
         if business_event == IndividualConfig.validation_import_valid_items:
             workflow = IndividualConfig.validation_import_valid_items_workflow
+            IndividualItemsImportTaskCompletionEvent(
+                workflow,
+                upload_record,
+                upload_record.data_upload.id,
+                User.objects.get(id=data['user']['id'])
+            ).run_workflow()
         elif business_event == IndividualConfig.validation_upload_valid_items:
             workflow = IndividualConfig.validation_upload_valid_items_workflow
+            ItemsUploadTaskCompletionEvent(
+                workflow,
+                upload_record,
+                upload_record.data_upload.id,
+                User.objects.get(id=data['user']['id'])
+            ).run_workflow()
         else:
             raise ValueError(f"Business event {business_event} doesn't have assigned workflow.")
-        ItemsUploadTaskCompletionEvent(
-            workflow,
-            upload_record,
-            upload_record.data_upload.id,
-            User.objects.get(id=data['user']['id'])
-        ).run_workflow()
     except Exception as exc:
         if upload_record:
             data_upload = upload_record.data_upload
