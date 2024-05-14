@@ -102,7 +102,7 @@ class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
 
     def _add_individuals_to_group(self, ids, group):
         for individual_id in ids:
-            if GroupIndividual.objects.filter(id=individual_id).exists():
+            if GroupIndividual.objects.filter(id=individual_id, group_id=group.id).exists():
                 continue
             self._create_group_individual(individual_id, group)
 
