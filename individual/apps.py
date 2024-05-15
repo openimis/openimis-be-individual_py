@@ -77,6 +77,7 @@ class IndividualConfig(AppConfig):
         self.__load_config(cfg)
         self.__validate_individual_schema(cfg)
         self.__add_recipient_info_to_individual_schema(cfg)
+        self.__add_group_id_individual_schema(cfg)
         self.__initialize_custom_filters()
         self._set_up_workflows()
 
@@ -91,6 +92,7 @@ class IndividualConfig(AppConfig):
 
     @classmethod
     def __validate_individual_schema(cls, cfg):
+        # TODO: validate against cls.individual_schema it is already assigned
         if 'individual_schema' not in cfg:
             logging.error('No individual_schema in individual module config.')
             return
@@ -104,14 +106,23 @@ class IndividualConfig(AppConfig):
 
     @classmethod
     def __add_recipient_info_to_individual_schema(cls, cfg):
-        schema = cfg['individual_schema']
         import json
-        schema_parsed = json.loads(schema)
+        schema_parsed = json.loads(cls.individual_schema)
         if 'recipient_info' not in schema_parsed.get('properties', {}):
             schema_parsed['properties'] = schema_parsed.get('properties', {})
             schema_parsed['properties']['recipient_info'] = {
-                "type": "string",
-                "enum": ["", "0", "1", "2"]
+                "type": "integer"
+            }
+        cls.individual_schema = json.dumps(schema_parsed)
+
+    @classmethod
+    def __add_group_id_individual_schema(cls, cfg):
+        import json
+        schema_parsed = json.loads(cls.individual_schema)
+        if 'group_id' not in schema_parsed.get('properties', {}):
+            schema_parsed['properties'] = schema_parsed.get('properties', {})
+            schema_parsed['properties']['group_id'] = {
+                "type": "string"
             }
         cls.individual_schema = json.dumps(schema_parsed)
 
