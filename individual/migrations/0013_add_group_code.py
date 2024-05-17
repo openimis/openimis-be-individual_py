@@ -55,22 +55,22 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='group',
             name='code',
-            field=models.CharField(max_length=64, unique=True, blank=True, null=True)
+            field=models.CharField(max_length=64, blank=True, null=True)
         ),
         migrations.AddField(
             model_name='historicalgroup',
             name='code',
-            field=models.CharField(max_length=64, unique=True, blank=True, null=True)
+            field=models.CharField(max_length=64, blank=True, null=True)
         ),
         migrations.RunPython(populate_group_codes, reverse_code=reverse_populate_group_codes),
         migrations.AlterField(
             model_name='group',
             name='code',
-            field=models.CharField(max_length=64, unique=True, blank=False, null=False)
+            field=models.CharField(max_length=64, blank=False, null=False)
         ),
         migrations.AlterField(
             model_name='historicalgroup',
             name='code',
-            field=models.CharField(db_index=True, max_length=64),
+            field=models.CharField(max_length=64, blank=False, null=False),
         ),
     ]

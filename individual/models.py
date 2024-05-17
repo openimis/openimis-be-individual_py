@@ -53,20 +53,8 @@ class IndividualDataUploadRecords(HistoryModel):
 
 
 class Group(HistoryModel):
-    code = models.CharField(max_length=64, unique=True, blank=False, null=False)
+    code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
-
-    def validate_unique(self, *args, **kwargs):
-        super().validate_unique(*args, **kwargs)
-
-        if Group.objects.filter(code=self.code).exclude(id=self.id).exists():
-            raise ValidationError({
-                'code': 'A group with this code already exists.'
-            })
-
-    def save(self, *args, **kwargs):
-        self.full_clean(exclude=['user_created', 'user_updated'])  # This will call validate_unique
-        super().save(*args, **kwargs)
 
 
 class GroupIndividual(HistoryModel):
