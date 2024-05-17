@@ -76,8 +76,6 @@ class IndividualConfig(AppConfig):
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
         self.__validate_individual_schema(cfg)
-        self.__add_recipient_info_to_individual_schema(cfg)
-        self.__add_group_id_individual_schema(cfg)
         self.__initialize_custom_filters()
         self._set_up_workflows()
 
@@ -103,28 +101,6 @@ class IndividualConfig(AppConfig):
         if errors:
             error_messages = [error['message'] for error in errors]
             logging.error('Schema validation errors in individual schema: %s', ', '.join(error_messages))
-
-    @classmethod
-    def __add_recipient_info_to_individual_schema(cls, cfg):
-        import json
-        schema_parsed = json.loads(cls.individual_schema)
-        if 'recipient_info' not in schema_parsed.get('properties', {}):
-            schema_parsed['properties'] = schema_parsed.get('properties', {})
-            schema_parsed['properties']['recipient_info'] = {
-                "type": "integer"
-            }
-        cls.individual_schema = json.dumps(schema_parsed)
-
-    @classmethod
-    def __add_group_id_individual_schema(cls, cfg):
-        import json
-        schema_parsed = json.loads(cls.individual_schema)
-        if 'group_id' not in schema_parsed.get('properties', {}):
-            schema_parsed['properties'] = schema_parsed.get('properties', {})
-            schema_parsed['properties']['group_id'] = {
-                "type": "string"
-            }
-        cls.individual_schema = json.dumps(schema_parsed)
 
     @classmethod
     def __initialize_custom_filters(cls):

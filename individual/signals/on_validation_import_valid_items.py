@@ -2,11 +2,9 @@ import logging
 from typing import List
 
 from django.contrib.postgres.aggregates import ArrayAgg
-from django.db.models import F
-from django.db import transaction
+from django.db.models import F, Q
 
 from core.models import User
-from core.utils import is_valid_uuid
 from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataSource,
@@ -61,7 +59,8 @@ class ItemsUploadTaskCompletionEvent:
 
 
 class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
-    group_id_str = 'group_id'
+    group_code_str = 'group_code'
+    recipient_info_str = 'recipient_info'
 
     def run_workflow(self):
         super().run_workflow()
@@ -70,23 +69,25 @@ class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
             return
 
         upload_record_json_ext = self.upload_record.json_ext or {}
-        group_aggregation_column = upload_record_json_ext.get('group_aggregation_column', self.group_id_str)
+        group_aggregation_column = upload_record_json_ext.get('group_aggregation_column', self.group_code_str)
 
         if group_aggregation_column == 'null':
-            group_aggregation_column = self.group_id_str
+            group_aggregation_column = self.group_code_str
 
         individuals = self._get_individuals()
         grouped_individuals = self._get_grouped_individuals(individuals, group_aggregation_column)
 
-        if group_aggregation_column == self.group_id_str:
-            self._create_groups_using_group_id(grouped_individuals)
+        if group_aggregation_column == self.group_code_str:
+            self._create_groups_using_group_code(grouped_individuals)
         else:
             self._create_groups(grouped_individuals)
 
+        self._clean_json_ext(individuals)
+
     def _get_individuals(self):
-        return IndividualDataSource.objects.filter(
-            upload__id=self.upload_id, individual__isnull=False, is_deleted=False
-        ).prefetch_related('individual')
+        return Individual.objects.filter(
+            individualdatasource__upload__id=self.upload_id, is_deleted=False, individualdatasource__is_deleted=False
+        )
 
     def _get_grouped_individuals(self, individuals_qs, group_aggregation_column):
         return (
@@ -96,7 +97,7 @@ class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
             .exclude(**{f'json_ext__{group_aggregation_column}': None})
             .values(f'json_ext__{group_aggregation_column}')
             .annotate(
-                record_ids=ArrayAgg('individual_id'),
+                record_ids=ArrayAgg('id'),
                 value=F(f'json_ext__{group_aggregation_column}')
             )
         )
@@ -107,20 +108,26 @@ class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
             group = Group()
             group.save(username=self.user.username)
             self._add_individuals_to_group(ids, group)
+            self._assign_head(ids)
 
-    def _create_groups_using_group_id(self, grouped_individuals):
+    def _create_groups_using_group_code(self, grouped_individuals):
         for individual_group in grouped_individuals:
             ids = individual_group['record_ids']
-            group_id = individual_group['value']
-            if is_valid_uuid(group_id):
-                group, _ = Group.objects.get_or_create(
-                    id=group_id,
-                    defaults={'username': self.user.username}
-                )
-            else:
-                group = Group()
+            group_code = individual_group['value']
+            group = Group.objects.filter(code=group_code).first()
+            if not group:
+                group = Group(code=group_code)
                 group.save(username=self.user.username)
             self._add_individuals_to_group(ids, group)
+            self._assign_head(ids)
+
+    def _assign_head(self, individual_ids):
+        if GroupIndividual.objects.filter(individual__id__in=individual_ids, role=GroupIndividual.Role.HEAD).exists():
+            return
+        first_id = individual_ids[0]
+        first_group_individual = GroupIndividual.objects.get(individual__id=first_id)
+        first_group_individual.role = GroupIndividual.Role.HEAD
+        first_group_individual.save(username=self.user.username)
 
     def _add_individuals_to_group(self, ids, group):
         existing_ids = set(
@@ -137,20 +144,26 @@ class IndividualItemsImportTaskCompletionEvent(ItemsUploadTaskCompletionEvent):
         group_individual = GroupIndividual(individual_id=individual_id, group_id=group.id)
         self._set_group_individual_role(group_individual, individual)
         group_individual.save(username=self.user.username)
-        self._set_group_id_in_individual_json_ext(individual, group.id)
 
     def _set_group_individual_role(self, group_individual, individual):
-        recipient_info = (individual.json_ext or {}).get('recipient_info')
+        recipient_info = (individual.json_ext or {}).get(self.recipient_info_str)
         if recipient_info in [1, '1']:
             group_individual.role = GroupIndividual.Role.HEAD
 
-    def _set_group_id_in_individual_json_ext(self, individual, group_id):
-        individual_json_ext = individual.json_ext or {}
-        group_id_str = str(group_id)
-        if individual_json_ext.get('group_id') != group_id_str:
-            individual_json_ext['group_id'] = group_id_str
-            individual.json_ext = individual_json_ext
-            individual.save(username=self.user.username)
+    def _clean_json_ext(self, individuals):
+        def clean_json_ext(json_ext):
+            if json_ext is None:
+                return None
+            json_ext.pop(self.group_code_str, None)
+            json_ext.pop(self.recipient_info_str, None)
+            return json_ext
+
+        for individual in individuals:
+            original_json_ext = individual.json_ext
+            cleaned_json_ext = clean_json_ext(original_json_ext.copy() if original_json_ext else None)
+            if cleaned_json_ext != original_json_ext:
+                individual.json_ext = cleaned_json_ext
+                individual.save(username=self.user.username)
 
 
 def on_task_complete_action(business_event, **kwargs):
