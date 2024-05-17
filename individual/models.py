@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 
 import core
 from core.models import HistoryModel
@@ -52,6 +53,7 @@ class IndividualDataUploadRecords(HistoryModel):
 
 
 class Group(HistoryModel):
+    code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
 

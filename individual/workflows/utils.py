@@ -51,6 +51,7 @@ class BasePythonWorkflowExecutor(metaclass=ABCMeta):
         """
         df_headers = set(self.df.columns)
         schema_properties = set(self.schema.get('properties', {}).keys())
+        schema_properties.update(['recipient_info', 'group_code'])
         required_headers = {'first_name', 'last_name', 'dob', 'id'}
         if is_update:
             required_headers.add('ID')
