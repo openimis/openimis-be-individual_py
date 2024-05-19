@@ -10,6 +10,7 @@ from individual.models import (
     IndividualDataSource,
     IndividualDataUploadRecords, Group, GroupIndividual, Individual
 )
+from individual.services import GroupIndividualService
 from tasks_management.models import Task
 from workflow.services import WorkflowService
 
@@ -217,6 +218,10 @@ class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
             group_individual, _ = self._get_or_create_group_individual(individual.id, group)
             parsed_role = self._role_parser(recipient_info)
             if group_individual.role != parsed_role:
+                if parsed_role == GroupIndividual.Role.HEAD:
+                    data = {'role': GroupIndividual.Role.HEAD, 'group_id': group.id}
+                    service = GroupIndividualService(self.user)
+                    service.handle_head_change(data, group_individual)
                 group_individual.role = parsed_role
                 group_individual.save(username=self.user.username)
 

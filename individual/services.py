@@ -268,7 +268,7 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 self.validation_class.validate_update(self.user, **obj_data)
                 obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
                 group_id_before_update = obj_.group.id
-                self._handle_head_change(obj_data, obj_)
+                self.handle_head_change(obj_data, obj_)
                 [setattr(obj_, key, obj_data[key]) for key in obj_data]
                 result = self.save_instance(obj_)
                 self._handle_json_ext(group_id_before_update, obj_)
@@ -280,7 +280,7 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     def delete(self, obj_data):
         return super().delete(obj_data)
 
-    def _handle_head_change(self, obj_data, obj_):
+    def handle_head_change(self, obj_data, obj_):
         with transaction.atomic():
             if obj_.role == GroupIndividual.Role.RECIPIENT and obj_data['role'] == GroupIndividual.Role.HEAD:
                 self._change_head(obj_data)
