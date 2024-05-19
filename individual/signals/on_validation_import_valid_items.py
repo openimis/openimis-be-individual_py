@@ -185,9 +185,13 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
     def _set_group_individual_role(self, group_individual):
         individual = group_individual.individual
+        group = group_individual.group
         individual_json_ext = BaseGroupColumnAggregationClass._get_json_ext(individual)
+        is_already_head_assigned = GroupIndividual.objects.filter(
+            group_id=group.id, role=GroupIndividual.Role.HEAD
+        ).exists()
         recipient_info = individual_json_ext.get(self.recipient_info_str)
-        if recipient_info in [1, '1']:
+        if not is_already_head_assigned and recipient_info in [1, '1']:
             group_individual.role = GroupIndividual.Role.HEAD
         else:
             group_individual.role = GroupIndividual.Role.RECIPIENT
