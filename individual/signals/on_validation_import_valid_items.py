@@ -71,7 +71,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         if not self.upload_record:
             return
 
-        upload_record_json_ext = BaseGroupColumnAggregationClass._get_json_ext(self.upload_record)
+        upload_record_json_ext = self._get_json_ext(self.upload_record)
         group_aggregation_column = upload_record_json_ext.get('group_aggregation_column', self.group_code_str)
         self.set_group_aggregation_column(group_aggregation_column)
         self.individuals = self._query_individuals()
@@ -91,7 +91,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             return json_ext
 
         for individual in self.individuals:
-            original_json_ext = BaseGroupColumnAggregationClass._get_json_ext(individual)
+            original_json_ext = self._get_json_ext(individual)
             cleaned_json_ext = clean_json_ext(original_json_ext.copy() if original_json_ext else None)
             if cleaned_json_ext != original_json_ext:
                 individual.json_ext = cleaned_json_ext
@@ -117,11 +117,21 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             return {}
         return instance.json_ext or {}
 
-    def _role_parser(self, recipient_info):
+    @staticmethod
+    def _role_parser(recipient_info):
         if recipient_info in [1, '1']:
             return GroupIndividual.Role.HEAD
         else:
             return GroupIndividual.Role.RECIPIENT
+
+    def _get_or_create_group_individual(self, individual_id, group):
+        group_individual = GroupIndividual.objects.filter(individual__id=individual_id, group=group).first()
+        if group_individual:
+            return group_individual, False
+
+        group_individual = GroupIndividual(individual_id=individual_id, group_id=group.id)
+        group_individual.save(username=self.user.username)
+        return group_individual, True
 
 
 class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
@@ -186,7 +196,7 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
     def _set_group_individual_role(self, group_individual):
         individual = group_individual.individual
         group = group_individual.group
-        individual_json_ext = BaseGroupColumnAggregationClass._get_json_ext(individual)
+        individual_json_ext = self._get_json_ext(individual)
         is_already_head_assigned = GroupIndividual.objects.filter(
             group_id=group.id, role=GroupIndividual.Role.HEAD
         ).exists()
@@ -229,14 +239,7 @@ class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
                 group_individual.role = parsed_role
                 group_individual.save(username=self.user.username)
 
-    def _get_or_create_group_individual(self, individual_id, group):
-        group_individual = GroupIndividual.objects.filter(individual__id=individual_id, group=group).first()
-        if group_individual:
-            return group_individual, False
-
-        group_individual = GroupIndividual(individual_id=individual_id, group_id=group.id)
-        group_individual.save(username=self.user.username)
-        return group_individual, True
+        self._clean_json_ext()
 
 
 def on_task_complete_action(business_event, **kwargs):
