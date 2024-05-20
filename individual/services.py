@@ -535,8 +535,8 @@ class IndividualImportService:
                 data_upload_id=upload_id,
                 is_deleted=False
             )
-            from individual.signals.on_validation_import_valid_items import ItemsUploadTaskCompletionEvent
-            ItemsUploadTaskCompletionEvent(
+            from individual.signals.on_validation_import_valid_items import IndividualItemsUploadTaskCompletionEvent
+            IndividualItemsUploadTaskCompletionEvent(
                 IndividualConfig.validation_upload_valid_items_workflow,
                 record,
                 record.data_upload.id,

@@ -207,18 +207,12 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
             group_individual.role = GroupIndividual.Role.RECIPIENT
 
     def _create_group_individual(self, individual_id, group):
-        group_individual = GroupIndividual.objects.filter(individual__id=individual_id, group=group).first()
-        if group_individual:
-            return
         group_individual = GroupIndividual(individual_id=individual_id, group_id=group.id)
         self._set_group_individual_role(group_individual)
         group_individual.save(username=self.user.username)
 
 
 class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
-    group_code_str = 'group_code'
-    recipient_info_str = 'recipient_info'
-
     def run_workflow(self):
         super().run_workflow()
 
@@ -273,7 +267,7 @@ def on_task_complete_action(business_event, **kwargs):
             ).run_workflow()
         elif business_event == IndividualConfig.validation_upload_valid_items:
             workflow = IndividualConfig.validation_upload_valid_items_workflow
-            ItemsUploadTaskCompletionEvent(
+            IndividualItemsUploadTaskCompletionEvent(
                 workflow,
                 upload_record,
                 upload_record.data_upload.id,
@@ -317,7 +311,7 @@ def _complete_task_for_accepted(_task, accept, user):
         return
 
     if _task.business_event == IndividualConfig.validation_import_valid_items:
-        ItemsUploadTaskCompletionEvent(
+        IndividualItemsImportTaskCompletionEvent(
             IndividualConfig.validation_import_valid_items_workflow,
             upload_record,
             upload_record.data_upload.id,
@@ -326,7 +320,7 @@ def _complete_task_for_accepted(_task, accept, user):
         ).run_workflow()
 
     if _task.business_event == IndividualConfig.validation_upload_valid_items:
-        ItemsUploadTaskCompletionEvent(
+        IndividualItemsUploadTaskCompletionEvent(
             IndividualConfig.validation_upload_valid_items_workflow,
             upload_record,
             upload_record.data_upload.id,
