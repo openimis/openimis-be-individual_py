@@ -13,13 +13,29 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='historicalindividualdatasourceupload',
-            name='individual',
+        migrations.RunSQL(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.columns 
+                           WHERE table_name='individualdatasourceupload' 
+                           AND column_name='individual') THEN
+                    ALTER TABLE individualdatasourceupload DROP COLUMN individual;
+                END IF;
+            END $$;
+            """,
         ),
-        migrations.RemoveField(
-            model_name='individualdatasourceupload',
-            name='individual',
+        migrations.RunSQL(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.columns 
+                           WHERE table_name='historicalindividualdatasourceupload' 
+                           AND column_name='individual') THEN
+                    ALTER TABLE historicalindividualdatasourceupload DROP COLUMN individual;
+                END IF;
+            END $$;
+            """,
         ),
         migrations.AlterField(
             model_name='group',
