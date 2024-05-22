@@ -1,4 +1,6 @@
 import logging
+import random
+import string
 from typing import List
 
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -164,10 +166,18 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
     def _create_groups(self, grouped_individuals):
         for individual_group in grouped_individuals:
             ids = individual_group['record_ids']
-            group = Group()
+            group = Group(code=self.generate_unique_code())
             group.save(username=self.user.username)
             self._add_individuals_to_group(ids, group)
             self._assign_head(ids)
+
+    @staticmethod
+    def generate_unique_code():
+        """Generate a unique 8-digit code."""
+        while True:
+            code = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            if not Group.objects.filter(code=code).exists():
+                return code
 
     def _create_groups_using_group_code(self, grouped_individuals):
         for individual_group in grouped_individuals:
