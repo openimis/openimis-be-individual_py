@@ -210,6 +210,33 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin):
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
+    @register_service_signal('group_service.select_groups_to_benefit_plan')
+    def select_groups_to_benefit_plan(self, custom_filters, benefit_plan_id, status, user):
+        group_query = Group.objects.filter(is_deleted=False)
+        # criteria will be based on head of the group
+        group_query_with_filters = CustomFilterWizardStorage.build_custom_filters_queryset(
+            "individual",
+            "Group",
+            custom_filters,
+            group_query,
+        )
+        if benefit_plan_id:
+            groups_assigned_to_selected_programme = group_query_with_filters. \
+                filter(is_deleted=False, groupbeneficiary__benefit_plan_id=benefit_plan_id)
+            groups_not_assigned_to_selected_programme = group_query_with_filters.exclude(
+                id__in=groups_assigned_to_selected_programme.values_list('id', flat=True)
+            )
+            output = {
+                "groups_assigned_to_selected_programme": groups_assigned_to_selected_programme,
+                "groups_not_assigned_to_selected_programme": groups_not_assigned_to_selected_programme,
+                "group_query_with_filters": group_query_with_filters,
+                "benefit_plan_id": benefit_plan_id,
+                "status": status,
+                "user": user,
+            }
+            return output
+        return None
+
 
 class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
     OBJECT_TYPE = Group

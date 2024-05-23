@@ -14,11 +14,11 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation, \
-    UndoDeleteIndividualMutation
+    UndoDeleteIndividualMutation, ConfirmGroupEnrollmentMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
     IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType, \
-    GroupIndividualHistoryGQLType
+    GroupIndividualHistoryGQLType, GroupSummaryEnrollmentGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords
 
@@ -133,6 +133,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         dateValidTo__Lte=graphene.DateTime(),
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String()
+    )
+
+    group_enrollment_summary = graphene.Field(
+        GroupSummaryEnrollmentGQLType,
+        customFilters=graphene.List(of_type=graphene.String),
+        benefitPlanId=graphene.String()
     )
 
     def resolve_individual(self, info, **kwargs):
@@ -334,6 +340,44 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         query = IndividualDataUploadRecords.objects.filter(*filters)
         return gql_optimizer.query(query, info)
 
+    def resolve_group_enrollment_summary(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_group_search_perms)
+        query = Group.objects.filter(is_deleted=False)
+        custom_filters = kwargs.get("customFilters", None)
+        benefit_plan_id = kwargs.get("benefitPlanId", None)
+        if custom_filters:
+            query = CustomFilterWizardStorage.build_custom_filters_queryset(
+                Query.module_name,
+                "Group",
+                custom_filters,
+                query,
+            )
+        # Aggregation for selected groups
+        number_of_selected_groups = query.count()
+
+        # Aggregation for total number of groups
+        total_number_of_groups = Group.objects.filter(is_deleted=False).count()
+        groups_not_assigned_to_programme = query.\
+            filter(is_deleted=False, groupbeneficiary__benefit_plan_id__isnull=True).count()
+        groups_assigned_to_programme = number_of_selected_groups - groups_not_assigned_to_programme
+
+        groups_assigned_to_selected_programme = "0"
+        number_of_groups_to_upload = number_of_selected_groups
+        if benefit_plan_id:
+            groups_assigned_to_selected_programme = query. \
+                filter(is_deleted=False, groupbeneficiary__benefit_plan_id=benefit_plan_id).count()
+            number_of_groups_to_upload = number_of_groups_to_upload - groups_assigned_to_selected_programme
+
+        return GroupSummaryEnrollmentGQLType(
+            number_of_selected_groups=number_of_selected_groups,
+            total_number_of_groups=total_number_of_groups,
+            number_of_groups_not_assigned_to_programme=groups_not_assigned_to_programme,
+            number_of_groups_assigned_to_programme=groups_assigned_to_programme,
+            number_of_groups_assigned_to_selected_programme=groups_assigned_to_selected_programme,
+            number_of_groups_to_upload=number_of_groups_to_upload
+        )
+
     @staticmethod
     def _check_permissions(user, perms):
         if type(user) is AnonymousUser or not user.id or not user.has_perms(perms):
@@ -358,3 +402,4 @@ class Mutation(graphene.ObjectType):
     create_group_and_move_individual = CreateGroupAndMoveIndividualMutation.Field()
 
     confirm_individual_enrollment = ConfirmIndividualEnrollmentMutation.Field()
+    confirm_group_enrollment = ConfirmGroupEnrollmentMutation.Field()
