@@ -94,7 +94,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id=graphene.String(),
         first_name=graphene.String(),
         last_name=graphene.String(),
-        customFilters=graphene.List(of_type=graphene.String)
+        customFilters=graphene.List(of_type=graphene.String),
+        benefitPlanToEnroll=graphene.String()
     )
 
     group_history = OrderedDjangoFilterConnectionField(
@@ -271,16 +272,22 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if last_name:
             filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
 
+        benefit_plan_to_enroll = kwargs.get("benefitPlanToEnroll")
+        if benefit_plan_to_enroll:
+            filters.append(
+                Q(is_deleted=False) &
+                ~Q(groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll)
+            )
+
         query = Group.objects.filter(*filters).distinct()
 
         custom_filters = kwargs.get("customFilters", None)
         if custom_filters:
             query = CustomFilterWizardStorage.build_custom_filters_queryset(
                 Query.module_name,
-                Query.object_type,
+                "Group",
                 custom_filters,
-                query,
-                relation=Query.related_field_individual
+                query
             )
         return gql_optimizer.query(query, info)
 
