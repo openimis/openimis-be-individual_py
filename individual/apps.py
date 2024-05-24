@@ -31,7 +31,9 @@ DEFAULT_CONFIG = {
     "enable_python_workflows": True,
     "enable_maker_checker_logic_import": True,
     "enable_maker_checker_for_individual_upload": True,
+    "enable_maker_checker_for_group_upload": True,
     "enable_maker_checker_for_individual_update": True,
+    "enable_maker_checker_for_group_update": True,
 }
 
 
@@ -68,7 +70,9 @@ class IndividualConfig(AppConfig):
     validation_upload_valid_items = None
 
     enable_maker_checker_for_individual_upload = None
+    enable_maker_checker_for_group_upload = None
     enable_maker_checker_for_individual_update = None
+    enable_maker_checker_for_group_update = None
 
     def ready(self):
         from core.models import ModuleConfiguration
