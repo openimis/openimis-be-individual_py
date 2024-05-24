@@ -23,7 +23,8 @@ class UpdateIndividualInputType(CreateIndividualInputType):
 
 
 class CreateGroupInputType(OpenIMISMutation.Input):
-    pass
+    code = graphene.String(required=True)
+    individual_ids = graphene.List(graphene.UUID)
 
 
 class UpdateGroupInputType(CreateGroupInputType):

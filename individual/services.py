@@ -31,7 +31,7 @@ from individual.validation import (
     IndividualValidation,
     IndividualDataSourceValidation,
     GroupIndividualValidation,
-    GroupValidation
+    GroupValidation, CrateGroupAndMoveIndividualValidation
 )
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
@@ -145,76 +145,89 @@ class IndividualDataSourceService(BaseService):
         super().__init__(user, validation_class)
 
 
-class GroupService(BaseService, CreateCheckerLogicServiceMixin):
+class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLogicServiceMixin):
     OBJECT_TYPE = Group
 
     def __init__(self, user, validation_class=GroupValidation):
         super().__init__(user, validation_class)
 
+    @check_authentication
     @register_service_signal('group_service.create')
     def create(self, obj_data):
-        return super().create(obj_data)
+        try:
+            with transaction.atomic():
+                individual_ids = obj_data.pop('individual_ids')
+                result = super().create(obj_data)
+                group_id = result['data']['id']
+                if individual_ids:
+                    self._update_group_json_ext(group_id, individual_ids)
+                    for individual_id in individual_ids:
+                        obj_data = {'group_id': group_id, 'individual_id': individual_id}
+                        service = GroupIndividualService(self.user)
+                        service.create(obj_data)
+                return result
+        except Exception as exc:
+            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="create", exception=exc)
 
+    @check_authentication
     @register_service_signal('group_service.update')
     def update(self, obj_data):
-        return super().update(obj_data)
+        try:
+            with transaction.atomic():
+                individual_ids = obj_data.pop('individual_ids')
+                result = super().update(obj_data)
+
+                if not individual_ids:
+                    return result
+
+                group_id = result['data']['id']
+                assigned_individuals_ids = \
+                    GroupIndividual.objects.filter(group_id=group_id).values_list('individual_id', flat=True)
+
+                service = GroupIndividualService(self.user)
+                group = self._update_group_json_ext(group_id, individual_ids)
+
+                for individual_id in assigned_individuals_ids:
+                    if individual_id not in individual_ids:
+                        group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
+                        service.delete({'id': group_individual.id})
+
+                for individual_id in individual_ids:
+                    if individual_id not in assigned_individuals_ids:
+                        obj_data = {'group_id': group_id, 'individual_id': individual_id}
+                        service.create(obj_data)
+
+                dict_repr = model_representation(group)
+                return output_result_success(dict_representation=dict_repr)
+        except Exception as exc:
+            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
     @register_service_signal('group_service.delete')
     def delete(self, obj_data):
+        # if there ever was a requirement to undo group delete, remember to use members from json_ext, you will avoid
+        # adding individuals that had been deleted from the group before group deletion
         with transaction.atomic():
             group_id = obj_data.get('id')
-            group = Group.objects.filter(id=group_id).first()
-            for group_individual in group.groupindividual_set.all():
+            group_individuals = GroupIndividual.objects.filter(group_id=group_id)
+            for group_individual in group_individuals:
                 # cant use .delete() on query since it will completely remove instances from db instead of marking
                 # them as isDeleted
                 group_individual.delete(username=self.user.username)
             return super().delete(obj_data)
 
-    @check_authentication
-    @register_service_signal('group_service.create_group_individuals')
-    def create_group_individuals(self, obj_data):
-        try:
-            with transaction.atomic():
-                self.validation_class.validate_create_group_individuals(self.user, **obj_data)
-                individual_ids = obj_data.pop('individual_ids')
-                group = self.create(obj_data)
-                group_id = group['data']['id']
-                service = GroupIndividualService(self.user)
-                group_individual_ids = [service.create({'group_id': group_id,
-                                                        'individual_id': individual_id})
-                                        for individual_id in individual_ids]
-                group_and_individuals_message = {**group, 'detail': group_individual_ids}
-                return group_and_individuals_message
-        except Exception as exc:
-            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="create", exception=exc)
-
-    @check_authentication
-    @register_service_signal('group_service.update_group_individuals')
-    def update_group_individuals(self, obj_data):
-        try:
-            with transaction.atomic():
-                self.validation_class.validate_update_group_individuals(self.user, **obj_data)
-                individual_ids = obj_data.pop('individual_ids')
-                group_id = obj_data.pop('id')
-                obj_ = self.OBJECT_TYPE.objects.filter(id=group_id).first()
-                obj_.groupindividual_set.all().delete()
-                service = GroupIndividualService(self.user)
-
-                individual_ids_list = [service.create({'group_id': group_id,
-                                                       'individual_id': individual_id})
-                                       for individual_id in individual_ids]
-                group_dict_repr = model_representation(obj_)
-                result_message = output_result_success(group_dict_repr)
-                group_and_individuals_message = {**result_message, 'detail': individual_ids_list}
-                return group_and_individuals_message
-        except Exception as exc:
-            return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
+    def _update_group_json_ext(self, group_id, individual_ids):
+        # it makes sure GroupIndividual .save() won't add each individual separately to group json_ext
+        # because their ids will be already there
+        group = Group.objects.get(id=group_id)
+        group.json_ext["members"] = individual_ids
+        group.save(username=self.user.username)
+        return group
 
 
 class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
     OBJECT_TYPE = Group
 
-    def __init__(self, user, validation_class=GroupValidation):
+    def __init__(self, user, validation_class=CrateGroupAndMoveIndividualValidation):
         self.user = user
         self.validation_class = validation_class
 
@@ -245,6 +258,7 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
             return value
 
         serialized_data = crud_business_data_builder(data, serialize)
+        # TODO change to group code
         serialized_data['incoming_data']["id"] = 'NEW_GROUP'
         return serialized_data
 
@@ -259,19 +273,20 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     def create(self, obj_data):
         return super().create(obj_data)
 
-    @register_service_signal('groupindividual_service.update')
     @check_authentication
+    @register_service_signal('groupindividual_service.update')
     def update(self, obj_data):
         try:
             with transaction.atomic():
-                obj_data = self._adjust_update_payload(obj_data)
-                self.validation_class.validate_update(self.user, **obj_data)
-                obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
-                group_id_before_update = obj_.group.id
-                self.handle_head_change(obj_data, obj_)
-                [setattr(obj_, key, obj_data[key]) for key in obj_data]
-                result = self.save_instance(obj_)
-                self._handle_json_ext(group_id_before_update, obj_)
+                group_individual_id = obj_data.get('group_individual_id')
+                incoming_group_id = obj_data.get('group_id')
+                group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
+
+                if str(group_individual.group.id) == incoming_group_id:
+                    return super().update(obj_data)
+
+                result = self.create(obj_data)
+                self.delete({'id': group_individual_id})
                 return result
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
@@ -279,51 +294,6 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     @register_service_signal('groupindividual_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
-
-    def handle_head_change(self, obj_data, obj_):
-        with transaction.atomic():
-            if obj_.role == GroupIndividual.Role.RECIPIENT and obj_data['role'] == GroupIndividual.Role.HEAD:
-                self._change_head(obj_data)
-
-    def _change_head(self, obj_data):
-        with transaction.atomic():
-            group_id = obj_data.get('group_id')
-            group_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
-            old_head = group_queryset.first()
-            if old_head:
-                old_head.role = GroupIndividual.Role.RECIPIENT
-                old_head.save(username=self.user.username)
-
-            if group_queryset.exists():
-                raise ValueError(_("more_than_one_head_in_group"))
-
-    def _handle_json_ext(self, group_id_before_update, obj_):
-        self._update_json_ext_for_group(group_id_before_update)
-        if group_id_before_update != obj_.group.id:
-            self._update_json_ext_for_group(obj_.group.id)
-
-    def _update_json_ext_for_group(self, group_id):
-        group = Group.objects.filter(id=group_id).first()
-        group_individuals = GroupIndividual.objects.filter(group_id=group_id)
-        head = group_individuals.filter(role=GroupIndividual.Role.HEAD).first()
-
-        group_members = {
-            str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
-            for individual in group_individuals
-        }
-        head_str = f'{head.individual.first_name} {head.individual.last_name}' if head else None
-
-        changes_to_save = {}
-
-        if group.json_ext.get("members") != group_members:
-            changes_to_save["members"] = group_members
-
-        if group.json_ext.get("head") != head_str:
-            changes_to_save["head"] = head_str
-
-        if changes_to_save:
-            group.json_ext.update(changes_to_save)
-            group.save(username=self.user.username)
 
     def _business_data_serializer(self, data):
         def serialize(key, value):
@@ -334,6 +304,84 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
 
         serialized_data = crud_business_data_builder(data, serialize)
         return serialized_data
+
+
+class GroupAndGroupIndividualAlignmentService:
+    """
+        Service used in overridden .save() of GroupIndividual model.
+    """
+
+    def __init__(self, user):
+        self.user = user
+
+    def handle_head_change(self, group_individual_id, role, group_id):
+        """
+            Method used for making sure that during head change, the old one is set to default role.
+        """
+        if role == GroupIndividual.Role.HEAD:
+            self._change_head(group_individual_id, group_id)
+
+    def update_json_ext_for_group(self, group):
+        """
+            This method makes sure that json_ext of a group will be up-to-date with role and its members.
+        """
+        group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
+        head = group_individuals.filter(role=GroupIndividual.Role.HEAD).first()
+
+        group_members = {
+            str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
+            for individual in group_individuals
+        }
+        head_str = f'{head.individual.first_name} {head.individual.last_name}' if head else None
+        head_id = str(head.id)
+
+        changes_to_save = {}
+
+        if group.json_ext.get("members") != group_members:
+            changes_to_save["members"] = group_members
+
+        if group.json_ext.get("head") != head_str:
+            changes_to_save["head"] = head_str
+
+        if group.json_ext.get("head_id") != head_id:
+            changes_to_save["head_id"] = head_id
+
+        if changes_to_save:
+            group.json_ext.update(changes_to_save)
+            group.save(username=self.user.username)
+
+    def handle_assure_head_in_group(self, group, role):
+        """
+            Making sure that group has a head.
+        """
+        if role == GroupIndividual.Role.HEAD:
+            return
+        self._assure_head_in_group(group)
+
+    def _assure_head_in_group(self, group):
+        group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
+        head_exists = group_individuals.filter(role=GroupIndividual.Role.HEAD).exist()
+
+        if head_exists:
+            return
+
+        new_head = group_individuals.first()
+
+        if not new_head:
+            return
+
+        new_head.role = GroupIndividual.Role.HEAD
+        new_head.save(username=self.user.username)
+
+    def _change_head(self, group_individual_id, group_id):
+        heads_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
+        old_head = heads_queryset.exclude(id=group_individual_id).first()
+
+        if not old_head:
+            return
+
+        old_head.role = GroupIndividual.Role.RECIPIENT
+        old_head.save(username=self.user.username)
 
 
 class IndividualImportService:

@@ -1,5 +1,4 @@
 from django.db import models
-from django.core.exceptions import ValidationError
 
 import core
 from core.models import HistoryModel
@@ -67,3 +66,11 @@ class GroupIndividual(HistoryModel):
     role = models.CharField(max_length=255, choices=Role.choices, default=Role.RECIPIENT)
 
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
+
+    def save(self, *args, **kwargs):
+        super().save(args=args, kwargs=kwargs)
+        from individual.services import GroupAndGroupIndividualAlignmentService
+        service = GroupAndGroupIndividualAlignmentService(self.user_updated)
+        service.handle_head_change(self.id, self.role, self.group_id)
+        service.handle_assure_head_in_group(self.group, self.role)
+        service.update_json_ext_for_group(self.group)
