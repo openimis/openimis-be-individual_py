@@ -120,15 +120,6 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             individualdatasource__upload__id=self.upload_id, is_deleted=False, individualdatasource__is_deleted=False
         )
 
-    def _get_or_create_group(self, group_code):
-        group = Group.objects.filter(code=group_code).first()
-        if group:
-            return group, False
-
-        group = Group(code=group_code)
-        group.save(username=self.user.username)
-        return group, True
-
     @staticmethod
     def _get_json_ext(instance):
         if not hasattr(instance, 'json_ext'):
@@ -154,11 +145,12 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
     def _create_or_update_groups_using_group_code(self):
         for individual_group in self.grouped_individuals:
             ids = individual_group['record_ids']
+            ids_str = [str(uuid) for uuid in ids]
             group_code = individual_group['value']
-            group, is_created = self._get_or_create_group(group_code)
+            group = Group.objects.filter(code=group_code).first()
             service = GroupService(self.user)
-            if is_created:
-                obj_data = {"individual_ids": ids, "code": group_code}
+            if not group:
+                obj_data = {"individual_ids": ids_str, "code": group_code}
                 if IndividualConfig.enable_maker_checker_for_group_upload:
                     service.create_create_task(obj_data)
                 else:
@@ -167,8 +159,9 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
                 assigned_individual_ids = list(Individual.objects.filter(
                     groupindividual__group=group, is_deleted=False
                 ).values_list('id', flat=True))
-                updated_ids = list(set(ids + assigned_individual_ids))
-                obj_data = {"individual_ids": updated_ids, "code": group_code}
+                assigned_individual_ids_str = [str(uuid) for uuid in assigned_individual_ids]
+                updated_ids = list(set(ids_str + assigned_individual_ids_str))
+                obj_data = {"id": group.id, "individual_ids": updated_ids, "code": group_code}
                 if IndividualConfig.enable_maker_checker_for_group_upload:
                     service.create_update_task(obj_data)
                 else:
@@ -190,8 +183,9 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
     def _create_groups(self):
         for individual_group in self.grouped_individuals:
             ids = individual_group['record_ids']
+            ids_str = [str(uuid) for uuid in ids]
             code = self.generate_unique_code()
-            obj_data = {"individual_ids": ids, "code": code}
+            obj_data = {"individual_ids": ids_str, "code": code}
             service = GroupService(self.user)
             if IndividualConfig.enable_maker_checker_for_group_upload:
                 service.create_create_task(obj_data)

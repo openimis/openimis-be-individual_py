@@ -68,7 +68,7 @@ class GroupIndividual(HistoryModel):
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
     def save(self, *args, **kwargs):
-        super().save(args=args, kwargs=kwargs)
+        super().save(username=kwargs.get('username'))
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.handle_head_change(self.id, self.role, self.group_id)

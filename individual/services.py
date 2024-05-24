@@ -158,7 +158,11 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             with transaction.atomic():
                 individual_ids = obj_data.pop('individual_ids')
                 result = super().create(obj_data)
-                group_id = result['data']['id']
+                group_id = result['data'].get('id')
+
+                if not group_id:
+                    return result
+
                 if individual_ids:
                     self._update_group_json_ext(group_id, individual_ids)
                     for individual_id in individual_ids:
@@ -180,7 +184,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 if not individual_ids:
                     return result
 
-                group_id = result['data']['id']
+                group_id = obj_data['id']
                 assigned_individuals_ids = \
                     GroupIndividual.objects.filter(group_id=group_id).values_list('individual_id', flat=True)
 
@@ -188,12 +192,12 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 group = self._update_group_json_ext(group_id, individual_ids)
 
                 for individual_id in assigned_individuals_ids:
-                    if individual_id not in individual_ids:
+                    if str(individual_id) not in individual_ids:
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
                         service.delete({'id': group_individual.id})
 
                 for individual_id in individual_ids:
-                    if individual_id not in assigned_individuals_ids:
+                    if uuid.UUID(individual_id) not in assigned_individuals_ids:
                         obj_data = {'group_id': group_id, 'individual_id': individual_id}
                         service.create(obj_data)
 
@@ -215,6 +219,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 group_individual.delete(username=self.user.username)
             return super().delete(obj_data)
 
+    @transaction.atomic
     def _update_group_json_ext(self, group_id, individual_ids):
         # it makes sure GroupIndividual .save() won't add each individual separately to group json_ext
         # because their ids will be already there
@@ -387,7 +392,7 @@ class GroupAndGroupIndividualAlignmentService:
 
     def _assure_head_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
-        head_exists = group_individuals.filter(role=GroupIndividual.Role.HEAD).exist()
+        head_exists = group_individuals.filter(role=GroupIndividual.Role.HEAD).exists()
 
         if head_exists:
             return
