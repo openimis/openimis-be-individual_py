@@ -108,10 +108,18 @@ class IndividualConfig(AppConfig):
 
     @classmethod
     def __initialize_custom_filters(cls):
-        from individual.custom_filters import IndividualCustomFilterWizard, GroupCustomFilterWizard
+        from individual.custom_filters import (
+            IndividualCustomFilterWizard,
+            GroupCustomFilterWizard,
+            GroupIndividualCustomFilterWizard,
+        )
         CustomFilterRegistryPoint.register_custom_filters(
             module_name=cls.name,
-            custom_filter_class_list=[IndividualCustomFilterWizard, GroupCustomFilterWizard]
+            custom_filter_class_list=[
+                IndividualCustomFilterWizard,
+                GroupCustomFilterWizard,
+                GroupIndividualCustomFilterWizard
+            ]
         )
 
     def _set_up_workflows(self):
