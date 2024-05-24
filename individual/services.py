@@ -355,19 +355,25 @@ class GroupAndGroupIndividualAlignmentService:
 
     def update_json_ext_for_group(self, group):
         """
-            This method makes sure that json_ext of a group will be up-to-date with role and its members.
+        This method ensures that json_ext of a group is up-to-date with its roles and members.
         """
-        group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
+        group_individuals = GroupIndividual.objects.filter(group_id=group.id, is_deleted=False)
         head = group_individuals.filter(role=GroupIndividual.Role.HEAD).first()
 
         group_members = {
             str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
             for individual in group_individuals
         }
+
         head_str = f'{head.individual.first_name} {head.individual.last_name}' if head else None
-        head_id = str(head.id)
+        head_id = str(head.individual.id) if head else None
+        head_json_ext = head.individual.json_ext if head and head.individual.json_ext else {}
 
         changes_to_save = {}
+        json_ext_minus_keys = {k: v for k, v in group.json_ext.items() if k not in ["members", "head", "head_id"]}
+
+        if json_ext_minus_keys != head_json_ext:
+            group.json_ext = head_json_ext
 
         if group.json_ext.get("members") != group_members:
             changes_to_save["members"] = group_members
@@ -380,7 +386,7 @@ class GroupAndGroupIndividualAlignmentService:
 
         if changes_to_save:
             group.json_ext.update(changes_to_save)
-            group.save(username=self.user.username)
+            group.save(update_fields=['json_ext'], username=self.user.username)
 
     def handle_assure_head_in_group(self, group, role):
         """
