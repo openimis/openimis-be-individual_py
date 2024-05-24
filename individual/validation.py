@@ -32,46 +32,11 @@ class IndividualDataSourceValidation(BaseModelValidation):
 class GroupValidation(BaseModelValidation):
     OBJECT_TYPE = Group
 
-    @classmethod
-    def validate_create_group_individuals(cls, user, **data):
-        super().validate_create(user, **data)
-        errors = []
-        individual_ids = data.get('individual_ids')
 
-        existing_individual_ids = set(Individual.objects.filter(id__in=individual_ids).values_list('id', flat=True))
-        missing_individual_ids = set(individual_ids) - existing_individual_ids
-
-        if missing_individual_ids:
-            errors += [_("individual.validation.validate_create_group_individuals.wrong_individual_ids") % {
-                'invalid_ids': {", ".join(map(str, missing_individual_ids))}
-            }]
-
-        return errors
-
-    @classmethod
-    def validate_update_group_individuals(cls, user, **data):
-        super().validate_update(user, **data)
-        errors = []
-        allowed_fields = {'id', 'individual_ids'}
-        extra_fields = set(data.keys()) - allowed_fields
-        missing_fields = allowed_fields - set(data.keys())
-
-        if extra_fields:
-            errors += [_("individual.validation.validate_update_group_individuals.extra_fields") % {
-                'fields': {', '.join(extra_fields)}
-            }]
-
-        if missing_fields:
-            errors += [_("individual.validation.validate_update_group_individuals.missing_fields") % {
-                'fields': {', '.join(missing_fields)}
-            }]
-
-        if errors:
-            raise ValidationError(errors)
-
+class CrateGroupAndMoveIndividualValidation:
     @classmethod
     def validate_create_group_and_move_individual(cls, user, **data):
-        super().validate_create(user, **data)
+        GroupValidation().validate_create(user, **data)
         errors = []
         group_individual_id = data.get('group_individual_id')
         group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
