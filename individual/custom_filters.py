@@ -9,7 +9,7 @@ from typing import List
 
 from core.custom_filters import CustomFilterWizardInterface
 from individual.apps import IndividualConfig
-from individual.models import Individual
+from individual.models import Individual, Group
 
 
 logger = logging.getLogger(__name__)
@@ -97,3 +97,8 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
         cleaned_string = re.sub(pattern, '', string)
 
         return cleaned_string
+
+
+class GroupCustomFilterWizard(IndividualCustomFilterWizard):
+
+    OBJECT_CLASS = Group

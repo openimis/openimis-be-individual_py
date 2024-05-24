@@ -439,3 +439,37 @@ class ConfirmIndividualEnrollmentMutation(BaseHistoryModelCreateMutationMixin, B
 
     class Input(ConfirmIndividualEnrollmentInputType):
         pass
+
+
+class ConfirmGroupEnrollmentMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
+    _mutation_class = "ConfirmGroupEnrollmentMutation"
+    _mutation_module = "individual"
+    _model = Group
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        super()._validate_mutation(user, **data)
+        if not user.has_perms(
+                IndividualConfig.gql_group_create_perms):
+            raise ValidationError("mutation.authentication_required")
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+        custom_filters = data.pop('custom_filters', None)
+        benefit_plan_id = data.pop('benefit_plan_id', None)
+        status = data.pop('status', "ACTIVE")
+        service = GroupService(user)
+        service.select_groups_to_benefit_plan(
+            custom_filters,
+            benefit_plan_id,
+            status,
+            user,
+        )
+        return None
+
+    class Input(ConfirmIndividualEnrollmentInputType):
+        pass
