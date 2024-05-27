@@ -31,6 +31,7 @@ class IndividualDataSourceValidation(BaseModelValidation):
 
 class GroupValidation(BaseModelValidation):
     OBJECT_TYPE = Group
+    # TODO: validate group code unique
 
 
 class CrateGroupAndMoveIndividualValidation:
@@ -51,12 +52,30 @@ class GroupIndividualValidation(BaseModelValidation):
     OBJECT_TYPE = GroupIndividual
 
     @classmethod
+    def validate_create(cls, user, **data):
+        errors = [
+            *check_if_group_id(data)
+        ]
+        if errors:
+            raise ValidationError(errors)
+
+    @classmethod
     def validate_update(cls, user, **data):
         errors = [
+            *check_if_group_id(data),
             *validate_group_task_pending(data)
         ]
         if errors:
             raise ValidationError(errors)
+
+
+def check_if_group_id(data):
+    group_id = data.get('group_id')
+
+    if group_id:
+        return []
+
+    return [{"message": _("individual.validation.check_if_group_id")}]
 
 
 def validate_group_task_pending(data):
