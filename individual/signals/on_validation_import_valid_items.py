@@ -107,8 +107,12 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         data_upload.save(username=self.user.username)
 
     @staticmethod
-    def group_data_sources_into_entities(upload_id, user):
+    def group_data_sources_into_entities(upload_id, user, accepted: List[str] = None):
         data_sources = GroupDataSource.objects.filter(upload_id=upload_id)
+
+        if accepted:
+            data_sources = data_sources.filter(id__in=accepted)
+
         service = GroupService(user)
         for source in data_sources:
             obj_data = source.json_ext
@@ -342,7 +346,7 @@ def _complete_task_for_accepted(_task, accept, user):
 
     if _task.business_event == IndividualConfig.validation_import_group_valid_items:
         BaseGroupColumnAggregationClass.group_data_sources_into_entities(
-            upload_record.data_upload.id, user
+            upload_record.data_upload.id, user, accept
         )
 
 
