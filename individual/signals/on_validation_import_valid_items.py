@@ -83,9 +83,6 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         self.individuals = self._query_individuals()
         self.grouped_individuals = self._get_grouped_individuals()
 
-        if self.grouped_individuals is None or not self.grouped_individuals.exists():
-            return
-
     def _create_task(self):
         json_ext = {
             'source_name': self.upload_record.data_upload.source_name,
@@ -218,6 +215,9 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
     def run_workflow(self):
         super().run_workflow()
 
+        if self.grouped_individuals is None or not self.grouped_individuals.exists():
+            return
+
         if self.group_aggregation_column == self.group_code_str:
             self._create_or_update_groups_using_group_code()
         else:
@@ -230,6 +230,10 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
     def run_workflow(self):
         super().run_workflow()
+
+        if self.grouped_individuals is None or not self.grouped_individuals.exists():
+            return
+
         self._create_or_update_groups_using_group_code()
         self._create_task_or_data_source_into_entity()
         self._clean_json_ext()
