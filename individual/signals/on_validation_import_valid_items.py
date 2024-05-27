@@ -83,6 +83,9 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         self.individuals = self._query_individuals()
         self.grouped_individuals = self._get_grouped_individuals()
 
+        if self.grouped_individuals is None or not self.grouped_individuals.exists():
+            return
+
     def _create_task(self):
         json_ext = {
             'source_name': self.upload_record.data_upload.source_name,
@@ -176,7 +179,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
                 ).values_list('id', flat=True))
                 assigned_individual_ids_str = [str(uuid) for uuid in assigned_individual_ids]
                 updated_ids = list(set(ids_str + assigned_individual_ids_str))
-                obj_data = {"id": group.id, "individual_ids": updated_ids, "code": group_code}
+                obj_data = {"id": str(group.id), "individual_ids": updated_ids, "code": group_code}
 
             self._create_group_data_source(obj_data, group)
 
@@ -382,7 +385,8 @@ def on_task_resolve(**kwargs):
                 and task_data['executor_action_event'] == TasksManagementConfig.default_executor_event \
                 and task_data['business_event'] in [
             IndividualConfig.validation_import_valid_items,
-            IndividualConfig.validation_upload_valid_items
+            IndividualConfig.validation_upload_valid_items,
+            IndividualConfig.validation_import_group_valid_items
         ]:
             data = kwargs.get("result").get("data")
             task = Task.objects.select_related('task_group').prefetch_related('task_group__taskexecutor_set').get(
@@ -390,9 +394,7 @@ def on_task_resolve(**kwargs):
             user = User.objects.get(id=data["user"]["id"])
 
             # Task only relevant for this specific source
-            if task.source != 'import_valid_items':
-                return
-            if task.source != 'import_group_valid_items':
+            if task.source != 'import_valid_items' and task.source != 'import_group_valid_items':
                 return
 
             if not task.task_group:
