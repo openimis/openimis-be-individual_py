@@ -6,7 +6,7 @@ from core import prefix_filterset, ExtendedConnection
 from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
-    IndividualDataSourceUpload, IndividualDataUploadRecords
+    IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
 
 
 def _have_permissions(user, permission):
@@ -122,7 +122,7 @@ class GroupGQLType(DjangoObjectType):
         model = Group
         interfaces = (graphene.relay.Node,)
         filter_fields = {
-            "id": ["exact"],
+            "id": ["exact", "isnull"],
             "code": ["iexact", "istartswith", "icontains"],
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
@@ -210,6 +210,25 @@ class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
             "version": ["exact"],
             "workflow": ["exact", "iexact", "startswith", "istartswith", "contains", "icontains"],
             **prefix_filterset("data_upload__", IndividualDataSourceUploadGQLType._meta.filter_fields),
+        }
+        connection_class = ExtendedConnection
+
+
+class GroupDataSourceGQLType(DjangoObjectType):
+    uuid = graphene.String(source='uuid')
+
+    class Meta:
+        model = GroupDataSource
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact", "isnull"],
+
+            "date_created": ["exact", "lt", "lte", "gt", "gte"],
+            "date_updated": ["exact", "lt", "lte", "gt", "gte"],
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+            **prefix_filterset("group__", GroupGQLType._meta.filter_fields),
+            **prefix_filterset("upload__", IndividualDataSourceUploadGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 

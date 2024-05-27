@@ -15,12 +15,13 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation, \
     UndoDeleteIndividualMutation, ConfirmGroupEnrollmentMutation
-from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, GroupGQLType, GroupIndividualGQLType, \
+from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, \
+    GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
     IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType, \
-    GroupIndividualHistoryGQLType, GroupSummaryEnrollmentGQLType
+    GroupIndividualHistoryGQLType, GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
-    GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords
+    GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
 
 
 def patch_details(data_df: pd.DataFrame):
@@ -73,6 +74,13 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
     individual_data_source = OrderedDjangoFilterConnectionField(
         IndividualDataSourceGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        applyDefaultValidityFilter=graphene.Boolean(),
+        client_mutation_id=graphene.String()
+    )
+
+    group_data_source = OrderedDjangoFilterConnectionField(
+        GroupDataSourceGQLType,
         orderBy=graphene.List(of_type=graphene.String),
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String()
@@ -240,6 +248,18 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
         query = IndividualDataSource.objects.filter(*filters)
+        return gql_optimizer.query(query, info)
+
+    def resolve_group_data_source(self, info, **kwargs):
+        filters = append_validity_filter(**kwargs)
+
+        client_mutation_id = kwargs.get("client_mutation_id")
+        if client_mutation_id:
+            filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+        query = GroupDataSource.objects.filter(*filters)
         return gql_optimizer.query(query, info)
 
     def resolve_individual_data_source_upload(self, info, **kwargs):

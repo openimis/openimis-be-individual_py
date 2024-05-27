@@ -11,7 +11,7 @@ class Individual(HistoryModel):
     last_name = models.CharField(max_length=255, null=False)
     dob = core.fields.DateField(null=False)
     #TODO WHY the HistoryModel json_ext was not enough
-    json_ext = models.JSONField(db_column="Json_ext",  blank=True, default=dict)
+    json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
     def __str__(self):
         return f'{self.first_name} {self.last_name}'
@@ -38,8 +38,8 @@ class IndividualDataSourceUpload(HistoryModel):
 
 
 class IndividualDataSource(HistoryModel):
-    individual = models.ForeignKey(Individual, models.DO_NOTHING,  blank=True, null=True)
-    upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING,  blank=True, null=True)
+    individual = models.ForeignKey(Individual, models.DO_NOTHING, blank=True, null=True)
+    upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
     validations = models.JSONField(blank=True, default=dict)
 
 
@@ -54,6 +54,12 @@ class IndividualDataUploadRecords(HistoryModel):
 class Group(HistoryModel):
     code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
+
+
+class GroupDataSource(HistoryModel):
+    group = models.ForeignKey(Group, models.DO_NOTHING, blank=True, null=True)
+    upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
+    validations = models.JSONField(blank=True, default=dict)
 
 
 class GroupIndividual(HistoryModel):
