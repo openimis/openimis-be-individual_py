@@ -701,29 +701,3 @@ class IndividualTaskCreatorService:
 
         percentage_of_invalid_items = round(percentage_of_invalid_items, 2)
         return percentage_of_invalid_items
-
-
-def group_on_task_complete_service_handler(service_type):
-    operations = []
-    if issubclass(service_type, CreateCheckerLogicServiceMixin):
-        operations.append('create')
-
-    def func(**kwargs):
-        try:
-            result = kwargs.get('result', {})
-            task = result['data']['task']
-            business_event = task['business_event']
-            service_match = business_event.startswith(f"{service_type.__name__}.")
-            if result and result['success'] \
-                    and task['status'] == Task.Status.COMPLETED \
-                    and service_match:
-                operation = business_event.split(".")[1]
-                if operation in operations:
-                    user = User.objects.get(id=result['data']['user']['id'])
-                    data = task['data']['incoming_data']
-                    getattr(service_type(user), operation)(data)
-        except Exception as e:
-            logger.error("Error while executing on_task_complete", exc_info=e)
-            return [str(e)]
-
-    return func

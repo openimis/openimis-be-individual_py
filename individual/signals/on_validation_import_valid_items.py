@@ -11,10 +11,12 @@ from individual.apps import IndividualConfig
 from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataSource,
-    IndividualDataUploadRecords, Group, GroupIndividual, Individual
+    IndividualDataUploadRecords, Group, GroupIndividual, Individual, GroupDataSource
 )
 from individual.services import GroupIndividualService, GroupService
+from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
+from tasks_management.services import TaskService
 from workflow.services import WorkflowService
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,44 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         self.individuals = self._query_individuals()
         self.grouped_individuals = self._get_grouped_individuals()
 
+    def _create_task(self):
+        json_ext = {
+            'source_name': self.upload_record.data_upload.source_name,
+            'workflow': self.upload_record.workflow,
+            'data_upload_id': str(self.upload_record.data_upload.id),
+            'group_aggregation_column':
+                self.upload_record.json_ext.get('group_aggregation_column')
+                if isinstance(self.upload_record.json_ext, dict)
+                else None,
+        }
+        TaskService(self.user).create({
+            'source': 'import_group_valid_items',
+            'entity': self.upload_record,
+            'status': Task.Status.RECEIVED,
+            'executor_action_event': TasksManagementConfig.default_executor_event,
+            'business_event': IndividualConfig.validation_import_group_valid_items,
+            'json_ext': json_ext
+        })
+
+        data_upload = self.upload_record.data_upload
+        data_upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
+        data_upload.save(username=self.user.username)
+
+    @staticmethod
+    def group_data_sources_into_entities(upload_id, user, accepted: List[str] = None):
+        data_sources = GroupDataSource.objects.filter(upload_id=upload_id)
+
+        if accepted:
+            data_sources = data_sources.filter(id__in=accepted)
+
+        service = GroupService(user)
+        for source in data_sources:
+            obj_data = source.json_ext
+            if source.group:
+                service.update(obj_data)
+            else:
+                service.create(obj_data)
+
     def set_group_aggregation_column(self, group_aggregation_column):
         if group_aggregation_column == 'null' or not group_aggregation_column:
             self.group_aggregation_column = self.group_code_str
@@ -126,59 +166,30 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             return {}
         return instance.json_ext or {}
 
-    @staticmethod
-    def _role_parser(recipient_info):
-        if recipient_info in [1, '1']:
-            return GroupIndividual.Role.HEAD
-        else:
-            return GroupIndividual.Role.RECIPIENT
-
-    def _get_or_create_group_individual(self, individual_id, group):
-        group_individual = GroupIndividual.objects.filter(individual__id=individual_id, group=group).first()
-        if group_individual:
-            return group_individual, False
-
-        group_individual = GroupIndividual(individual_id=individual_id, group_id=group.id)
-        group_individual.save(username=self.user.username)
-        return group_individual, True
-
     def _create_or_update_groups_using_group_code(self):
         for individual_group in self.grouped_individuals:
             ids = individual_group['record_ids']
             ids_str = [str(uuid) for uuid in ids]
             group_code = individual_group['value']
             group = Group.objects.filter(code=group_code).first()
-            service = GroupService(self.user)
-            if not group:
-                obj_data = {"individual_ids": ids_str, "code": group_code}
-                if IndividualConfig.enable_maker_checker_for_group_upload:
-                    service.create_create_task(obj_data)
-                else:
-                    service.create(obj_data)
-            else:
+            obj_data = {"individual_ids": ids_str, "code": group_code}
+
+            if group:
                 assigned_individual_ids = list(Individual.objects.filter(
                     groupindividual__group=group, is_deleted=False
                 ).values_list('id', flat=True))
                 assigned_individual_ids_str = [str(uuid) for uuid in assigned_individual_ids]
                 updated_ids = list(set(ids_str + assigned_individual_ids_str))
-                obj_data = {"id": group.id, "individual_ids": updated_ids, "code": group_code}
-                if IndividualConfig.enable_maker_checker_for_group_upload:
-                    service.create_update_task(obj_data)
-                else:
-                    service.update(obj_data)
+                obj_data = {"id": str(group.id), "individual_ids": updated_ids, "code": group_code}
 
+            self._create_group_data_source(obj_data, group)
 
-class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
-
-    def run_workflow(self):
-        super().run_workflow()
-
-        if self.group_aggregation_column == self.group_code_str:
-            self._create_or_update_groups_using_group_code()
+    def _create_group_data_source(self, json_ext_data, group=None):
+        if group:
+            data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data, group=group)
         else:
-            self._create_groups()
-
-        self._clean_json_ext()
+            data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data)
+        data_source.save(username=self.user.username)
 
     def _create_groups(self):
         for individual_group in self.grouped_individuals:
@@ -186,11 +197,7 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
             ids_str = [str(uuid) for uuid in ids]
             code = self.generate_unique_code()
             obj_data = {"individual_ids": ids_str, "code": code}
-            service = GroupService(self.user)
-            if IndividualConfig.enable_maker_checker_for_group_upload:
-                service.create_create_task(obj_data)
-            else:
-                service.create(obj_data)
+            self._create_group_data_source(obj_data)
 
     @staticmethod
     def generate_unique_code():
@@ -200,24 +207,39 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
             if not Group.objects.filter(code=code).exists():
                 return code
 
-    def _set_group_individual_role(self, group_individual):
-        individual = group_individual.individual
-        group = group_individual.group
-        individual_json_ext = self._get_json_ext(individual)
-        is_already_head_assigned = GroupIndividual.objects.filter(
-            group_id=group.id, role=GroupIndividual.Role.HEAD
-        ).exists()
-        recipient_info = individual_json_ext.get(self.recipient_info_str)
-        if not is_already_head_assigned and recipient_info in [1, '1']:
-            group_individual.role = GroupIndividual.Role.HEAD
+    def _create_task_or_data_source_into_entity(self):
+        if IndividualConfig.enable_maker_checker_for_group_upload:
+            self._create_task()
         else:
-            group_individual.role = GroupIndividual.Role.RECIPIENT
+            self.group_data_sources_into_entities(self.upload_record.data_upload.id, self.user)
+
+
+class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
+
+    def run_workflow(self):
+        super().run_workflow()
+
+        if self.grouped_individuals is None or not self.grouped_individuals.exists():
+            return
+
+        if self.group_aggregation_column == self.group_code_str:
+            self._create_or_update_groups_using_group_code()
+        else:
+            self._create_groups()
+
+        self._create_task_or_data_source_into_entity()
+        self._clean_json_ext()
 
 
 class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
     def run_workflow(self):
         super().run_workflow()
+
+        if self.grouped_individuals is None or not self.grouped_individuals.exists():
+            return
+
         self._create_or_update_groups_using_group_code()
+        self._create_task_or_data_source_into_entity()
         self._clean_json_ext()
 
 
@@ -258,6 +280,10 @@ def on_task_complete_action(business_event, **kwargs):
                 upload_record.data_upload.id,
                 User.objects.get(id=data['user']['id'])
             ).run_workflow()
+        elif business_event == IndividualConfig.validation_import_group_valid_items:
+            BaseGroupColumnAggregationClass.group_data_sources_into_entities(
+                upload_record.data_upload.id, User.objects.get(id=data['user']['id'])
+            )
         else:
             raise ValueError(f"Business event {business_event} doesn't have assigned workflow.")
     except Exception as exc:
@@ -274,18 +300,23 @@ def on_task_complete_import_validated(**kwargs):
     from individual.apps import IndividualConfig
     on_task_complete_action(IndividualConfig.validation_import_valid_items, **kwargs)
     on_task_complete_action(IndividualConfig.validation_upload_valid_items, **kwargs)
+    on_task_complete_action(IndividualConfig.validation_import_group_valid_items, **kwargs)
 
 
-def _delete_rejected(uuids_list):
+def _delete_rejected(uuids_list, task_source):
     # Use soft delete to remove atomic tasks, it's not possible to mark them on level of Individual.
-    sources_to_update = IndividualDataSource.objects.filter(id__in=uuids_list)
+    model = IndividualDataSource
+    if task_source == 'import_group_valid_items':
+        model = GroupDataSource
+
+    sources_to_update = model.objects.filter(id__in=uuids_list)
 
     # Set is_deleted to True for each instance
     for source in sources_to_update:
         source.is_deleted = True
 
     # Perform the bulk update
-    IndividualDataSource.objects.bulk_update(sources_to_update, ['is_deleted'])
+    model.objects.bulk_update(sources_to_update, ['is_deleted'])
 
 
 def _complete_task_for_accepted(_task, accept, user):
@@ -313,6 +344,11 @@ def _complete_task_for_accepted(_task, accept, user):
             accept
         ).run_workflow()
 
+    if _task.business_event == IndividualConfig.validation_import_group_valid_items:
+        BaseGroupColumnAggregationClass.group_data_sources_into_entities(
+            upload_record.data_upload.id, user, accept
+        )
+
 
 def _resolve_task_any(_task: Task, _user):
     # Atomic resolution of individuals
@@ -329,7 +365,7 @@ def _resolve_task_any(_task: Task, _user):
             accept = _task.business_status[user_id_str].get('ACCEPT', [])
             reject = _task.business_status[user_id_str].get('REJECT', [])
 
-        _delete_rejected(reject)
+        _delete_rejected(reject, _task.source)
         _complete_task_for_accepted(_task, accept, _user)
 
 
@@ -357,7 +393,8 @@ def on_task_resolve(**kwargs):
                 and task_data['executor_action_event'] == TasksManagementConfig.default_executor_event \
                 and task_data['business_event'] in [
             IndividualConfig.validation_import_valid_items,
-            IndividualConfig.validation_upload_valid_items
+            IndividualConfig.validation_upload_valid_items,
+            IndividualConfig.validation_import_group_valid_items
         ]:
             data = kwargs.get("result").get("data")
             task = Task.objects.select_related('task_group').prefetch_related('task_group__taskexecutor_set').get(
@@ -365,7 +402,7 @@ def on_task_resolve(**kwargs):
             user = User.objects.get(id=data["user"]["id"])
 
             # Task only relevant for this specific source
-            if task.source != 'import_valid_items':
+            if task.source != 'import_valid_items' and task.source != 'import_group_valid_items':
                 return
 
             if not task.task_group:

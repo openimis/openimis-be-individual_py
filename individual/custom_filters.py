@@ -52,7 +52,7 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
     ) -> List[namedtuple]:
         tuples_with_definitions = []
 
-        properties = individual_schema['properties']
+        properties = individual_schema.get('properties', {})
         for key, value in properties.items():
             tuple_with_definition = tuple_type(
                 field=key,
