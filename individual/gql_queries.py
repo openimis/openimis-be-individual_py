@@ -164,6 +164,7 @@ class GroupIndividualGQLType(DjangoObjectType):
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "role": ["exact", "iexact", "istartswith", "icontains"],
+            "recipient_type": ["exact", "iexact", "istartswith", "icontains"],
             "is_deleted": ["exact"],
             "version": ["exact"],
             **prefix_filterset("individual__", IndividualGQLType._meta.filter_fields),

@@ -172,7 +172,6 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             ids_str = [str(uuid) for uuid in ids]
             group_code = individual_group['value']
             group = Group.objects.filter(code=group_code).first()
-            obj_data = {"individual_ids": ids_str, "code": group_code}
 
             if group:
                 assigned_individual_ids = list(Individual.objects.filter(
@@ -180,9 +179,31 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
                 ).values_list('id', flat=True))
                 assigned_individual_ids_str = [str(uuid) for uuid in assigned_individual_ids]
                 updated_ids = list(set(ids_str + assigned_individual_ids_str))
-                obj_data = {"id": str(group.id), "individual_ids": updated_ids, "code": group_code}
+                update_individuals_data = self._build_individual_data(updated_ids)
+                obj_data = {"id": str(group.id), "individuals_data": update_individuals_data, "code": group_code}
+            else:
+                individuals_data = self._build_individual_data(ids_str)
+                obj_data = {"individuals_data": individuals_data, "code": group_code}
 
             self._create_group_data_source(obj_data, group)
+
+    def _build_individual_data(self, ids):
+        def build_single_individual_data(individual_id):
+            individual = Individual.objects.get(id=individual_id)
+            individual_json_ext = self._get_json_ext(individual)
+            recipient_info = individual_json_ext.get('recipient_info')
+            recipient_type = self._recipient_type_parser(recipient_info)
+            return {'individual_id': individual_id, 'recipient_type': recipient_type}
+
+        return [build_single_individual_data(individual_id) for individual_id in ids]
+
+    @staticmethod
+    def _recipient_type_parser(recipient_type):
+        if recipient_type in [1, '1', 1.0]:
+            return GroupIndividual.RecipientType.PRIMARY
+        if recipient_type in [2, '2', 2.0]:
+            return GroupIndividual.RecipientType.SECONDARY
+        return None
 
     def _create_group_data_source(self, json_ext_data, group=None):
         if group:
@@ -196,7 +217,8 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             ids = individual_group['record_ids']
             ids_str = [str(uuid) for uuid in ids]
             code = self.generate_unique_code()
-            obj_data = {"individual_ids": ids_str, "code": code}
+            individuals_data = self._build_individual_data(ids_str)
+            obj_data = {"individuals_data": individuals_data, "code": code}
             self._create_group_data_source(obj_data)
 
     @staticmethod

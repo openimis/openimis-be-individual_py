@@ -37,3 +37,6 @@ msgstr "Invalid Individual ids %(invalid_ids)"
 
 msgid "individual.validation.validate_undo_delete.individual_not_deleted"
 msgstr "Individual %(id) is not deleted."
+
+msgid "individual.validation.check_if_group_id"
+msgstr "Missing group_id."

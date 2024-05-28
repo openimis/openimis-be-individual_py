@@ -22,26 +22,43 @@ class UpdateIndividualInputType(CreateIndividualInputType):
     id = graphene.UUID(required=True)
 
 
+RoleEnum = graphene.Enum.from_enum(GroupIndividual.Role)
+RecipientTypeEnum = graphene.Enum.from_enum(GroupIndividual.RecipientType)
+
+
+class CreateGroupIndividualInputType(OpenIMISMutation.Input):
+    group_id = graphene.UUID(required=False)
+    individual_id = graphene.UUID(required=True)
+    role = graphene.Field(RoleEnum, required=False)
+    recipient_type = graphene.Field(RecipientTypeEnum, required=False)
+
+    def resolve_role(self, info):
+        return self.role
+
+    def resolve_recipient_type(self, info):
+        return self.recipient_type
+
+
+class CreateGroupIndividualInputTypeInputObjectType(graphene.InputObjectType):
+    group_id = graphene.UUID(required=False)
+    individual_id = graphene.UUID(required=True)
+    role = graphene.Field(RoleEnum, required=False)
+    recipient_type = graphene.Field(RecipientTypeEnum, required=False)
+
+    def resolve_role(self, info):
+        return self.role
+
+    def resolve_recipient_type(self, info):
+        return self.recipient_type
+
+
 class CreateGroupInputType(OpenIMISMutation.Input):
     code = graphene.String(required=True)
-    individual_ids = graphene.List(graphene.UUID)
+    individuals_data = graphene.List(CreateGroupIndividualInputTypeInputObjectType, required=False)
 
 
 class UpdateGroupInputType(CreateGroupInputType):
     id = graphene.UUID(required=True)
-
-
-class CreateGroupIndividualInputType(OpenIMISMutation.Input):
-    class RoleEnum(graphene.Enum):
-        HEAD = GroupIndividual.Role.HEAD
-        RECIPIENT = GroupIndividual.Role.RECIPIENT
-
-    group_id = graphene.UUID(required=True)
-    individual_id = graphene.UUID(required=True)
-    role = graphene.Field(RoleEnum, required=False)
-
-    def resolve_role(self, info):
-        return self.role
 
 
 class UpdateGroupIndividualInputType(CreateGroupIndividualInputType):

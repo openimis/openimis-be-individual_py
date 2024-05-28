@@ -156,17 +156,23 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
     def create(self, obj_data):
         try:
             with transaction.atomic():
-                individual_ids = obj_data.pop('individual_ids')
+                individuals_data = obj_data.pop('individuals_data')
                 result = super().create(obj_data)
                 group_id = result['data'].get('id')
 
                 if not group_id:
                     return result
 
-                if individual_ids:
+                if individuals_data:
+                    individual_ids = [data["individual_id"] for data in individuals_data]
                     self._update_group_json_ext(group_id, individual_ids)
-                    for individual_id in individual_ids:
-                        obj_data = {'group_id': group_id, 'individual_id': individual_id}
+                    for data in individuals_data:
+                        obj_data = {
+                            'group_id': group_id,
+                            'individual_id': data.get("individual_id"),
+                            'role': data.get("role"),
+                            'recipient_type': data.get("recipient_type")
+                        }
                         service = GroupIndividualService(self.user)
                         service.create(obj_data)
                 return result
@@ -178,10 +184,10 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
     def update(self, obj_data):
         try:
             with transaction.atomic():
-                individual_ids = obj_data.pop('individual_ids')
+                individuals_data = obj_data.pop('individuals_data')
                 result = super().update(obj_data)
 
-                if not individual_ids:
+                if not individuals_data:
                     return result
 
                 group_id = obj_data['id']
@@ -189,6 +195,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                     GroupIndividual.objects.filter(group_id=group_id).values_list('individual_id', flat=True)
 
                 service = GroupIndividualService(self.user)
+                individual_ids = [data.individual_id for data in individuals_data]
                 group = self._update_group_json_ext(group_id, individual_ids)
 
                 for individual_id in assigned_individuals_ids:
@@ -196,9 +203,14 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
                         service.delete({'id': group_individual.id})
 
-                for individual_id in individual_ids:
-                    if uuid.UUID(individual_id) not in assigned_individuals_ids:
-                        obj_data = {'group_id': group_id, 'individual_id': individual_id}
+                for data in individuals_data:
+                    if uuid.UUID(data.individual_id) not in assigned_individuals_ids:
+                        obj_data = {
+                            'group_id': group_id,
+                            'individual_id': data.get("individual_id"),
+                            'role': data.get("role"),
+                            'recipient_type': data.get("recipient_type")
+                        }
                         service.create(obj_data)
 
                 dict_repr = model_representation(group)
@@ -310,7 +322,7 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
     def update(self, obj_data):
         try:
             with transaction.atomic():
-                group_individual_id = obj_data.get('group_individual_id')
+                group_individual_id = obj_data.get('id')
                 incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
 
@@ -359,6 +371,8 @@ class GroupAndGroupIndividualAlignmentService:
         """
         group_individuals = GroupIndividual.objects.filter(group_id=group.id, is_deleted=False)
         head = group_individuals.filter(role=GroupIndividual.Role.HEAD).first()
+        primary = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).first()
+        secondary = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.SECONDARY).first()
 
         group_members = {
             str(individual.individual.id): f"{individual.individual.first_name} {individual.individual.last_name}"
@@ -368,6 +382,12 @@ class GroupAndGroupIndividualAlignmentService:
         head_str = f'{head.individual.first_name} {head.individual.last_name}' if head else None
         head_id = str(head.individual.id) if head else None
         head_json_ext = head.individual.json_ext if head and head.individual.json_ext else {}
+
+        primary_str = f'{primary.individual.first_name} {primary.individual.last_name}' if primary else None
+        primary_id = str(primary.individual.id) if primary else None
+
+        secondary_str = f'{secondary.individual.first_name} {secondary.individual.last_name}' if secondary else None
+        secondary_id = str(secondary.individual.id) if secondary else None
 
         changes_to_save = {}
         json_ext_minus_keys = {k: v for k, v in group.json_ext.items() if k not in ["members", "head", "head_id"]}
@@ -384,32 +404,44 @@ class GroupAndGroupIndividualAlignmentService:
         if group.json_ext.get("head_id") != head_id:
             changes_to_save["head_id"] = head_id
 
+        if group.json_ext.get("primary_recipient") != primary_str:
+            changes_to_save["primary_recipient"] = primary_str
+
+        if group.json_ext.get("primary_recipient_id") != primary_id:
+            changes_to_save["primary_recipient_id"] = primary_id
+
+        if group.json_ext.get("secondary_recipient") != secondary_str:
+            changes_to_save["secondary_recipient"] = secondary_str
+
+        if group.json_ext.get("secondary_recipient_id") != secondary_id:
+            changes_to_save["secondary_recipient_id"] = secondary_id
+
         if changes_to_save:
             group.json_ext.update(changes_to_save)
             group.save(update_fields=['json_ext'], username=self.user.username)
 
-    def handle_assure_head_in_group(self, group, role):
+    def handle_assure_primary_recipient_in_group(self, group, recipient_type):
         """
             Making sure that group has a head.
         """
-        if role == GroupIndividual.Role.HEAD:
+        if recipient_type == GroupIndividual.RecipientType.PRIMARY:
             return
-        self._assure_head_in_group(group)
+        self._assure_primary_recipient_in_group(group)
 
-    def _assure_head_in_group(self, group):
+    def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
-        head_exists = group_individuals.filter(role=GroupIndividual.Role.HEAD).exists()
+        primary_exists = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).exists()
 
-        if head_exists:
+        if primary_exists:
             return
 
-        new_head = group_individuals.first()
+        new_primary = group_individuals.first()
 
-        if not new_head:
+        if not new_primary:
             return
 
-        new_head.role = GroupIndividual.Role.HEAD
-        new_head.save(username=self.user.username)
+        new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
+        new_primary.save(username=self.user.username)
 
     def _change_head(self, group_individual_id, group_id):
         heads_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
@@ -418,7 +450,7 @@ class GroupAndGroupIndividualAlignmentService:
         if not old_head:
             return
 
-        old_head.role = GroupIndividual.Role.RECIPIENT
+        old_head.role = None
         old_head.save(username=self.user.username)
 
 
