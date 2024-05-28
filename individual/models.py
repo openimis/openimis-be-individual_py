@@ -65,11 +65,22 @@ class GroupDataSource(HistoryModel):
 class GroupIndividual(HistoryModel):
     class Role(models.TextChoices):
         HEAD = 'HEAD', _('HEAD')
-        RECIPIENT = 'RECIPIENT', _('RECIPIENT')
+        SPOUSE = 'SPOUSE', _('SPOUSE')
+        SON = 'SON', _('SON')
+        DAUGHTER = 'DAUGHTER', _('DAUGHTER')
+        GRANDFATHER = 'GRANDFATHER', _('GRANDFATHER')
+        GRANDMOTHER = 'GRANDMOTHER', _('GRANDMOTHER')
+        MOTHER = 'MOTHER', _('MOTHER')
+        FATHER = 'FATHER', _('FATHER')
+
+    class RecipientType(models.TextChoices):
+        PRIMARY = 'PRIMARY', _('PRIMARY')
+        SECONDARY = 'SECONDARY', _('SECONDARY')
 
     group = models.ForeignKey(Group, models.DO_NOTHING)
     individual = models.ForeignKey(Individual, models.DO_NOTHING)
-    role = models.CharField(max_length=255, choices=Role.choices, default=Role.RECIPIENT)
+    role = models.CharField(max_length=255, choices=Role.choices, null=True, blank=True)
+    recipient_type = models.CharField(max_length=255, choices=RecipientType.choices, null=True, blank=True)
 
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
@@ -78,5 +89,5 @@ class GroupIndividual(HistoryModel):
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.handle_head_change(self.id, self.role, self.group_id)
-        service.handle_assure_head_in_group(self.group, self.role)
+        service.handle_assure_primary_recipient_in_group(self.group, self.recipient_type)
         service.update_json_ext_for_group(self.group)
