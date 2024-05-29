@@ -108,7 +108,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
     @staticmethod
     def group_data_sources_into_entities(upload_id, user, accepted: List[str] = None):
-        data_sources = GroupDataSource.objects.filter(upload_id=upload_id)
+        data_sources = GroupDataSource.objects.filter(upload_id=upload_id, group=None)
 
         if accepted:
             data_sources = data_sources.filter(id__in=accepted)
@@ -117,9 +117,14 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         for source in data_sources:
             obj_data = source.json_ext
             if source.group:
-                service.update(obj_data)
+                result = service.update(obj_data)
             else:
-                service.create(obj_data)
+                result = service.create(obj_data)
+
+            group_id = result["data"].get('id')
+            if group_id:
+                source.group_id = group_id
+                source.save(username=user.username)
 
     def set_group_aggregation_column(self, group_aggregation_column):
         if group_aggregation_column == 'null' or not group_aggregation_column:
