@@ -369,6 +369,13 @@ class GroupAndGroupIndividualAlignmentService:
         if role == GroupIndividual.Role.HEAD:
             self._change_head(group_individual_id, group_id)
 
+    def handle_primary_recipient_change(self, group_individual_id, recipient_type, group_id):
+        """
+            Method used for making sure that during primary recipient change, the old one is set to default role.
+        """
+        if recipient_type == GroupIndividual.RecipientType.PRIMARY:
+            self._change_primary(group_individual_id, group_id)
+
     def update_json_ext_for_group(self, group):
         """
         This method ensures that json_ext of a group is up-to-date with its roles and members.
@@ -441,7 +448,7 @@ class GroupAndGroupIndividualAlignmentService:
         self._assure_primary_recipient_in_group(group)
 
     def _assure_primary_recipient_in_group(self, group):
-        group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
+        group_individuals = GroupIndividual.objects.filter(group=group, is_deleted=False)
         primary_exists = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).exists()
         head_exists = group_individuals.filter(role=GroupIndividual.Role.HEAD).exists()
 
@@ -467,6 +474,18 @@ class GroupAndGroupIndividualAlignmentService:
 
         old_head.role = None
         old_head.save(username=self.user.username)
+
+    def _change_primary(self, group_individual_id, group_id):
+        primaries_queryset = GroupIndividual.objects.filter(
+            group_id=group_id, recipient_type=GroupIndividual.RecipientType.PRIMARY
+        )
+        old_primary = primaries_queryset.exclude(id=group_individual_id).first()
+
+        if not old_primary:
+            return
+
+        old_primary.recipient_type = None
+        old_primary.save(username=self.user.username)
 
 
 class IndividualImportService:

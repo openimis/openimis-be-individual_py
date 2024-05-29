@@ -89,5 +89,6 @@ class GroupIndividual(HistoryModel):
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.handle_head_change(self.id, self.role, self.group_id)
+        service.handle_primary_recipient_change(self.id, self.recipient_type, self.group_id)
         service.handle_assure_primary_recipient_in_group(self.group, self.recipient_type)
         service.update_json_ext_for_group(self.group)
