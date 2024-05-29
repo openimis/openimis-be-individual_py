@@ -236,7 +236,11 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
         # it makes sure GroupIndividual .save() won't add each individual separately to group json_ext
         # because their ids will be already there
         group = Group.objects.get(id=group_id)
-        group.json_ext["members"] = individual_ids
+        group_members = {
+            str(individual.id): f"{individual.first_name} {individual.last_name}"
+            for individual in Individual.objects.filter(id__in=individual_ids)
+        }
+        group.json_ext["members"] = group_members
         group.save(username=self.user.username)
         return group
 
@@ -393,10 +397,18 @@ class GroupAndGroupIndividualAlignmentService:
         json_ext_minus_keys = {k: v for k, v in group.json_ext.items() if k not in ["members", "head", "head_id"]}
 
         if json_ext_minus_keys != head_json_ext:
-            group.json_ext = head_json_ext
+            for key, value in head_json_ext.items():
+                group.json_ext[key] = value
 
-        if group.json_ext.get("members") != group_members:
-            changes_to_save["members"] = group_members
+        current_members = group.json_ext.get("members", {})
+        additional_members = {k: v for k, v in group_members.items() if k not in current_members}
+        remove_members = {k: v for k, v in current_members.items() if k not in group_members}
+        updated_members = {**current_members, **additional_members}
+        for member_id in remove_members:
+            updated_members.pop(member_id, None)
+
+        if current_members != updated_members:
+            changes_to_save["members"] = updated_members
 
         if group.json_ext.get("head") != head_str:
             changes_to_save["head"] = head_str
@@ -431,6 +443,7 @@ class GroupAndGroupIndividualAlignmentService:
     def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group_id=group, is_deleted=False)
         primary_exists = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).exists()
+        head_exists = group_individuals.filter(role=GroupIndividual.Role.HEAD).exists()
 
         if primary_exists:
             return
@@ -441,6 +454,8 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
+        if not head_exists:
+            new_primary.role = GroupIndividual.Role.HEAD
         new_primary.save(username=self.user.username)
 
     def _change_head(self, group_individual_id, group_id):
