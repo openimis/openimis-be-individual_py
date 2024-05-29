@@ -92,3 +92,9 @@ class GroupIndividual(HistoryModel):
         service.handle_primary_recipient_change(self.id, self.recipient_type, self.group_id)
         service.handle_assure_primary_recipient_in_group(self.group, self.recipient_type)
         service.update_json_ext_for_group(self.group)
+
+    def delete(self, *args, **kwargs):
+        super().delete(username=kwargs.get('username'))
+        from individual.services import GroupAndGroupIndividualAlignmentService
+        service = GroupAndGroupIndividualAlignmentService(self.user_updated)
+        service.update_json_ext_for_group(self.group)
