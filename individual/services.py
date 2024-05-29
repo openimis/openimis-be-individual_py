@@ -351,6 +351,9 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
             if key == 'id':
                 group_individual = GroupIndividual.objects.get(id=value)
                 return f'{group_individual.individual.first_name} {group_individual.individual.last_name}'
+            if key == 'group_id':
+                group = Group.objects.get(id=value)
+                return group.code
             return value
 
         serialized_data = crud_business_data_builder(data, serialize)
