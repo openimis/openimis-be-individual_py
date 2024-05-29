@@ -115,7 +115,8 @@ class GroupGQLType(DjangoObjectType):
     def resolve_head(self, info):
         return Individual.objects.filter(
             groupindividual__group__id=self.id,
-            groupindividual__role=GroupIndividual.Role.HEAD
+            groupindividual__role=GroupIndividual.Role.HEAD,
+            groupindividual__is_deleted=False,
         ).first()
 
     class Meta:
