@@ -158,7 +158,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             with transaction.atomic():
                 individuals_data = obj_data.pop('individuals_data')
                 result = super().create(obj_data)
-                group_id = result['data'].get('id')
+                group_id = result.get('data', {}).get('id')
 
                 if not group_id:
                     return result
@@ -195,7 +195,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                     GroupIndividual.objects.filter(group_id=group_id).values_list('individual_id', flat=True)
 
                 service = GroupIndividualService(self.user)
-                individual_ids = [data.individual_id for data in individuals_data]
+                individual_ids = [data['individual_id'] for data in individuals_data]
                 group = self._update_group_json_ext(group_id, individual_ids)
 
                 for individual_id in assigned_individuals_ids:
@@ -204,7 +204,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                         service.delete({'id': group_individual.id})
 
                 for data in individuals_data:
-                    if uuid.UUID(data.individual_id) not in assigned_individuals_ids:
+                    if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
                         obj_data = {
                             'group_id': group_id,
                             'individual_id': data.get("individual_id"),

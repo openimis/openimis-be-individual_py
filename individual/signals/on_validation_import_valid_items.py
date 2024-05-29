@@ -116,7 +116,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         service = GroupService(user)
         for source in data_sources:
             obj_data = source.json_ext
-            if source.group:
+            if obj_data.get('id'):
                 result = service.update(obj_data)
             else:
                 result = service.create(obj_data)
@@ -190,7 +190,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
                 individuals_data = self._build_individual_data(ids_str)
                 obj_data = {"individuals_data": individuals_data, "code": group_code}
 
-            self._create_group_data_source(obj_data, group)
+            self._create_group_data_source(obj_data)
 
     def _build_individual_data(self, ids):
         def build_single_individual_data(individual_id):
@@ -210,11 +210,8 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             return GroupIndividual.RecipientType.SECONDARY
         return None
 
-    def _create_group_data_source(self, json_ext_data, group=None):
-        if group:
-            data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data, group=group)
-        else:
-            data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data)
+    def _create_group_data_source(self, json_ext_data):
+        data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data)
         data_source.save(username=self.user.username)
 
     def _create_groups(self):
