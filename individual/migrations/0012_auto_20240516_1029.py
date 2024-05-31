@@ -5,6 +5,7 @@ import datetime
 from django.db import migrations, models
 import django.db.models.deletion
 
+from django.conf import settings
 
 class Migration(migrations.Migration):
 
@@ -14,28 +15,52 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunSQL(
-            """
-            DO $$
-            BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.columns 
-                           WHERE table_name='individualdatasourceupload' 
-                           AND column_name='individual') THEN
-                    ALTER TABLE individualdatasourceupload DROP COLUMN individual;
-                END IF;
-            END $$;
-            """,
+            sql=(
+                """
+                IF (SELECT SERVERPROPERTY('EngineEdition')) = 5 BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_name='individualdatasourceupload' 
+                               AND column_name='individual') 
+                    BEGIN
+                        ALTER TABLE individualdatasourceupload DROP COLUMN individual;
+                    END
+                END
+                """ if settings.MSSQL else """
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_name='individualdatasourceupload' 
+                               AND column_name='individual') THEN
+                        ALTER TABLE individualdatasourceupload DROP COLUMN individual;
+                    END IF;
+                END $$;
+                """
+            ),
+            reverse_sql=migrations.RunSQL.noop
         ),
         migrations.RunSQL(
-            """
-            DO $$
-            BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.columns 
-                           WHERE table_name='historicalindividualdatasourceupload' 
-                           AND column_name='individual') THEN
-                    ALTER TABLE historicalindividualdatasourceupload DROP COLUMN individual;
-                END IF;
-            END $$;
-            """,
+            sql=(
+                """
+                IF (SELECT SERVERPROPERTY('EngineEdition')) = 5 BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_name='historicalindividualdatasourceupload' 
+                               AND column_name='individual') 
+                    BEGIN
+                        ALTER TABLE historicalindividualdatasourceupload DROP COLUMN individual;
+                    END
+                END
+                """ if settings.MSSQL else """
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_name='historicalindividualdatasourceupload' 
+                               AND column_name='individual') THEN
+                        ALTER TABLE historicalindividualdatasourceupload DROP COLUMN individual;
+                    END IF;
+                END $$;
+                """
+            ),
+            reverse_sql=migrations.RunSQL.noop
         ),
         migrations.AlterField(
             model_name='group',
