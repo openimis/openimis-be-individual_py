@@ -3,7 +3,7 @@ import graphene_django_optimizer as gql_optimizer
 import pandas as pd
 
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Subquery
 
 from core.custom_filters import CustomFilterWizardStorage
 from core.gql.export_mixin import ExportableQueryMixin
@@ -62,6 +62,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         customFilters=graphene.List(of_type=graphene.String),
         benefitPlanToEnroll=graphene.String(),
         benefitPlanId=graphene.String(),
+        filterNotAttachedToGroup=graphene.Boolean()
     )
 
     individual_history = OrderedDjangoFilterConnectionField(
@@ -174,6 +175,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 Q(is_deleted=False) &
                 Q(beneficiary__benefit_plan_id=benefit_plan_id)
             )
+
+        filter_not_attached_to_group = kwargs.get("filterNotAttachedToGroup")
+        if filter_not_attached_to_group:
+            subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
+            filters.append(~Q(pk__in=Subquery(subquery)))
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
