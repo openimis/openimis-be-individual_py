@@ -197,6 +197,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     def resolve_individual_enrollment_summary(self, info, **kwargs):
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
+        subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
         query = Individual.objects.filter(is_deleted=False)
         custom_filters = kwargs.get("customFilters", None)
         benefit_plan_id = kwargs.get("benefitPlanId", None)
@@ -207,6 +208,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 custom_filters,
                 query,
             )
+        query = query.filter(~Q(pk__in=Subquery(subquery))).distinct()
         # Aggregation for selected individuals
         number_of_selected_individuals = query.count()
 
