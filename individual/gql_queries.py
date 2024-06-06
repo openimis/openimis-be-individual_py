@@ -136,6 +136,14 @@ class GroupGQLType(DjangoObjectType):
 class GroupHistoryGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
     user_updated = graphene.Field(UserGQLType)
+    head = graphene.Field(IndividualGQLType)
+
+    def resolve_head(self, info):
+        return Individual.objects.filter(
+            groupindividual__group__id=self.id,
+            groupindividual__role=GroupIndividual.Role.HEAD,
+            groupindividual__is_deleted=False,
+        ).first()
 
     def resolve_user_updated(self, info):
         return self.user_updated
