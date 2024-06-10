@@ -13,6 +13,7 @@ from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.utils.translation import gettext as _
+from django.db.models import Q, OuterRef, Subquery
 from individual.apps import IndividualConfig
 from individual.models import (
     Individual,
@@ -77,12 +78,14 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     @register_service_signal('individual_service.select_individuals_to_benefit_plan')
     def select_individuals_to_benefit_plan(self, custom_filters, benefit_plan_id, status, user):
         individual_query = Individual.objects.filter(is_deleted=False)
+        subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
         individual_query_with_filters = CustomFilterWizardStorage.build_custom_filters_queryset(
             "individual",
             "Individual",
             custom_filters,
             individual_query,
         )
+        individual_query_with_filters = individual_query_with_filters.filter(~Q(pk__in=Subquery(subquery))).distinct()
         if benefit_plan_id:
             individuals_assigned_to_selected_programme = individual_query_with_filters. \
                 filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id)
