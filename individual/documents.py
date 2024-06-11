@@ -57,10 +57,7 @@ if 'opensearch_reports' in apps.app_configs:
             'last_name': opensearch_fields.KeywordField(),
             'dob': opensearch_fields.DateField(),
         })
-        status = opensearch_fields.KeywordField(fields={
-            'status_key': opensearch_fields.KeywordField()}
-        )
-        role = opensearch_fields.DateField()
+        role = opensearch_fields.KeywordField()
         recipient_type = opensearch_fields.KeywordField(),
         json_ext = opensearch_fields.ObjectField()
 
