@@ -419,7 +419,6 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
     def resolve_global_schema(self, info):
         individual_schema = IndividualConfig.individual_schema
-        print(individual_schema)
         if individual_schema:
             individual_schema_dict = json.loads(individual_schema)
             return GlobalSchemaType(schema=individual_schema_dict)
