@@ -259,3 +259,7 @@ class GroupSummaryEnrollmentGQLType(graphene.ObjectType):
     number_of_groups_assigned_to_programme = graphene.String()
     number_of_groups_assigned_to_selected_programme = graphene.String()
     number_of_groups_to_upload = graphene.String()
+
+
+class GlobalSchemaType(graphene.ObjectType):
+    schema = graphene.JSONString()

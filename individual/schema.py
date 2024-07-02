@@ -1,3 +1,4 @@
+import json
 import graphene
 import graphene_django_optimizer as gql_optimizer
 import pandas as pd
@@ -19,7 +20,8 @@ from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, 
     GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
     IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType, \
-    GroupIndividualHistoryGQLType, GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
+    GroupIndividualHistoryGQLType, GlobalSchemaType, \
+    GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
 
@@ -150,6 +152,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         customFilters=graphene.List(of_type=graphene.String),
         benefitPlanId=graphene.String()
     )
+
+    global_schema = graphene.Field(GlobalSchemaType)
 
     def resolve_individual(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
@@ -412,6 +416,14 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             number_of_groups_assigned_to_selected_programme=groups_assigned_to_selected_programme,
             number_of_groups_to_upload=number_of_groups_to_upload
         )
+
+    def resolve_global_schema(self, info):
+        individual_schema = IndividualConfig.individual_schema
+        print(individual_schema)
+        if individual_schema:
+            individual_schema_dict = json.loads(individual_schema)
+            return GlobalSchemaType(schema=individual_schema_dict)
+        return GlobalSchemaType(schema={})
 
     @staticmethod
     def _check_permissions(user, perms):
