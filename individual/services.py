@@ -159,7 +159,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
     def create(self, obj_data):
         try:
             with transaction.atomic():
-                individuals_data = obj_data.pop('individuals_data')
+                individuals_data = obj_data.pop('individuals_data', None)
                 result = super().create(obj_data)
                 group_id = result.get('data', {}).get('id')
 
@@ -187,7 +187,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
     def update(self, obj_data):
         try:
             with transaction.atomic():
-                individuals_data = obj_data.pop('individuals_data')
+                individuals_data = obj_data.pop('individuals_data', None)
                 result = super().update(obj_data)
 
                 if not individuals_data:

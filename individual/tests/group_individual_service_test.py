@@ -41,10 +41,12 @@ class GroupIndividualServiceTest(TestCase):
         uuid = result.get('data', {}).get('uuid')
         update_payload = {
             "id": uuid,
-            "individual_id": self.individual2.id
+            "individual_id": self.individual2.id,
+            "group_id": self.group.id,
         }
         result = self.service.update(update_payload)
         self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
         self.assertEqual(query.first().individual_id, update_payload.get('individual_id'))
