@@ -4,7 +4,7 @@ from individual.models import Individual, GroupIndividual, Group
 from individual.services import GroupIndividualService
 from individual.tests.data import service_add_individual_payload, service_group_individual_payload
 
-from individual.tests.helpers import LogInHelper
+from core.test_helpers import LogInHelper
 
 
 class GroupIndividualServiceTest(TestCase):

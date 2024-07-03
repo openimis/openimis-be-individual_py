@@ -5,7 +5,7 @@ from django.test import TestCase
 from individual.models import Group, Individual, GroupIndividual
 from individual.services import GroupService
 from individual.tests.data import service_group_update_payload, service_add_individual_payload
-from individual.tests.helpers import LogInHelper
+from core.test_helpers import LogInHelper
 
 
 class GroupServiceTest(TestCase):
