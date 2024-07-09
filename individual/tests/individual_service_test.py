@@ -9,7 +9,7 @@ from individual.tests.data import (
     service_add_individual_payload_no_ext,
     service_update_individual_payload
 )
-from individual.tests.helpers import LogInHelper
+from core.test_helpers import LogInHelper
 
 
 class IndividualServiceTest(TestCase):
