@@ -3,6 +3,7 @@ import logging
 from django.apps import AppConfig
 
 from core.custom_filters import CustomFilterRegistryPoint
+from core.data_masking import MaskingClassRegistryPoint
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,12 @@ DEFAULT_CONFIG = {
     "enable_maker_checker_for_group_upload": True,
     "enable_maker_checker_for_individual_update": True,
     "enable_maker_checker_for_group_update": True,
+    "individual_masking_enabled": True,
+    "individual_mask_fields": [
+        'dob',
+        'last_name',
+        'json_ext.educated_level'
+    ]
 }
 
 
@@ -75,6 +82,8 @@ class IndividualConfig(AppConfig):
     enable_maker_checker_for_group_upload = None
     enable_maker_checker_for_individual_update = None
     enable_maker_checker_for_group_update = None
+    individual_mask_fields = None
+    individual_masking_enabled = None
 
     def ready(self):
         from core.models import ModuleConfiguration
@@ -84,6 +93,7 @@ class IndividualConfig(AppConfig):
         self.__validate_individual_schema(cfg)
         self.__initialize_custom_filters()
         self._set_up_workflows()
+        self.__register_masking_class()
 
     @classmethod
     def __load_config(cls, cfg):
@@ -122,6 +132,12 @@ class IndividualConfig(AppConfig):
                 GroupCustomFilterWizard,
                 GroupIndividualCustomFilterWizard
             ]
+        )
+
+    def __register_masking_class(cls):
+        from individual.data_masking import IndividualMask
+        MaskingClassRegistryPoint.register_masking_class(
+            masking_class_list=[IndividualMask()]
         )
 
     def _set_up_workflows(self):
