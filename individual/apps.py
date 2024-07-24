@@ -38,8 +38,7 @@ DEFAULT_CONFIG = {
     "enable_maker_checker_for_group_update": True,
     "individual_masking_enabled": True,
     "individual_mask_fields": [
-        'dob',
-        'last_name',
+        'json_ext.beneficiary_data_source',
         'json_ext.educated_level'
     ]
 }
