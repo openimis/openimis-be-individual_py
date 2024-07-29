@@ -64,7 +64,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         customFilters=graphene.List(of_type=graphene.String),
         benefitPlanToEnroll=graphene.String(),
         benefitPlanId=graphene.String(),
-        filterNotAttachedToGroup=graphene.Boolean()
+        filterNotAttachedToGroup=graphene.Boolean(),
     )
 
     individual_history = OrderedDjangoFilterConnectionField(
@@ -196,6 +196,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 custom_filters,
                 query,
             )
+
         return gql_optimizer.query(query, info)
 
     def resolve_individual_enrollment_summary(self, info, **kwargs):
