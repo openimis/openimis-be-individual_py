@@ -134,9 +134,9 @@ class IndividualConfig(AppConfig):
         )
 
     def __register_masking_class(cls):
-        from individual.data_masking import IndividualMask
+        from individual.data_masking import IndividualMask, IndividualHistoryMask
         MaskingClassRegistryPoint.register_masking_class(
-            masking_class_list=[IndividualMask()]
+            masking_class_list=[IndividualMask(), IndividualHistoryMask()]
         )
 
     def _set_up_workflows(self):
