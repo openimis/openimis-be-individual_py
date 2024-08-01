@@ -55,8 +55,6 @@ def download_template_file(request):
     try:
         base_fields = ['first_name', 'last_name', 'dob', 'id']
         extra_fields = get_global_schema_fields()
-        print(extra_fields)
-        print(type(extra_fields))
         all_fields = base_fields + extra_fields
         template_df = pd.DataFrame(columns=all_fields)
 
