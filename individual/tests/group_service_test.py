@@ -22,17 +22,6 @@ class GroupServiceTest(TestCase):
         cls.query_all = Group.objects.filter(is_deleted=False)
         cls.payload = {}
         cls.group_individual_query_all = GroupIndividual.objects.filter(is_deleted=False)
-        cls.individual1 = cls.__create_individual()
-        cls.individual2 = cls.__create_individual()
-        cls.payload_individuals = {
-            'individual_ids': [cls.individual1.id, cls.individual2.id]
-        }
-        cls.payload_individuals1 = {
-            'individual_ids': [cls.individual1.id, cls.individual2.id]
-        }
-        cls.payload_individuals2 = {
-            'individual_ids': [cls.individual1.id]
-        }
 
     def test_add_group(self):
         result = self.service.create(self.payload)
@@ -42,9 +31,6 @@ class GroupServiceTest(TestCase):
         self.assertEqual(query.count(), 1)
 
     def test_update_group(self):
-        '''
-            It tests update of group fields
-        '''
         result = self.service.create(self.payload)
         self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
         uuid = result.get('data', {}).get('uuid')
@@ -66,38 +52,67 @@ class GroupServiceTest(TestCase):
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 0)
 
-    # def test_create_group_individuals(self):
-    #     TODO use GroupService.create and test group creation with individual_ids param
-    #     result = self.service.create_group_individuals(self.payload_individuals)
-    #     self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
-    #     uuid = result.get('data', {}).get('uuid', None)
-    #     query = self.query_all.filter(uuid=uuid)
-    #     group = query.first()
-    #     self.assertEqual(query.count(), 1)
-    #     group_individual_query = self.group_individual_query_all.filter(group=group)
-    #     self.assertEqual(group_individual_query.count(), 2)
+    def test_create_group_individuals(self):
+        individual1 = self.__create_individual()
+        individual2 = self.__create_individual()
+        individual3 = self.__create_individual()
+        payload_individuals = {
+            'individuals_data': [
+                {'individual_id': str(individual1.id)},
+                {'individual_id': str(individual2.id)},
+            ]
+        }
+        result = self.service.create(payload_individuals)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        group = query.first()
+        self.assertEqual(query.count(), 1)
+        self.assertEqual(str(group.id), uuid)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 2)
+        individual_ids = group_individual_query.values_list('individual__id', flat=True)
+        self.assertTrue(individual1.id in individual_ids)
+        self.assertTrue(individual2.id in individual_ids)
+        self.assertFalse(individual3.id in individual_ids)
 
-    # def test_update_group_individuals(self):
-    #     TODO use GroupService.create and GroupService.update using group update with individual_ids param
-    #     result = self.service.create_group_individuals(self.payload_individuals1)
-    #     self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
-    #     uuid = result.get('data', {}).get('uuid', None)
-    #     query = self.query_all.filter(uuid=uuid)
-    #     group = query.first()
-    #     self.assertEqual(query.count(), 1)
-    #     group_individual_query = self.group_individual_query_all.filter(group=group)
-    #     self.assertEqual(group_individual_query.count(), 2)
-    #     uuid = result.get('data', {}).get('uuid')
-    #     update_payload = copy.deepcopy(self.payload_individuals2)
-    #     update_payload['id'] = uuid
-    #     update_result = self.service.update_group_individuals(update_payload)
-    #     self.assertTrue(update_result.get('success', False), result.get('detail', "No details provided"))
-    #     uuid = result.get('data', {}).get('uuid', None)
-    #     query = self.query_all.filter(uuid=uuid)
-    #     group = query.first()
-    #     self.assertEqual(query.count(), 1)
-    #     group_individual_query = self.group_individual_query_all.filter(group=group)
-    #     self.assertEqual(group_individual_query.count(), 1)
+    def test_update_group_individuals(self):
+        individual1 = self.__create_individual()
+        individual2 = self.__create_individual()
+        individual3 = self.__create_individual()
+        payload_individuals = {
+            'individuals_data': [
+                {'individual_id': str(individual1.id)},
+                {'individual_id': str(individual2.id)},
+            ]
+        }
+        result = self.service.create(payload_individuals)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        group = query.first()
+        self.assertEqual(query.count(), 1)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 2)
+        individual_ids = group_individual_query.values_list('individual__id', flat=True)
+        self.assertTrue(individual1.id in individual_ids)
+        self.assertTrue(individual2.id in individual_ids)
+        self.assertFalse(individual3.id in individual_ids)
+
+        payload_individuals_updated = {
+            'id': uuid,
+            'individuals_data': [
+                {'individual_id': str(individual1.id)},
+                {'individual_id': str(individual3.id)},
+            ]
+        }
+        result = self.service.update(payload_individuals_updated)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 2)
+        individual_ids = group_individual_query.values_list('individual__id', flat=True)
+        self.assertTrue(individual1.id in individual_ids)
+        self.assertFalse(individual2.id in individual_ids)
+        self.assertTrue(individual3.id in individual_ids)
 
     @classmethod
     def __create_individual(cls):

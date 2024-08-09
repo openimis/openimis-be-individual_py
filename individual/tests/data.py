@@ -25,7 +25,7 @@ service_update_individual_payload = {
     'dob': datetime.now(),
     'json_ext': {
         'key': 'value',
-        'key2': 'value2'
+        'key2': 'value2 updated'
     }
 }
 
