@@ -1,7 +1,11 @@
 from django.apps import apps
+from django.conf import settings
+
+is_unit_test_env = getattr(settings, 'IS_UNIT_TEST_ENV', False)
 
 # Check if the 'opensearch_reports' app is in INSTALLED_APPS
-if 'opensearch_reports' in apps.app_configs:
+# Also skip this when running unit tests to avoid connection issues
+if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
     from django_opensearch_dsl import Document, fields as opensearch_fields
     from django_opensearch_dsl.registries import registry
     from individual.models import Individual, GroupIndividual, Group

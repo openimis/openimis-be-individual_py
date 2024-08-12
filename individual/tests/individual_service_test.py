@@ -31,6 +31,9 @@ class IndividualServiceTest(TestCase):
         uuid = result.get('data', {}).get('uuid', None)
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
+        json_ext = query.first().json_ext
+        self.assertEqual(json_ext['key'], 'value')
+        self.assertEqual(json_ext['key2'], 'value2')
 
     def test_add_individual_no_ext(self):
         result = self.service.create(service_add_individual_payload_no_ext)
@@ -50,6 +53,9 @@ class IndividualServiceTest(TestCase):
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
         self.assertEqual(query.first().first_name, update_payload.get('first_name'))
+        json_ext = query.first().json_ext
+        self.assertEqual(json_ext['key'], 'value')
+        self.assertEqual(json_ext['key2'], 'value2 updated')
 
     def test_delete_individual(self):
         result = self.service.create(service_add_individual_payload)
