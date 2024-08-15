@@ -204,7 +204,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 for individual_id in assigned_individuals_ids:
                     if str(individual_id) not in individual_ids:
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
-                        service.delete({'id': group_individual.id})
+                        service.delete({'id': group_individual.id, 'user': self.user})
 
                 for data in individuals_data:
                     if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
