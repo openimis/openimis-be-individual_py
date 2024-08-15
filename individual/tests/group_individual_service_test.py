@@ -3,7 +3,7 @@ from django.test import TestCase
 from individual.models import Individual, GroupIndividual, Group
 from individual.services import GroupIndividualService
 from individual.tests.data import service_add_individual_payload, service_group_individual_payload
-
+from datetime import datetime
 from core.test_helpers import LogInHelper
 
 
@@ -75,7 +75,7 @@ class GroupIndividualServiceTest(TestCase):
 
     @classmethod
     def __create_group(cls):
-        group = Group()
+        group = Group(code=str(datetime.now()))
         group.save(username=cls.user.username)
 
         return group
