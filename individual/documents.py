@@ -85,7 +85,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
             if isinstance(related_instance, Group):
                 return related_instance.groupindividual_set.all()
             elif isinstance(related_instance, Individual):
-                return related_instance.individuals_set.all()
+                return related_instance.groupindividual_set.all()
 
         def prepare_json_ext(self, instance):
             json_ext_data = instance.json_ext
