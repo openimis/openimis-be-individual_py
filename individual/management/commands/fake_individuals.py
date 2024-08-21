@@ -21,13 +21,14 @@ json_schema = {
     "beneficiary_data_source": {"type": "string"}
 }
 
-def generate_fake_individual(group_code, recipient_info):
+def generate_fake_individual(group_code, recipient_info, individual_role):
     return {
         "first_name": fake.first_name(),
         "last_name": fake.last_name(),
         "dob": fake.date_of_birth(minimum_age=16, maximum_age=90).isoformat(),
         "group_code": group_code,
         "recipient_info": recipient_info,
+        "individual_role": individual_role,
         "email": fake.email(),
         "able_bodied": fake.boolean(),
         "national_id": fake.unique.ssn(),
@@ -45,14 +46,20 @@ class Command(BaseCommand):
     help = "Create test individual csv for uploading"
 
     def handle(self, *args, **options):
+        from individual.models import GroupIndividual
+
         individuals = []
         num_individuals = 100
         num_households = 20
 
+        # Exclude the head from role choices so that one group only has one head in randomnes
+        available_role_choices = [choice for choice in GroupIndividual.Role if choice != GroupIndividual.Role.HEAD]
+
         for group_code in range(1, num_households+1):
             for i in range(num_individuals // num_households):
                 recipient_info = 1 if i == 0 else 0
-                individual = generate_fake_individual(group_code, recipient_info)
+                individual_role = GroupIndividual.Role.HEAD if i == 0 else random.choice(available_role_choices)
+                individual = generate_fake_individual(group_code, recipient_info, individual_role)
                 individuals.append(individual)
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as tmp_file:
