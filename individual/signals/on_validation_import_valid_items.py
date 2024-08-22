@@ -67,6 +67,7 @@ class ItemsUploadTaskCompletionEvent:
 class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
     group_code_str = 'group_code'
     recipient_info_str = 'recipient_info'
+    individual_role_str = 'individual_role'
     individuals = None
     group_aggregation_column = None
     grouped_individuals = None
@@ -151,6 +152,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
                 return None
             json_ext.pop(self.group_code_str, None)
             json_ext.pop(self.recipient_info_str, None)
+            json_ext.pop(self.individual_role_str, None)
             return json_ext
 
         for individual in self.individuals:
@@ -197,8 +199,10 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             individual = Individual.objects.get(id=individual_id)
             individual_json_ext = self._get_json_ext(individual)
             recipient_info = individual_json_ext.get('recipient_info')
+            individual_role = individual_json_ext.get(self.individual_role_str)
+            individual_role = self._individual_role_parser(individual_role)
             recipient_type = self._recipient_type_parser(recipient_info)
-            return {'individual_id': individual_id, 'recipient_type': recipient_type}
+            return {'individual_id': individual_id, 'recipient_type': recipient_type, 'role': individual_role}
 
         return [build_single_individual_data(individual_id) for individual_id in ids]
 
@@ -209,6 +213,10 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         if recipient_type in [2, '2', 2.0]:
             return GroupIndividual.RecipientType.SECONDARY
         return None
+    
+    @staticmethod
+    def _individual_role_parser(individual_role):
+        return getattr(GroupIndividual.Role, individual_role.upper(), None)
 
     def _create_group_data_source(self, json_ext_data):
         data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data)

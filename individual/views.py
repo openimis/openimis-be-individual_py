@@ -44,7 +44,7 @@ def load_spreadsheet(file: InMemoryUploadedFile, **kwargs) -> pd.DataFrame:
 def get_global_schema_fields():
     schema = json.loads(IndividualConfig.individual_schema)
     schema_properties = set(schema.get('properties', {}).keys())
-    schema_properties.update(['recipient_info', 'group_code'])
+    schema_properties.update(['recipient_info', 'individual_role', 'group_code'])
     return list(schema_properties)
 
 
