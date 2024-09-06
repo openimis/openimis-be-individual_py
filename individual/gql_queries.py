@@ -1,5 +1,7 @@
 import graphene
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.db import models
 from graphene_django import DjangoObjectType
 
 from core import prefix_filterset, ExtendedConnection
@@ -7,6 +9,7 @@ from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
     IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+from location.models import LocationManager
 
 
 def _have_permissions(user, permission):
@@ -42,6 +45,40 @@ class IndividualGQLType(DjangoObjectType):
             "version": ["exact"],
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        if queryset is None:
+            queryset = Individual.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        user = info.context.user
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            user_districts_match_individual = LocationManager().build_user_location_filter_query(
+                user._u,
+                prefix='village__parent__parent',
+                loc_types=['D']
+            )
+            individual_has_group = models.Q(("groupindividual__group__isnull", False))
+            user_districts_match_individual_group = LocationManager().build_user_location_filter_query(
+                user._u,
+                prefix='groupindividual__group__village__parent__parent',
+                loc_types=['D']
+            )
+            return queryset.filter(
+                models.Q(
+                    user_districts_match_individual
+                    | (individual_has_group & user_districts_match_individual_group)
+                )
+            )
+
+        return queryset
 
 
 class IndividualHistoryGQLType(DjangoObjectType):
@@ -131,6 +168,27 @@ class GroupGQLType(DjangoObjectType):
             "version": ["exact"],
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        if queryset is None:
+            queryset = Group.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        user = info.context.user
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            return queryset.filter(
+                LocationManager().build_user_location_filter_query(
+                    user._u, prefix='village__parent__parent', loc_types=['D']
+                )
+            )
+        return queryset
 
 
 class GroupHistoryGQLType(DjangoObjectType):
