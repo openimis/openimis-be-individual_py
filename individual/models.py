@@ -163,3 +163,22 @@ class GroupIndividual(HistoryModel):
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.update_json_ext_for_group(self.group)
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        if queryset is None:
+            queryset = GroupIndividual.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            return queryset.filter(
+                LocationManager().build_user_location_filter_query(
+                    user._u, prefix='group__village__parent__parent', loc_types=['D']
+                )
+            )
+        return queryset

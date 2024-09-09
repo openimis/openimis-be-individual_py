@@ -233,7 +233,6 @@ class IndividualGQLTest(openIMISGraphQLTestCase):
 
     def test_group_history_query_row_security(self):
         def send_group_history_query(group_uuid, as_user_token):
-            date_created = str(self.group_a.date_created).replace(' ', 'T')
             query_str = f'''query {{
               groupHistory(
                 isDeleted: false,
@@ -456,7 +455,6 @@ class IndividualGQLTest(openIMISGraphQLTestCase):
 
     def test_individual_history_query_row_security(self):
         def send_individual_history_query(individual_uuid, as_user_token):
-            date_created = str(self.individual_a.date_created).replace(' ', 'T')
             query_str = f'''query {{
               individualHistory(
                 isDeleted: false,
@@ -547,3 +545,82 @@ class IndividualGQLTest(openIMISGraphQLTestCase):
             self.assertResponseNoErrors(response)
             content = json.loads(response.content)
             self.assertEqual(content['data']['individualHistory']['totalCount'], 0)
+
+
+    def test_group_individual_query_row_security(self):
+        def send_group_individual_query(group_uuid, as_user_token):
+            query_str = f'''query {{
+              groupIndividual(
+                    group_Id: "{group_uuid}"
+                ) {{
+                totalCount
+                pageInfo {{
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
+                  endCursor
+                }}
+                edges {{
+                  node {{
+                    id
+                    individual {{
+                      id
+                      uuid
+                      firstName
+                      lastName
+                      dob
+                    }}
+                    group {{
+                      id
+                      code
+                    }}
+                    role
+                    recipientType
+                    isDeleted
+                    dateCreated
+                    dateUpdated
+                    jsonExt
+                  }}
+                }}
+              }}
+            }}'''
+
+            return self.query(
+                query_str,
+                headers={"HTTP_AUTHORIZATION": f"Bearer {as_user_token}"}
+            )
+
+        # SP officer A sees only group individuals from their assigned districts
+        response = send_group_individual_query(self.group_a.uuid, self.dist_a_user_token)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        self.assertEqual(content['data']['groupIndividual']['totalCount'], 2)
+
+        group_data = content['data']['groupIndividual']
+
+        individual_uuids = list(
+            e['node']['individual']['uuid'] for e in group_data['edges']
+        )
+        self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
+
+        # SP officer A shouldn't see group individuals from other districts
+        response = send_group_individual_query(self.group_b.uuid, self.dist_a_user_token)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        self.assertEqual(content['data']['groupIndividual']['totalCount'], 0)
+
+        # SP officer B sees only group individuals from their assigned district
+        response = send_group_individual_query(self.group_b.uuid, self.dist_b_user_token)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        self.assertEqual(content['data']['groupIndividual']['totalCount'], 1)
+
+        group_data = content['data']['groupIndividual']
+        self.assertEqual(str(self.individual_b.uuid), group_data['edges'][0]['node']['individual']['uuid'])
+
+        # SP officer B shouldn't see group individuals from other districts
+        response = send_group_individual_query(self.group_a.uuid, self.dist_b_user_token)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        self.assertEqual(content['data']['groupIndividual']['totalCount'], 0)

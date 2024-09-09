@@ -204,6 +204,10 @@ class GroupIndividualGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return GroupIndividual.get_queryset(queryset, info.context.user)
+
 
 class GroupIndividualHistoryGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
