@@ -1,10 +1,11 @@
+from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 import core
 from core.models import HistoryModel
 from graphql import ResolveInfo
-from location import models as location_models
+from location.models import Location, LocationManager
 
 
 class Individual(HistoryModel):
@@ -15,7 +16,7 @@ class Individual(HistoryModel):
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
     village = models.ForeignKey(
-        location_models.Location,
+        Location,
         models.DO_NOTHING,
         blank=True,
         null=True
@@ -27,6 +28,37 @@ class Individual(HistoryModel):
     class Meta:
         managed = True
 
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        if queryset is None:
+            queryset = cls.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            user_districts_match_individual = LocationManager().build_user_location_filter_query(
+                user._u,
+                prefix='village__parent__parent',
+                loc_types=['D']
+            )
+            individual_has_group = models.Q(("groupindividual__group__isnull", False))
+            user_districts_match_individual_group = LocationManager().build_user_location_filter_query(
+                user._u,
+                prefix='groupindividual__group__village__parent__parent',
+                loc_types=['D']
+            )
+            return queryset.filter(
+                models.Q(
+                    user_districts_match_individual
+                    | (individual_has_group & user_districts_match_individual_group)
+                )
+            )
+
+        return queryset
 
 class IndividualDataSourceUpload(HistoryModel):
     class Status(models.TextChoices):
@@ -63,7 +95,7 @@ class Group(HistoryModel):
     code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
     village = models.ForeignKey(
-        location_models.Location,
+        Location,
         models.DO_NOTHING,
         blank=True,
         null=True
