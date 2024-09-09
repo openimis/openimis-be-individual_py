@@ -1,7 +1,5 @@
 import graphene
-from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.db import models
 from graphene_django import DjangoObjectType
 import graphene_django_optimizer as gql_optimizer
 
@@ -10,7 +8,6 @@ from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
     IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
-from location.models import LocationManager
 
 
 def _have_permissions(user, permission):
@@ -149,24 +146,7 @@ class GroupGQLType(DjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        if queryset is None:
-            queryset = Group.objects.all()
-
-        if not settings.ROW_SECURITY:
-            return queryset
-
-        user = info.context.user
-
-        if user.is_anonymous:
-            return queryset.filter(id=-1)
-
-        if not user.is_imis_admin:
-            return queryset.filter(
-                LocationManager().build_user_location_filter_query(
-                    user._u, prefix='village__parent__parent', loc_types=['D']
-                )
-            )
-        return queryset
+        return Group.get_queryset(queryset, info.context.user)
 
 
 class GroupHistoryGQLType(DjangoObjectType):
@@ -196,6 +176,13 @@ class GroupHistoryGQLType(DjangoObjectType):
             **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        accessible_group_query = Group.get_queryset(None, info.context.user)
+        accessible_groups = gql_optimizer.query(accessible_group_query, info)
+        accessible_uuids = set(accessible_groups.values_list('uuid', flat=True))
+        return queryset.filter(id__in=accessible_uuids)
 
 
 class GroupIndividualGQLType(DjangoObjectType):

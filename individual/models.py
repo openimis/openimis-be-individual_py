@@ -101,6 +101,25 @@ class Group(HistoryModel):
         null=True
     )
 
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        if queryset is None:
+            queryset = Group.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            return queryset.filter(
+                LocationManager().build_user_location_filter_query(
+                    user._u, prefix='village__parent__parent', loc_types=['D']
+                )
+            )
+        return queryset
+
 
 class GroupDataSource(HistoryModel):
     group = models.ForeignKey(Group, models.DO_NOTHING, blank=True, null=True)

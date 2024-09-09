@@ -231,6 +231,93 @@ class IndividualGQLTest(openIMISGraphQLTestCase):
         self.assertTrue(str(self.group_no_loc.uuid) in group_uuids)
 
 
+    def test_group_history_query_row_security(self):
+        def send_group_history_query(group_uuid, as_user_token):
+            date_created = str(self.group_a.date_created).replace(' ', 'T')
+            query_str = f'''query {{
+              groupHistory(
+                isDeleted: false,
+                id: "{group_uuid}",
+                first: 10,
+                orderBy: ["-version"]
+              ) {{
+                totalCount
+                pageInfo {{
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
+                  endCursor
+                }}
+                edges {{
+                  node {{
+                    id
+                    isDeleted
+                    dateCreated
+                    dateUpdated
+                    code
+                    jsonExt
+                    version
+                    userUpdated {{
+                      username
+                    }}
+                  }}
+                }}
+              }}
+            }}'''
+
+            return self.query(
+                query_str,
+                headers={"HTTP_AUTHORIZATION": f"Bearer {as_user_token}"}
+            )
+
+        # SP officer A sees only group from their assigned districts and
+        # groups wihtout location
+        permitted_uuids = [
+            self.group_a.uuid,
+            self.group_no_loc.uuid,
+        ]
+
+        not_permitted_uuids = [
+            self.group_b.uuid,
+        ]
+
+        for uuid in permitted_uuids:
+            response = send_group_history_query(uuid, self.dist_a_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertTrue(content['data']['groupHistory']['totalCount'] > 0)
+
+        for uuid in not_permitted_uuids:
+            response = send_group_history_query(uuid, self.dist_a_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertEqual(content['data']['groupHistory']['totalCount'], 0)
+
+
+        # SP officer B sees only group from their assigned district and
+        # groups wihtout location
+        permitted_uuids = [
+            self.group_b.uuid,
+            self.group_no_loc.uuid,
+        ]
+
+        not_permitted_uuids = [
+            self.group_a.uuid,
+        ]
+
+        for uuid in permitted_uuids:
+            response = send_group_history_query(uuid, self.dist_b_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertTrue(content['data']['groupHistory']['totalCount'] > 0)
+
+        for uuid in not_permitted_uuids:
+            response = send_group_history_query(uuid, self.dist_b_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertEqual(content['data']['groupHistory']['totalCount'], 0)
+
+
     def test_individual_query_general_permission(self):
         date_created = str(self.individual_a.date_created).replace(' ', 'T')
         query_str = f'''query {{
