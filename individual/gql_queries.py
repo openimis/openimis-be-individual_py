@@ -232,6 +232,13 @@ class GroupIndividualHistoryGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        accessible_group_query = Group.get_queryset(None, info.context.user)
+        accessible_groups = gql_optimizer.query(accessible_group_query, info)
+        accessible_uuids = set(accessible_groups.values_list('uuid', flat=True))
+        return queryset.filter(group__id__in=accessible_uuids)
+
 
 class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
     uuid = graphene.String(source='uuid')

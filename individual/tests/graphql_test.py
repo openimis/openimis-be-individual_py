@@ -624,3 +624,102 @@ class IndividualGQLTest(openIMISGraphQLTestCase):
         self.assertResponseNoErrors(response)
         content = json.loads(response.content)
         self.assertEqual(content['data']['groupIndividual']['totalCount'], 0)
+
+    def test_group_individual_history_query_row_security(self):
+        def send_group_individual_history_query(individual_uuid, as_user_token):
+            query_str = f'''query {{
+              groupIndividualHistory(
+                individual_Id: "{individual_uuid}",
+                first: 10,
+                orderBy: ["-version"]
+              ) {{
+                totalCount
+                pageInfo {{
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
+                  endCursor
+                }}
+                edges {{
+                  node {{
+                    id
+                    individual {{
+                      id
+                      uuid
+                      firstName
+                      lastName
+                      dob
+                    }}
+                    group {{
+                      id
+                      code
+                    }}
+                    isDeleted
+                    dateCreated
+                    dateUpdated
+                    role
+                    jsonExt
+                    version
+                    userUpdated {{
+                      username
+                    }}
+                  }}
+                }}
+              }}
+            }}'''
+
+            return self.query(
+                query_str,
+                headers={"HTTP_AUTHORIZATION": f"Bearer {as_user_token}"}
+            )
+
+        # SP officer A sees only individuals from their assigned districts and
+        # from groups wihtout location
+        permitted_uuids = [
+            self.individual_a.uuid,
+            self.individual_a_group_no_loc.uuid,
+            self.individual_no_loc_group_a.uuid,
+        ]
+
+        not_permitted_uuids = [
+            self.individual_b.uuid,
+        ]
+
+        for i, uuid in enumerate(permitted_uuids):
+            response = send_group_individual_history_query(uuid, self.dist_a_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertTrue(
+                content['data']['groupIndividualHistory']['totalCount'] > 0,
+                f'Expected uuid at position {i} of permitted_uuids to have groupIndividualHistory records, but got 0'
+            )
+
+        for uuid in not_permitted_uuids:
+            response = send_group_individual_history_query(uuid, self.dist_a_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertEqual(content['data']['groupIndividualHistory']['totalCount'], 0)
+
+        # SP officer B sees only group from their assigned district and
+        # from groups wihtout location
+        permitted_uuids = [
+            self.individual_b.uuid,
+            self.individual_a_group_no_loc.uuid,
+        ]
+
+        not_permitted_uuids = [
+            self.individual_a.uuid,
+            self.individual_no_loc_group_a.uuid,
+        ]
+
+        for uuid in permitted_uuids:
+            response = send_group_individual_history_query(uuid, self.dist_b_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertTrue(content['data']['groupIndividualHistory']['totalCount'] > 0)
+
+        for uuid in not_permitted_uuids:
+            response = send_group_individual_history_query(uuid, self.dist_b_user_token)
+            self.assertResponseNoErrors(response)
+            content = json.loads(response.content)
+            self.assertEqual(content['data']['groupIndividualHistory']['totalCount'], 0)
