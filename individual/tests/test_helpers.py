@@ -1,6 +1,8 @@
 import random
 import string
 import copy
+from core.models import Role, RoleRight
+from core.utils import TimeUtils
 from individual.models import Individual, Group, GroupIndividual
 from individual.tests.data import (
     service_add_individual_payload
@@ -50,3 +52,29 @@ def create_group_with_individual(username, group_override={}, individual_overrid
     group_individual = add_individual_to_group(username, individual, group)
     return individual, group, group_individual
 
+
+class BaseTestContext:
+    def __init__(self, user):
+        self.user = user
+
+
+# Create a role with permissions to CRUD individuals and groups
+def create_sp_role(created_by_user):
+    sp_role_data = {
+        'name': "SP Enrollment Officer",
+        'is_blocked': False,
+        'is_system': False,
+        'audit_user_id': created_by_user.id_for_audit,
+    }
+    role = Role.objects.create(**sp_role_data)
+
+    for right_id in [159001,159002,159003,159004,159005,180001,180002,180003,180004]:
+        RoleRight.objects.create(
+            **{
+                "role_id": role.id,
+                "right_id": right_id,
+                "audit_user_id": role.audit_user_id,
+                "validity_from": TimeUtils.now(),
+            }
+        )
+    return role

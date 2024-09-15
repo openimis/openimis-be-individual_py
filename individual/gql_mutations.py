@@ -9,6 +9,7 @@ from individual.apps import IndividualConfig
 from individual.models import Individual, Group, GroupIndividual
 from individual.services import IndividualService, GroupService, GroupIndividualService, \
     CreateGroupAndMoveIndividualService
+from location.models import Location, LocationManager
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -16,6 +17,7 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
     last_name = graphene.String(required=True, max_length=255)
     dob = graphene.Date(required=True)
     json_ext = graphene.types.json.JSONString(required=False)
+    village_id = graphene.Int(required=False)
 
 
 class UpdateIndividualInputType(CreateIndividualInputType):
@@ -82,6 +84,11 @@ class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation
         if not user.has_perms(
                 IndividualConfig.gql_individual_create_perms):
             raise ValidationError("mutation.authentication_required")
+        if 'village_id' in data:
+            village = Location.objects.get(id=data['village_id'])
+            permitted_locs = LocationManager().allowed(user._u.id, qs=True)
+            if village not in permitted_locs:
+                raise ValidationError("mutation.authentication_required")
 
     @classmethod
     def _mutate(cls, user, **data):

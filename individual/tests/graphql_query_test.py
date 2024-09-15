@@ -1,10 +1,6 @@
 import json
-from core.models import User, filter_validity, Role, RoleRight
 from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
 from core.test_helpers import create_test_interactive_user
-from core.utils import TimeUtils
-from django.conf import settings
-from django.utils import timezone
 from graphql_jwt.shortcuts import get_token
 from location.models import Location
 from rest_framework import status
@@ -12,38 +8,13 @@ from individual.tests.test_helpers import (
     create_individual,
     create_group_with_individual,
     add_individual_to_group,
+    BaseTestContext,
+    create_sp_role,
 )
 from location.test_helpers import create_test_village, assign_user_districts
 
 
-class BaseTestContext:
-    def __init__(self, user):
-        self.user = user
-
-
-# Create a role with permissions to CRUD individuals and groups
-def create_sp_role(created_by_user):
-    sp_role_data = {
-        'name': "SP Enrollment Officer",
-        'is_blocked': False,
-        'is_system': False,
-        'audit_user_id': created_by_user.id_for_audit,
-    }
-    role = Role.objects.create(**sp_role_data)
-
-    for right_id in [159001,159002,159003,159004,159005,180001,180002,180003,180004]:
-        RoleRight.objects.create(
-            **{
-                "role_id": role.id,
-                "right_id": right_id,
-                "audit_user_id": role.audit_user_id,
-                "validity_from": TimeUtils.now(),
-            }
-        )
-    return role
-
-
-class IndividualGQLTest(openIMISGraphQLTestCase):
+class IndividualGQLQueryTest(openIMISGraphQLTestCase):
 
     @classmethod
     def setUpClass(cls):
