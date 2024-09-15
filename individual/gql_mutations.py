@@ -195,6 +195,15 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
                 IndividualConfig.gql_individual_undo_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
+        villages_qs = Location.objects.filter(individual__id__in=data['ids'], type='V')
+        # must first check if villages_qs exists in case none of the individuals has location
+        if villages_qs.exists():
+            allowed_loc_ids = Location.get_queryset(None, user).values('id')
+            not_in_allowed = villages_qs.exclude(id__in=Subquery(allowed_loc_ids))
+            # all individuals' villages must be within permission for the given user
+            if not allowed_loc_ids.exists() or not_in_allowed.exists():
+                raise ValidationError("mutation.authentication_required")
+
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
