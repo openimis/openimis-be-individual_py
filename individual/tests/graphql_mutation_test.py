@@ -197,3 +197,100 @@ class IndividualGQLMutationTest(openIMISGraphQLTestCase):
         content = json.loads(response.content)
         id = content['data']['createIndividual']['internalId']
         self.assert_mutation_success(id)
+
+    def test_update_individual_general_permission(self):
+        individual = create_individual(self.admin_user.username)
+        query_str = f'''
+            mutation {{
+              updateIndividual(
+                input: {{
+                  id: "{individual.id}"
+                  firstName: "Bob"
+                  lastName: "Bar"
+                  dob: "2019-09-19"
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # Anonymous User has no permission
+        response = self.query(query_str)
+
+        content = json.loads(response.content)
+        id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # IMIS admin can do everything
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_success(id)
+
+        # Health Enrollment Officier (role=1) has no permission
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.med_enroll_officer_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+    def test_update_individual_row_security(self):
+        individual_a = create_individual(
+            self.admin_user.username,
+            payload_override={'village': self.village_a},
+        )
+        query_str = f'''
+            mutation {{
+              updateIndividual(
+                input: {{
+                  id: "{individual_a.id}"
+                  firstName: "Bob"
+                  lastName: "Foo"
+                  dob: "2020-02-19"
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # SP officer B cannot update individual for district A
+        response = self.query(query_str)
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # SP officer A can update individual for district A
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer B can update individual without any district
+        individual_no_loc = create_individual(self.admin_user.username)
+        response = self.query(
+            query_str.replace(
+                f'id: "{individual_a.id}"',
+                f'id: "{individual_no_loc.id}"'
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_success(id)

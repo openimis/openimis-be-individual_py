@@ -86,8 +86,7 @@ class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation
             raise ValidationError("mutation.authentication_required")
         if 'village_id' in data:
             village = Location.objects.get(id=data['village_id'])
-            permitted_locs = LocationManager().allowed(user._u.id, qs=True)
-            if village not in permitted_locs:
+            if village not in Location.get_queryset(None, user):
                 raise ValidationError("mutation.authentication_required")
 
     @classmethod
@@ -115,6 +114,10 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_individual_update_perms):
+            raise ValidationError("mutation.authentication_required")
+
+        village = Individual.objects.get(id=data['id']).village
+        if village and village not in Location.get_queryset(None, user):
             raise ValidationError("mutation.authentication_required")
 
     @classmethod
