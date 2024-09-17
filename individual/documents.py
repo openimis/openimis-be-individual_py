@@ -131,18 +131,3 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
                 'date_created', 'status', 'error'
             ]
             queryset_pagination = 5000
-
-        def prepare_error(self, instance):
-            error_json_data = instance.error
-            error_data = self.__flatten_dict(error_json_data)
-            return error_data
-
-        def __flatten_dict(self, d, parent_key='', sep='__'):
-            items = {}
-            for k, v in d.items():
-                new_key = f"{parent_key}{sep}{k}" if parent_key else k
-                if isinstance(v, dict):
-                    items.update(self.__flatten_dict(v, new_key, sep=sep))
-                else:
-                    items[new_key] = v
-            return items
