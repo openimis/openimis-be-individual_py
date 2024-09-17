@@ -8,13 +8,18 @@ is_unit_test_env = getattr(settings, 'IS_UNIT_TEST_ENV', False)
 if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
     from django_opensearch_dsl import Document, fields as opensearch_fields
     from django_opensearch_dsl.registries import registry
-    from individual.models import Individual, GroupIndividual, Group
+    from individual.models import (
+        Individual,
+        IndividualDataSourceUpload,
+        GroupIndividual,
+        Group
+    )
 
     @registry.register_document
     class IndividualDocument(Document):
-        first_name = opensearch_fields.KeywordField(),
-        last_name = opensearch_fields.KeywordField(),
-        dob = opensearch_fields.DateField(),
+        first_name = opensearch_fields.KeywordField()
+        last_name = opensearch_fields.KeywordField()
+        dob = opensearch_fields.DateField()
         date_created = opensearch_fields.DateField()
         json_ext = opensearch_fields.ObjectField()
 
@@ -29,7 +34,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
         class Django:
             model = Individual
             fields = [
-                'id', 'first_name', 'last_name'
+                'id'
             ]
             queryset_pagination = 5000
 
@@ -101,3 +106,27 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
                 else:
                     items[new_key] = v
             return items
+
+
+    @registry.register_document
+    class IndividualDataSourceDocument(Document):
+        source_name = opensearch_fields.KeywordField()
+        source_type = opensearch_fields.KeywordField()
+        date_created = opensearch_fields.DateField()
+        status = opensearch_fields.KeywordField()
+        error = opensearch_fields.ObjectField()
+
+        class Index:
+            name = 'individual_data_source_upload'
+            settings = {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            }
+            auto_refresh = True
+
+        class Django:
+            model = IndividualDataSourceUpload
+            fields = [
+                'id'
+            ]
+            queryset_pagination = 5000
