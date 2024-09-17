@@ -8,13 +8,18 @@ is_unit_test_env = getattr(settings, 'IS_UNIT_TEST_ENV', False)
 if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
     from django_opensearch_dsl import Document, fields as opensearch_fields
     from django_opensearch_dsl.registries import registry
-    from individual.models import Individual, GroupIndividual, Group
+    from individual.models import (
+        Individual,
+        IndividualDataSourceUpload,
+        GroupIndividual,
+        Group
+    )
 
     @registry.register_document
     class IndividualDocument(Document):
-        first_name = opensearch_fields.KeywordField(),
-        last_name = opensearch_fields.KeywordField(),
-        dob = opensearch_fields.DateField(),
+        first_name = opensearch_fields.KeywordField()
+        last_name = opensearch_fields.KeywordField()
+        dob = opensearch_fields.DateField()
         date_created = opensearch_fields.DateField()
         json_ext = opensearch_fields.ObjectField()
 
@@ -91,6 +96,46 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
             json_ext_data = instance.json_ext
             json_data = self.__flatten_dict(json_ext_data)
             return json_data
+
+        def __flatten_dict(self, d, parent_key='', sep='__'):
+            items = {}
+            for k, v in d.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, dict):
+                    items.update(self.__flatten_dict(v, new_key, sep=sep))
+                else:
+                    items[new_key] = v
+            return items
+
+
+    @registry.register_document
+    class IndividualDataSourceDocument(Document):
+        source_name = opensearch_fields.KeywordField()
+        source_type = opensearch_fields.KeywordField()
+        date_created = opensearch_fields.DateField()
+        status = opensearch_fields.KeywordField()
+        error = opensearch_fields.ObjectField()
+
+        class Index:
+            name = 'individual_data_source_upload'
+            settings = {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            }
+            auto_refresh = True
+
+        class Django:
+            model = IndividualDataSourceUpload
+            fields = [
+                'id', 'source_name', 'source_type',
+                'date_created', 'status', 'error'
+            ]
+            queryset_pagination = 5000
+
+        def prepare_error(self, instance):
+            error_json_data = instance.error
+            error_data = self.__flatten_dict(error_json_data)
+            return error_data
 
         def __flatten_dict(self, d, parent_key='', sep='__'):
             items = {}
