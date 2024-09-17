@@ -34,7 +34,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
         class Django:
             model = Individual
             fields = [
-                'id', 'first_name', 'last_name'
+                'id'
             ]
             queryset_pagination = 5000
 
@@ -127,7 +127,6 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
         class Django:
             model = IndividualDataSourceUpload
             fields = [
-                'id', 'source_name', 'source_type',
-                'date_created', 'status', 'error'
+                'id'
             ]
             queryset_pagination = 5000
