@@ -6,6 +6,7 @@ is_unit_test_env = getattr(settings, 'IS_UNIT_TEST_ENV', False)
 # Check if the 'opensearch_reports' app is in INSTALLED_APPS
 # Also skip this when running unit tests to avoid connection issues
 if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
+    from opensearch_reports.service import BaseSyncDocument
     from django_opensearch_dsl import Document, fields as opensearch_fields
     from django_opensearch_dsl.registries import registry
     from individual.models import (
@@ -16,7 +17,9 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
     )
 
     @registry.register_document
-    class IndividualDocument(Document):
+    class IndividualDocument(BaseSyncDocument):
+        DASHBOARD_NAME = 'Individual'
+
         first_name = opensearch_fields.KeywordField()
         last_name = opensearch_fields.KeywordField()
         dob = opensearch_fields.DateField()
@@ -55,7 +58,9 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
 
 
     @registry.register_document
-    class GroupIndividual(Document):
+    class GroupIndividual(BaseSyncDocument):
+        DASHBOARD_NAME = 'Group'
+
         group = opensearch_fields.ObjectField(properties={
             'id': opensearch_fields.KeywordField(),
             'code': opensearch_fields.KeywordField(),
@@ -109,7 +114,9 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
 
 
     @registry.register_document
-    class IndividualDataSourceDocument(Document):
+    class IndividualDataSourceDocument(BaseSyncDocument):
+        DASHBOARD_NAME = 'DataUpdates'
+
         source_name = opensearch_fields.KeywordField()
         source_type = opensearch_fields.KeywordField()
         date_created = opensearch_fields.DateField()
