@@ -1,32 +1,18 @@
 import json
-from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
-from core.test_helpers import create_test_interactive_user
-from graphql_jwt.shortcuts import get_token
-from location.models import Location
-from rest_framework import status
 from individual.tests.test_helpers import (
     create_individual,
     create_group_with_individual,
     add_individual_to_group,
-    BaseTestContext,
-    create_sp_role,
+    IndividualGQLTestCase,
 )
-from location.test_helpers import create_test_village, assign_user_districts
 
 
-class IndividualGQLQueryTest(openIMISGraphQLTestCase):
+class IndividualGQLQueryTest(IndividualGQLTestCase):
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        cls.admin_user = create_test_interactive_user(username="adminSeesEveryone")
-        cls.admin_token = get_token(cls.admin_user, BaseTestContext(user=cls.admin_user))
-
-        cls.village_a = create_test_village({
-            'name': 'Village A',
-            'code': 'ViA',
-        })
         cls.individual_a, cls.group_a, _ = create_group_with_individual(
             cls.admin_user.username,
             group_override={'village': cls.village_a},
@@ -50,34 +36,11 @@ class IndividualGQLQueryTest(openIMISGraphQLTestCase):
 
         cls.individual_no_loc_no_group = create_individual(cls.admin_user.username)
 
-        cls.village_b = create_test_village({
-            'name': 'Village B',
-            'code': 'ViB'
-        })
         cls.individual_b, cls.group_b, _ = create_group_with_individual(
             cls.admin_user.username,
             group_override={'village': cls.village_b},
             individual_override={'village': cls.village_b},
         )
-
-        cls.sp_role = create_sp_role(cls.admin_user)
-
-        cls.dist_a_user = create_test_interactive_user(
-            username="districtUserSeesDistrict", roles=[cls.sp_role.id])
-        district_a_code = cls.village_a.parent.parent.code
-        assign_user_districts(cls.dist_a_user, ["R1D1", district_a_code])
-        cls.dist_a_user_token = get_token(cls.dist_a_user, BaseTestContext(user=cls.dist_a_user))
-
-        cls.dist_b_user = create_test_interactive_user(
-            username="districtBUser", roles=[cls.sp_role.id])
-        district_b_code = cls.village_b.parent.parent.code
-        assign_user_districts(cls.dist_b_user, [district_b_code])
-        cls.dist_b_user_token = get_token(cls.dist_b_user, BaseTestContext(user=cls.dist_b_user))
-
-        cls.med_enroll_officer = create_test_interactive_user(
-            username="medEONoRight", roles=[1]) # 1 is the med enrollment officer role
-        cls.med_enroll_officer_token = get_token(
-            cls.med_enroll_officer, BaseTestContext(user=cls.med_enroll_officer))
 
 
     def test_group_query_general_permission(self):
