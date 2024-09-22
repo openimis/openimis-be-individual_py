@@ -58,6 +58,7 @@ class CreateGroupIndividualInputTypeInputObjectType(graphene.InputObjectType):
 class CreateGroupInputType(OpenIMISMutation.Input):
     code = graphene.String(required=True)
     individuals_data = graphene.List(CreateGroupIndividualInputTypeInputObjectType, required=False)
+    village_id = graphene.Int(required=False)
 
 
 class UpdateGroupInputType(CreateGroupInputType):
@@ -234,6 +235,10 @@ class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
             raise ValidationError("mutation.authentication_required")
+        if 'village_id' in data:
+            village = Location.objects.get(id=data['village_id'])
+            if village not in Location.get_queryset(None, user):
+                raise ValidationError("mutation.authentication_required")
 
     @classmethod
     def _mutate(cls, user, **data):

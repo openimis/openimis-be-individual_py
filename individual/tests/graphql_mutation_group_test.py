@@ -49,3 +49,61 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['createGroup']['internalId']
         self.assert_mutation_error(id, 'mutation.authentication_required')
+
+    def test_create_group_row_security(self):
+        query_str = f'''
+            mutation {{
+              createGroup(
+                input: {{
+                  code: "GBVA"
+                  individualsData: []
+                  villageId: {self.village_a.id}
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # SP officer B cannot create group for district A
+        response = self.query(query_str)
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        id = content['data']['createGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # SP officer A can create group for district A
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['createGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer B can create group for district B
+        response = self.query(
+            query_str.replace(
+                f'villageId: {self.village_a.id}',
+                f'villageId: {self.village_b.id}'
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['createGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer B can create group without any district
+        response = self.query(
+            query_str.replace(f'villageId: {self.village_a.id}', ' '),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['createGroup']['internalId']
+        self.assert_mutation_success(id)
+
