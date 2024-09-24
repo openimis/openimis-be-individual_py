@@ -93,9 +93,11 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
 
         def get_instances_from_related(self, related_instance):
             if isinstance(related_instance, Group):
-                return related_instance.groupindividual_set.all()
+                return GroupIndividual.objects.filter(
+                    group=related_instance
+                )
             elif isinstance(related_instance, Individual):
-                return related_instance.groupindividual_set.all()
+                return GroupIndividual.objects.filter(individual=related_instance)
 
         def prepare_json_ext(self, instance):
             json_ext_data = instance.json_ext
