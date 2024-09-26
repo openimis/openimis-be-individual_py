@@ -58,7 +58,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
 
 
     @registry.register_document
-    class GroupIndividual(BaseSyncDocument):
+    class GroupIndividualDocument(BaseSyncDocument):
         DASHBOARD_NAME = 'Group'
 
         group = opensearch_fields.ObjectField(properties={
