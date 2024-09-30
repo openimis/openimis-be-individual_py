@@ -1,6 +1,7 @@
 import json
 from individual.tests.test_helpers import (
     create_group,
+    create_individual,
     IndividualGQLTestCase,
 )
 
@@ -323,4 +324,140 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['deleteGroup']['internalId']
         self.assert_mutation_success(id)
+
+    def test_add_individual_to_group_general_permission(self):
+        group = create_group(self.admin_user.username)
+        individual = create_individual(self.admin_user.username)
+        query_str = f'''
+            mutation {{
+              addIndividualToGroup(
+                input: {{
+                  groupId: "{group.id}"
+                  individualId: "{individual.id}"
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # Anonymous User has no permission
+        response = self.query(query_str)
+
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # Health Enrollment Officier (role=1) has no permission
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.med_enroll_officer_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # IMIS admin can do everything
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_success(id)
+
+    def test_add_individual_to_group_row_security(self):
+        group_a = create_group(
+            self.admin_user.username,
+            payload_override={'village': self.village_a},
+        )
+        group_b = create_group(
+            self.admin_user.username,
+            payload_override={'village': self.village_b},
+        )
+        group_no_loc = create_group(self.admin_user.username)
+
+        individual_a = create_individual(
+            self.admin_user.username,
+            payload_override={'village': self.village_a},
+        )
+        individual_b = create_individual(
+            self.admin_user.username,
+            payload_override={'village': self.village_b},
+        )
+        individual_no_loc = create_individual(self.admin_user.username)
+
+        query_str = f'''
+            mutation {{
+              addIndividualToGroup(
+                input: {{
+                  groupId: "{group_a.id}"
+                  individualId: "{individual_a.id}"
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # SP officer B cannot add individual to group for district A
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # SP officer B can add individual to group for district B
+        query_str_b = query_str.replace(
+            str(individual_a.id), str(individual_b.id)
+        ).replace(
+            str(group_a.id), str(group_b.id)
+        )
+        response = self.query(
+            query_str_b,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer A can add individual to group for district A
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer A can add individual without location to group in district A
+        response = self.query(
+            query_str.replace(str(individual_a.id), str(individual_no_loc.id)),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer A can add individual from district A to group without location
+        response = self.query(
+            query_str.replace(str(group_a.id), str(group_no_loc.id)),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # Adding a individual to a group with different locations is not allowed
+        response = self.query(
+            query_str.replace(str(group_a.id), str(group_b.id)),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.individual_group_village_mismatch')
 
