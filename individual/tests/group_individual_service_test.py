@@ -35,6 +35,20 @@ class GroupIndividualServiceTest(TestCase):
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
 
+    def test_add_group_individual_validations(self):
+        result = self.service.create({
+            "individual_id": self.individual1.id,
+        })
+        self.assertFalse(result.get('success'))
+        self.assertEqual(result.get('detail'), "['individual.validation.check_if_group_id']")
+
+        result = self.service.create({
+            "group_id": self.group.id,
+        })
+        self.assertFalse(result.get('success'))
+        self.assertTrue("{'individual': ['This field cannot be null.']" in result.get('detail'))
+        # Why is individual_id precence not validated like group_id?
+
     def test_update_group_individual(self):
         result = self.service.create(self.payload)
         self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
