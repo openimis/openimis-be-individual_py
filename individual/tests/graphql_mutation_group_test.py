@@ -4,8 +4,10 @@ from individual.tests.test_helpers import (
     create_individual,
     create_group_with_individual,
     IndividualGQLTestCase,
-    complete_group_tasks,
 )
+from individual.models import GroupIndividual
+from unittest.mock import patch
+from individual.apps import IndividualConfig
 
 
 class GroupGQLMutationTest(IndividualGQLTestCase):
@@ -463,6 +465,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         id = content['data']['addIndividualToGroup']['internalId']
         self.assert_mutation_error(id, 'mutation.individual_group_village_mismatch')
 
+    @patch.object(IndividualConfig, 'check_group_individual_update', new=False)
     def test_edit_individual_in_group_general_permission(self):
         individual, group, group_individual = create_group_with_individual(self.admin_user.username)
         query_str = f'''
@@ -472,7 +475,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
                   id: "{group_individual.id}"
                   groupId: "{group.id}"
                   individualId: "{individual.id}"
-                  role: HEAD
+                  role: DAUGHTER
                 }}
               ) {{
                 clientMutationId
@@ -506,6 +509,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         id = content['data']['editIndividualInGroup']['internalId']
         self.assert_mutation_success(id)
 
+    @patch.object(IndividualConfig, 'check_group_individual_update', new=False)
     def test_edit_individual_in_group_row_security(self):
         individual, group, group_individual = create_group_with_individual(self.admin_user.username)
         individual_a, group_a, group_individual_a = create_group_with_individual(
@@ -525,7 +529,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
                   id: "{group_individual_a.id}"
                   groupId: "{group_a.id}"
                   individualId: "{individual_a.id}"
-                  role: HEAD
+                  role: DAUGHTER
                 }}
               ) {{
                 clientMutationId
@@ -558,9 +562,9 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['editIndividualInGroup']['internalId']
         self.assert_mutation_success(id)
-
-        complete_group_tasks(group_a.id)
-        complete_group_tasks(group_b.id)
+        expected_gi = GroupIndividual.objects.filter(group_id=group_b.id, individual_id=individual_b.id)
+        self.assertTrue(expected_gi.exists())
+        self.assertEqual(expected_gi.first().id, group_individual_b.id)
 
         # SP officer A can edit individual in group for district A
         response = self.query(
@@ -570,8 +574,9 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['editIndividualInGroup']['internalId']
         self.assert_mutation_success(id)
-
-        complete_group_tasks(group_a.id)
+        expected_gi = GroupIndividual.objects.filter(group_id=group_a.id, individual_id=individual_a.id)
+        self.assertTrue(expected_gi.exists())
+        self.assertEqual(expected_gi.first().id, group_individual_a.id)
 
         # SP officer A can move individual without location to group in district A
         query_str_no_loc = query_str.replace(
@@ -586,8 +591,9 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['editIndividualInGroup']['internalId']
         self.assert_mutation_success(id)
-
-        complete_group_tasks(group.id)
+        expected_gi = GroupIndividual.objects.filter(group_id=group_a.id, individual_id=individual.id)
+        self.assertTrue(expected_gi.exists())
+        self.assertNotEqual(expected_gi.first().id, group_individual.id)
 
         # SP officer A can move individual from district A to group without location
         response = self.query(
@@ -597,6 +603,9 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['editIndividualInGroup']['internalId']
         self.assert_mutation_success(id)
+        expected_gi = GroupIndividual.objects.filter(group_id=group.id, individual_id=individual_a.id)
+        self.assertTrue(expected_gi.exists())
+        self.assertNotEqual(expected_gi.first().id, group_individual_a.id)
 
         # Moving a individual to a group with different locations is not allowed
         response = self.query(
