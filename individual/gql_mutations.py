@@ -1,7 +1,7 @@
 import graphene
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Subquery
+from django.db.models import Subquery, Q
 
 from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationMixin, BaseMutation, \
     BaseHistoryModelUpdateMutationMixin, BaseHistoryModelCreateMutationMixin
@@ -407,6 +407,19 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
         if not user.has_perms(
                 IndividualConfig.gql_group_delete_perms):
             raise ValidationError("mutation.authentication_required")
+        villages_qs = Location.objects.filter(
+            type='V'
+        ).filter(
+            Q(group__groupindividual__id__in=data['ids']) |
+            Q(individual__groupindividual__id__in=data['ids'])
+        )
+        # must first check if villages_qs exists in case none of the groups or individuals has location
+        if villages_qs.exists():
+            allowed_loc_ids = Location.get_queryset(None, user).values('id')
+            not_in_allowed = villages_qs.exclude(id__in=Subquery(allowed_loc_ids))
+            # all groups' & individuals' villages must be within permission for the given user
+            if not allowed_loc_ids.exists() or not_in_allowed.exists():
+                raise ValidationError("mutation.authentication_required")
 
     @classmethod
     def _mutate(cls, user, **data):

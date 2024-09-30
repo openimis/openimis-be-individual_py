@@ -606,3 +606,124 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         id = content['data']['editIndividualInGroup']['internalId']
         self.assert_mutation_error(id, 'mutation.individual_group_village_mismatch')
+
+    def test_remove_individuals_from_group_general_permission(self):
+        _, _, group_individual = create_group_with_individual(self.admin_user.username)
+        query_str = f'''
+            mutation {{
+              removeIndividualFromGroup(
+                input: {{
+                  ids: ["{group_individual.id}"]
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # Anonymous User has no permission
+        response = self.query(query_str)
+
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # Health Enrollment Officier (role=1) has no permission
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.med_enroll_officer_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # IMIS admin can do everything
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_success(id)
+
+    def test_remove_individuals_from_group_row_security(self):
+        individual, group, group_individual = create_group_with_individual(self.admin_user.username)
+        individual_a, group_a, group_individual_a = create_group_with_individual(
+            self.admin_user.username,
+            group_override={'village': self.village_a},
+            individual_override={'village': self.village_a},
+        )
+        individual_b, group_b, group_individual_b = create_group_with_individual(
+            self.admin_user.username,
+            group_override={'village': self.village_b},
+            individual_override={'village': self.village_b},
+        )
+        query_str = f'''
+            mutation {{
+              removeIndividualFromGroup(
+                input: {{
+                  ids: ["{group_individual_a.id}"]
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+        # SP officer B cannot delete group for district A
+        response = self.query(query_str)
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # SP officer A can delete group for district A
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer B can delete group without any district
+        group_no_loc = create_group(self.admin_user.username)
+        response = self.query(
+            query_str.replace(
+                str(group_individual_a.id),
+                str(group_individual.id)
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_success(id)
+
+        # SP officer B cannot delete a mix of groups from district A and district B
+        response = self.query(
+            query_str.replace(
+                f'["{group_individual_a.id}"]',
+                f'["{group_individual_a.id}", "{group_individual_b.id}"]'
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_error(id, 'mutation.authentication_required')
+
+        # SP officer B can delete group from district B
+        group_no_loc = create_group(self.admin_user.username)
+        response = self.query(
+            query_str.replace(
+                str(group_individual_a.id),
+                str(group_individual_b.id)
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_success(id)
