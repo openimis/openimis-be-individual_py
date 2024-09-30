@@ -13,6 +13,9 @@ from individual.tests.data import (
 )
 from location.test_helpers import create_test_village, assign_user_districts
 from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
+from django.db.models import Q
+from django.contrib.contenttypes.models import ContentType
+from tasks_management.models import Task
 
 
 def generate_random_string(length=6):
@@ -84,6 +87,25 @@ def create_sp_role(created_by_user):
             }
         )
     return role
+
+def complete_group_tasks(group_id):
+    content_type_groupindividual = ContentType.objects.get_for_model(GroupIndividual)
+    content_type_group = ContentType.objects.get_for_model(Group)
+    groupindividual_ids = list(GroupIndividual.objects.filter(group_id=group_id).values_list('id', flat=True))
+
+    # Update group individual tasks to COMPLETED
+    Task.objects.filter(
+        Q(status=Task.Status.RECEIVED) | Q(status=Task.Status.ACCEPTED),
+        entity_type=content_type_groupindividual,
+        entity_id__in=groupindividual_ids,
+    ).update(status=Task.Status.COMPLETED)
+
+    # Update group tasks to COMPLETED
+    Task.objects.filter(
+        Q(status=Task.Status.RECEIVED) | Q(status=Task.Status.ACCEPTED),
+        entity_type=content_type_group,
+        entity_id=group_id,
+    ).update(status=Task.Status.COMPLETED)
 
 class IndividualGQLTestCase(openIMISGraphQLTestCase):
 

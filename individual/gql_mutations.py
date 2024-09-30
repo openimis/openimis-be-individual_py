@@ -370,6 +370,13 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
         if not user.has_perms(
                 IndividualConfig.gql_group_update_perms):
             raise ValidationError("mutation.authentication_required")
+        group_village = Group.objects.get(id=data['group_id']).village
+        individual_village = Individual.objects.get(id=data['individual_id']).village
+        if group_village and individual_village:
+            if group_village.id != individual_village.id:
+                raise ValidationError("mutation.individual_group_village_mismatch")
+            elif group_village not in Location.get_queryset(None, user):
+                raise ValidationError("mutation.authentication_required")
 
     @classmethod
     def _mutate(cls, user, **data):
