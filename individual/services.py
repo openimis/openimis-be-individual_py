@@ -619,7 +619,6 @@ class IndividualImportService:
             for future in concurrent.futures.as_completed(futures):
                 validated_dataframe.extend(future.result())
 
-        print(validated_dataframe)
         self.save_validation_error_in_data_source_bulk(validated_dataframe)
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
