@@ -582,7 +582,7 @@ class IndividualImportService:
                 # Uniqueness Check
                 if "uniqueness" in field_properties and field in row:
                     field_validation['validations'][f'{field}_uniqueness'] = not unique_validations[field].loc[row.name]
-            
+
             validated_dataframe.append(field_validation)
         
         return validated_dataframe
@@ -619,6 +619,8 @@ class IndividualImportService:
             for future in concurrent.futures.as_completed(futures):
                 validated_dataframe.extend(future.result())
 
+        print(validated_dataframe)
+        self.save_validation_error_in_data_source_bulk(validated_dataframe)
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
 
@@ -709,18 +711,29 @@ class IndividualImportService:
             upload.save(username=self.user.login_name)
             return upload
 
-    def __save_validation_error_in_data_source(self, row, field_validation):
-        error_fields = []
-        for key, value in field_validation['validations'].items():
-            if not value['success']:
-                error_fields.append({
-                    "field_name": value['field_name'],
-                    "note": value['note']
-                })
-        individual_data_source = IndividualDataSource.objects.get(id=row['id'])
-        validation_column = {'validation_errors': error_fields}
-        individual_data_source.validations = validation_column
-        individual_data_source.save(username=self.user.username)
+    def save_validation_error_in_data_source_bulk(self, validated_dataframe):
+        data_sources_to_update = []
+
+        for field_validation in validated_dataframe:
+            row = field_validation['row']
+            error_fields = []
+
+            for key, value in field_validation['validations'].items():
+                if not value.get('success', False):
+                    error_fields.append({
+                        "field_name": value.get('field_name'),
+                        "note": value.get('note')
+                    })
+
+            data_sources_to_update.append(
+                IndividualDataSource(
+                    id=row['id'],
+                    validations={'validation_errors': error_fields}
+                )
+            )
+
+        if data_sources_to_update:
+            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'])
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
