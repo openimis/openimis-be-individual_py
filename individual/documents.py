@@ -6,15 +6,23 @@ is_unit_test_env = getattr(settings, 'IS_UNIT_TEST_ENV', False)
 # Check if the 'opensearch_reports' app is in INSTALLED_APPS
 # Also skip this when running unit tests to avoid connection issues
 if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
+    from opensearch_reports.service import BaseSyncDocument
     from django_opensearch_dsl import Document, fields as opensearch_fields
     from django_opensearch_dsl.registries import registry
-    from individual.models import Individual, GroupIndividual, Group
+    from individual.models import (
+        Individual,
+        IndividualDataSourceUpload,
+        GroupIndividual,
+        Group
+    )
 
     @registry.register_document
-    class IndividualDocument(Document):
-        first_name = opensearch_fields.KeywordField(),
-        last_name = opensearch_fields.KeywordField(),
-        dob = opensearch_fields.DateField(),
+    class IndividualDocument(BaseSyncDocument):
+        DASHBOARD_NAME = 'Individual'
+
+        first_name = opensearch_fields.KeywordField()
+        last_name = opensearch_fields.KeywordField()
+        dob = opensearch_fields.DateField()
         date_created = opensearch_fields.DateField()
         json_ext = opensearch_fields.ObjectField()
 
@@ -29,7 +37,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
         class Django:
             model = Individual
             fields = [
-                'id', 'first_name', 'last_name'
+                'id'
             ]
             queryset_pagination = 5000
 
@@ -50,7 +58,9 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
 
 
     @registry.register_document
-    class GroupIndividual(Document):
+    class GroupIndividualDocument(BaseSyncDocument):
+        DASHBOARD_NAME = 'Group'
+
         group = opensearch_fields.ObjectField(properties={
             'id': opensearch_fields.KeywordField(),
             'code': opensearch_fields.KeywordField(),
@@ -83,9 +93,11 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
 
         def get_instances_from_related(self, related_instance):
             if isinstance(related_instance, Group):
-                return related_instance.groupindividual_set.all()
+                return GroupIndividual.objects.filter(
+                    group=related_instance
+                )
             elif isinstance(related_instance, Individual):
-                return related_instance.groupindividual_set.all()
+                return GroupIndividual.objects.filter(individual=related_instance)
 
         def prepare_json_ext(self, instance):
             json_ext_data = instance.json_ext
@@ -101,3 +113,29 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
                 else:
                     items[new_key] = v
             return items
+
+
+    @registry.register_document
+    class IndividualDataSourceDocument(BaseSyncDocument):
+        DASHBOARD_NAME = 'DataUpdates'
+
+        source_name = opensearch_fields.KeywordField()
+        source_type = opensearch_fields.KeywordField()
+        date_created = opensearch_fields.DateField()
+        status = opensearch_fields.KeywordField()
+        error = opensearch_fields.ObjectField()
+
+        class Index:
+            name = 'individual_data_source_upload'
+            settings = {
+                'number_of_shards': 1,
+                'number_of_replicas': 0
+            }
+            auto_refresh = True
+
+        class Django:
+            model = IndividualDataSourceUpload
+            fields = [
+                'id'
+            ]
+            queryset_pagination = 5000
