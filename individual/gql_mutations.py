@@ -152,7 +152,7 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
                 IndividualConfig.gql_individual_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
-        villages_qs = Location.objects.filter(individual__id__in=data['ids'], type='V')
+        villages_qs = Location.objects.filter(individual_id__in=data['ids'], type='V')
         # must first check if villages_qs exists in case none of the individuals has location
         if villages_qs.exists():
             allowed_loc_ids = Location.get_queryset(None, user).values('id')
@@ -196,7 +196,7 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
                 IndividualConfig.gql_individual_undo_delete_perms):
             raise ValidationError("mutation.authentication_required")
 
-        villages_qs = Location.objects.filter(individual__id__in=data['ids'], type='V')
+        villages_qs = Location.objects.filter(individual_id__in=data['ids'], type='V')
         # must first check if villages_qs exists in case none of the individuals has location
         if villages_qs.exists():
             allowed_loc_ids = Location.get_queryset(None, user).values('id')
