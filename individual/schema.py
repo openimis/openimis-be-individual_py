@@ -156,6 +156,9 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     global_schema = graphene.Field(GlobalSchemaType)
 
     def resolve_individual(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+
         filters = append_validity_filter(**kwargs)
 
         client_mutation_id = kwargs.get("client_mutation_id")
@@ -185,9 +188,9 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
             filters.append(~Q(pk__in=Subquery(subquery)))
 
-        Query._check_permissions(info.context.user,
-                                 IndividualConfig.gql_individual_search_perms)
-        query = Individual.objects.filter(*filters)
+        query = IndividualGQLType.get_queryset(None, info)
+        query = query.filter(*filters)
+
         custom_filters = kwargs.get("customFilters", None)
         if custom_filters:
             query = CustomFilterWizardStorage.build_custom_filters_queryset(
@@ -312,7 +315,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 ~Q(groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll)
             )
 
-        query = Group.objects.filter(*filters).distinct()
+        query = GroupGQLType.get_queryset(None, info)
+        query = query.filter(*filters).distinct()
 
         custom_filters = kwargs.get("customFilters", None)
         if custom_filters:
