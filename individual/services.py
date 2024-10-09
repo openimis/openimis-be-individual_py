@@ -333,7 +333,7 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
 
-                if str(group_individual.group.id) == incoming_group_id:
+                if str(group_individual.group.id) == str(incoming_group_id):
                     return super().update(obj_data)
 
                 obj_data.pop('id', None)
