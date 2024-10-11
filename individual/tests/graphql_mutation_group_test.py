@@ -736,13 +736,13 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_error(internal_id, _('unauthorized.location'))
 
         # SP officer B can delete group from district B
-        # group_no_loc = create_group(self.admin_user.username)
-        # response = self.query(
-        #     query_str.replace(
-        #         str(group_individual_a.id),
-        #         str(group_individual_b.id)
-        #     ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
-        # )
-        # content = json.loads(response.content)
-        # internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        # self.assert_mutation_success(internal_id)
+        group_no_loc = create_group(self.admin_user.username)
+        response = self.query(
+            query_str.replace(
+                str(group_individual_a.id),
+                str(group_individual_b.id)
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        internal_id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_success(internal_id)
