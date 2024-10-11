@@ -187,5 +187,9 @@ class IndividualGQLTestCase(openIMISGraphQLTestCase):
     def assert_mutation_success(self, uuid):
         mutation_result = self.get_mutation_result(uuid, self.admin_token, internal=True)
         mutation_status = mutation_result['data']['mutationLogs']['edges'][0]['node']['status']
-        self.assertEqual(mutation_status, MutationLog.SUCCESS)
+        self.assertEqual(
+            mutation_status,
+            MutationLog.SUCCESS,
+            mutation_result['data']['mutationLogs']['edges'][0]['node']['error']
+        )
 

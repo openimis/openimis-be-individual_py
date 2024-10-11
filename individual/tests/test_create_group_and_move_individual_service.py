@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.test import TestCase
 
 from individual.models import Individual, GroupIndividual, Group
@@ -28,10 +29,11 @@ class CreateGroupAndMoveIndividualServiceTest(TestCase):
         }
 
     def test_create_group_and_move_individual(self):
+        test_start_time = datetime.now()
         result = self.service.create(self.payload)
         self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
         uuid = result.get('data', {}).get('uuid', None)
-        self.assertEqual(self.query_all.count(), 2)
+        self.assertEqual(self.query_all.filter(date_created__gte=test_start_time).count(), 1)
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
         group_individual_id = self.payload.get("group_individual_id")
