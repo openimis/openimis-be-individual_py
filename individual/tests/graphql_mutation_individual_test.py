@@ -33,7 +33,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['createIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('mutation.authentication_required'))
 
         # IMIS admin can do everything
         response = self.query(
@@ -74,7 +74,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['createIndividual']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -137,7 +137,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['updateIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('mutation.authentication_required'))
 
         # IMIS admin can do everything
         response = self.query(
@@ -182,7 +182,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['updateIndividual']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -236,7 +236,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['deleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -275,7 +275,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['undoDeleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -326,7 +326,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['deleteIndividual']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -399,7 +399,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['undoDeleteIndividual']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}

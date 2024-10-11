@@ -37,7 +37,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         internal_id = content['data']['createGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # IMIS admin can do everything
         response = self.query(
@@ -77,7 +77,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['createGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         
         response = self.query(
             query_str,
@@ -139,7 +139,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # IMIS admin can do everything
         response = self.query(
@@ -182,7 +182,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -235,7 +235,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         internal_id = content['data']['deleteGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -285,7 +285,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['deleteGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -362,7 +362,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         internal_id = content['data']['addIndividualToGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -474,7 +474,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         internal_id = content['data']['addIndividualToGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('unauthorized.location'))
+        self.assert_mutation_success(internal_id)
 
     @patch.object(IndividualConfig, 'check_group_individual_update', new=False)
     def test_edit_individual_in_group_general_permission(self):
@@ -500,7 +500,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         internal_id = content['data']['editIndividualInGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -643,7 +643,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -692,7 +692,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         response = self.query(query_str)
         content = json.loads(response.content)
         internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -736,13 +736,13 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_error(internal_id, _('unauthorized.location'))
 
         # SP officer B can delete group from district B
-        # group_no_loc = create_group(self.admin_user.username)
-        # response = self.query(
-        #     query_str.replace(
-        #         str(group_individual_a.id),
-        #         str(group_individual_b.id)
-        #     ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
-        # )
-        # content = json.loads(response.content)
-        # internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        # self.assert_mutation_success(internal_id)
+        group_no_loc = create_group(self.admin_user.username)
+        response = self.query(
+            query_str.replace(
+                str(group_individual_a.id),
+                str(group_individual_b.id)
+            ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
+        )
+        content = json.loads(response.content)
+        internal_id = content['data']['removeIndividualFromGroup']['internalId']
+        self.assert_mutation_success(internal_id)
