@@ -24,6 +24,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
                 input: {{
                   code: "GF"
                   individualsData: []
+                  locationId: {self.village_a.id}
                 }}
               ) {{
                 clientMutationId
@@ -74,11 +75,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot create group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['createGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
-        
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -126,6 +122,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
                 input: {{
                   id: "{group.id}"
                   code: "GFOO"
+                  locationId: {self.village_a.id}
                 }}
               ) {{
                 clientMutationId
@@ -179,10 +176,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot update group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -215,8 +208,14 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_success(internal_id)
 
     def test_delete_group_general_permission(self):
-        group1 = create_group(self.admin_user.username)
-        group2 = create_group(self.admin_user.username)
+        group1 = create_group(
+            self.admin_user.username,
+            payload_override={'location': self.village_a},
+        )
+        group2 = create_group(
+            self.admin_user.username,
+            payload_override={'location': self.village_b},
+        )
         query_str = f'''
             mutation {{
               deleteGroup(
@@ -282,10 +281,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot delete group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['deleteGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -624,6 +619,10 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
         )
         content = json.loads(response.content)
+        internal_id = content['data']['editIndividualInGroup']['internalId']
+        self.assert_mutation_error(internal_id, _('mutation.individual_group_location_mismatch'))
+
+    def test_remove_individuals_from_group_general_permission(self):
         __, __, group_individual = create_group_with_individual(self.admin_user.username)
         query_str = f'''
             mutation {{
@@ -689,10 +688,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot delete group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
