@@ -41,5 +41,5 @@ msgstr "Individual %(id) is not deleted."
 msgid "individual.validation.check_if_group_id"
 msgstr "Missing group_id."
 
-msgid "mutation.individual_group_village_mismatch"
-msgstr "To add an individual to a group their villages must be the same."
+msgid "mutation.individual_group_location_mismatch"
+msgstr "To add an individual to a group their locations must be the same."

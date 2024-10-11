@@ -5,6 +5,7 @@ from individual.services import GroupIndividualService
 from individual.tests.data import service_add_individual_payload, service_group_individual_payload
 from datetime import datetime
 from core.test_helpers import LogInHelper
+from django.utils.translation import gettext as _
 
 
 class GroupIndividualServiceTest(TestCase):
@@ -40,13 +41,13 @@ class GroupIndividualServiceTest(TestCase):
             "individual_id": self.individual1.id,
         })
         self.assertFalse(result.get('success'))
-        self.assertEqual(result.get('detail'), "['individual.validation.check_if_group_id']")
+        self.assertEqual(result.get('detail'), f"['{_('individual.validation.check_if_group_id')}']")
 
         result = self.service.create({
             "group_id": self.group.id,
         })
         self.assertFalse(result.get('success'))
-        self.assertTrue("{'individual': ['This field cannot be null.']" in result.get('detail'))
+        self.assertTrue("'individual': ['This field cannot be null.']" in result.get('detail'), result.get('detail'))
         # Why is individual_id precence not validated like group_id?
 
     def test_update_group_individual(self):

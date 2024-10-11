@@ -66,7 +66,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
                 self.validation_class.validate_undo_delete(obj_data)
                 obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
                 obj_.is_deleted = False
-                obj_.save(username=self.user.username)
+                obj_.save(user=self.user.user)
                 return {
                     "success": True,
                     "message": "Ok",
@@ -204,7 +204,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 for individual_id in assigned_individuals_ids:
                     if str(individual_id) not in individual_ids:
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
-                        service.delete({'id': group_individual.id, 'user': self.user})
+                        service.delete({'id': group_individual.id})
 
                 for data in individuals_data:
                     if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
@@ -231,7 +231,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             for group_individual in group_individuals:
                 # cant use .delete() on query since it will completely remove instances from db instead of marking
                 # them as isDeleted
-                group_individual.delete(username=self.user.username)
+                group_individual.delete(user=self.user)
             return super().delete(obj_data)
 
     @transaction.atomic
@@ -244,7 +244,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             for individual in Individual.objects.filter(id__in=individual_ids)
         }
         group.json_ext["members"] = group_members
-        group.save(username=self.user.username)
+        group.save(user=self.user.user)
         return group
 
     @register_service_signal('group_service.select_groups_to_benefit_plan')
@@ -290,6 +290,9 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
                 self.validation_class.validate_create_group_and_move_individual(self.user, **obj_data)
                 group_individual_id = obj_data.pop('group_individual_id')
                 group = GroupService(self.user).create(obj_data)
+                # return group if it has errors
+                if not group['data']:
+                    return group
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
                 group_id = group['data']['id']
                 service = GroupIndividualService(self.user)
@@ -454,7 +457,7 @@ class GroupAndGroupIndividualAlignmentService:
 
         if changes_to_save:
             group.json_ext.update(changes_to_save)
-            group.save(update_fields=['json_ext'], username=self.user.username)
+            group.save(update_fields=['json_ext'], user=self.user)
 
     def handle_assure_primary_recipient_in_group(self, group, recipient_type):
         """
@@ -480,7 +483,7 @@ class GroupAndGroupIndividualAlignmentService:
         new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
         if not head_exists:
             new_primary.role = GroupIndividual.Role.HEAD
-        new_primary.save(username=self.user.username)
+        new_primary.save(user=self.user.user)
 
     def _change_head(self, group_individual_id, group_id):
         heads_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
@@ -490,7 +493,7 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         old_head.role = None
-        old_head.save(username=self.user.username)
+        old_head.save(user=self.user.user)
 
     def _change_primary(self, group_individual_id, group_id):
         primaries_queryset = GroupIndividual.objects.filter(
@@ -502,7 +505,7 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         old_primary.recipient_type = None
-        old_primary.save(username=self.user.username)
+        old_primary.save(user=self.user.user)
 
 
 class IndividualImportService:
@@ -547,7 +550,7 @@ class IndividualImportService:
             workflow=workflow.name,
             json_ext={"group_aggregation_column": group_aggregation_column}
         )
-        record.save(username=self.user.username)
+        record.save(user=self.user.user)
 
     def validate_import_individuals(self, upload_id: uuid, individual_sources):
         dataframe = self._load_dataframe(individual_sources)
@@ -675,7 +678,7 @@ class IndividualImportService:
         individual_data_source = IndividualDataSource.objects.get(id=row['id'])
         validation_column = {'validation_errors': error_fields}
         individual_data_source.validations = validation_column
-        individual_data_source.save(username=self.user.username)
+        individual_data_source.save(user=self.user.user)
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
@@ -725,7 +728,7 @@ class IndividualImportService:
                 individual.json_ext.update(synch_status)
             else:
                 individual.json_ext = synch_status
-            individual.save(username=self.user.username)
+            individual.save(user=self.user.user)
 
 
 class IndividualTaskCreatorService:
@@ -770,7 +773,7 @@ class IndividualTaskCreatorService:
 
         data_upload = upload_record.data_upload
         data_upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
-        data_upload.save(username=self.user.username)
+        data_upload.save(user=self.user.user)
 
     def __calculate_percentage_of_invalid_items(self, upload_id):
         number_of_valid_items = len(fetch_summary_of_valid_items(upload_id))

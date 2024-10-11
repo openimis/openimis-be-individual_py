@@ -15,11 +15,12 @@ class Individual(HistoryModel):
     #TODO WHY the HistoryModel json_ext was not enough
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
-    village = models.ForeignKey(
+    location = models.ForeignKey(
         Location,
         models.DO_NOTHING,
         blank=True,
-        null=True
+        null=True,
+        related_name='individuals'
     )
 
     def __str__(self):
@@ -41,15 +42,12 @@ class Individual(HistoryModel):
 
         if not user.is_imis_admin:
             user_districts_match_individual = LocationManager().build_user_location_filter_query(
-                user._u,
-                prefix='village__parent__parent',
-                loc_types=['D']
+                user._u
             )
-            individual_has_group = models.Q(("groupindividual__group__isnull", False))
+            individual_has_group = models.Q(("groupindividuals__group__isnull", False))
             user_districts_match_individual_group = LocationManager().build_user_location_filter_query(
                 user._u,
-                prefix='groupindividual__group__village__parent__parent',
-                loc_types=['D']
+                prefix='groupindividuals__group__location'
             )
             return queryset.filter(
                 models.Q(
@@ -94,11 +92,12 @@ class IndividualDataUploadRecords(HistoryModel):
 class Group(HistoryModel):
     code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
-    village = models.ForeignKey(
+    location = models.ForeignKey(
         Location,
         models.DO_NOTHING,
         blank=True,
-        null=True
+        null=True,
+        related_name='groups'
     )
 
     @classmethod
@@ -115,7 +114,7 @@ class Group(HistoryModel):
         if not user.is_imis_admin:
             return queryset.filter(
                 LocationManager().build_user_location_filter_query(
-                    user._u, prefix='village__parent__parent', loc_types=['D']
+                    user._u
                 )
             )
         return queryset
@@ -142,15 +141,27 @@ class GroupIndividual(HistoryModel):
         PRIMARY = 'PRIMARY', _('PRIMARY')
         SECONDARY = 'SECONDARY', _('SECONDARY')
 
-    group = models.ForeignKey(Group, models.DO_NOTHING)
-    individual = models.ForeignKey(Individual, models.DO_NOTHING)
+    group = models.ForeignKey(
+        Group,
+        models.DO_NOTHING,
+        related_name='groupindividuals'
+    )
+    individual = models.ForeignKey(
+        Individual,
+        models.DO_NOTHING,
+        related_name='groupindividuals'
+    )
     role = models.CharField(max_length=255, choices=Role.choices, null=True, blank=True)
     recipient_type = models.CharField(max_length=255, choices=RecipientType.choices, null=True, blank=True)
 
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
     def save(self, *args, **kwargs):
-        super().save(username=kwargs.get('username'))
+        user = kwargs.get('user')
+        if user:
+            super().save(user=user)
+        else:
+            super().save(username=kwargs.get('username'))  
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.handle_head_change(self.id, self.role, self.group_id)
@@ -159,7 +170,12 @@ class GroupIndividual(HistoryModel):
         service.update_json_ext_for_group(self.group)
 
     def delete(self, *args, **kwargs):
-        super().delete(username=kwargs.get('username'))
+        user = kwargs.get('user')
+        if user:
+            super().delete(user=user)
+        else:
+            super().delete(username=kwargs.get('username'))
+        
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.update_json_ext_for_group(self.group)
@@ -178,7 +194,7 @@ class GroupIndividual(HistoryModel):
         if not user.is_imis_admin:
             return queryset.filter(
                 LocationManager().build_user_location_filter_query(
-                    user._u, prefix='group__village__parent__parent', loc_types=['D']
+                    user._u, prefix='group__location'
                 )
             )
         return queryset

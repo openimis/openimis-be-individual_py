@@ -3,6 +3,7 @@ from individual.tests.test_helpers import (
     create_individual,
     IndividualGQLTestCase,
 )
+from django.utils.translation import gettext as _
 
 
 class IndividualGQLMutationTest(IndividualGQLTestCase):
@@ -50,7 +51,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         id = content['data']['createIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized'))
 
     def test_create_individual_row_security(self):
         query_str = f'''
@@ -60,7 +61,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
                   firstName: "Alice"
                   lastName: "Foo"
                   dob: "2020-02-20"
-                  villageId: {self.village_a.id}
+                  locationId: {self.village_a.id}
                 }}
               ) {{
                 clientMutationId
@@ -71,6 +72,9 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         # SP officer B cannot create individual for district A
         response = self.query(query_str)
+        content = json.loads(response.content)
+        internal_id = content['data']['createIndividual']['internalId']
+        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -79,7 +83,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['createIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized.location'))
 
         # SP officer A can create individual for district A
         response = self.query(
@@ -93,8 +97,8 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         # SP officer B can create individual for district B
         response = self.query(
             query_str.replace(
-                f'villageId: {self.village_a.id}',
-                f'villageId: {self.village_b.id}'
+                f'locationId: {self.village_a.id}',
+                f'locationId: {self.village_b.id}'
             ), headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
         )
         content = json.loads(response.content)
@@ -103,7 +107,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         # SP officer B can create individual without any district
         response = self.query(
-            query_str.replace(f'villageId: {self.village_a.id}', ' '),
+            query_str.replace(f'locationId: {self.village_a.id}', ' '),
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
         )
         content = json.loads(response.content)
@@ -151,12 +155,12 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         id = content['data']['updateIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized'))
 
     def test_update_individual_row_security(self):
         individual_a = create_individual(
             self.admin_user.username,
-            payload_override={'village': self.village_a},
+            payload_override={'location': self.village_a},
         )
         query_str = f'''
             mutation {{
@@ -176,6 +180,9 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         # SP officer B cannot update individual for district A
         response = self.query(query_str)
+        content = json.loads(response.content)
+        internal_id = content['data']['updateIndividual']['internalId']
+        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -184,7 +191,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['updateIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized.location'))
 
         # SP officer A can update individual for district A
         response = self.query(
@@ -238,7 +245,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         id = content['data']['deleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized'))
 
         # IMIS admin can do everything
         response = self.query(
@@ -277,7 +284,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         id = content['data']['undoDeleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized'))
 
         # IMIS admin can do everything
         response = self.query(
@@ -292,15 +299,15 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
     def test_delete_individual_row_security(self):
         individual_a1 = create_individual(
             self.admin_user.username,
-            payload_override={'village': self.village_a},
+            payload_override={'location': self.village_a},
         )
         individual_a2 = create_individual(
             self.admin_user.username,
-            payload_override={'village': self.village_a},
+            payload_override={'location': self.village_a},
         )
         individual_b = create_individual(
             self.admin_user.username,
-            payload_override={'village': self.village_b},
+            payload_override={'location': self.village_b},
         )
         query_str = f'''
             mutation {{
@@ -317,6 +324,9 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         # SP officer B cannot delete individual for district A
         response = self.query(query_str)
+        content = json.loads(response.content)
+        internal_id = content['data']['deleteIndividual']['internalId']
+        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -325,7 +335,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['deleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized.location'))
 
         # SP officer A can delete individual for district A
         response = self.query(
@@ -357,7 +367,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         id = content['data']['deleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized.location'))
 
         # SP officer B can delete individual from district B
         individual_no_loc = create_individual(self.admin_user.username)
@@ -387,6 +397,9 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         # SP officer B cannot undelete individual for district A
         response = self.query(query_str)
+        content = json.loads(response.content)
+        internal_id = content['data']['undoDeleteIndividual']['internalId']
+        self.assert_mutation_error(internal_id, 'mutation.authentication_required')
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -395,7 +408,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
         content = json.loads(response.content)
         id = content['data']['undoDeleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized.location'))
 
         # SP officer A can undelete individual for district A
         response = self.query(
@@ -426,7 +439,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         id = content['data']['undoDeleteIndividual']['internalId']
-        self.assert_mutation_error(id, 'mutation.authentication_required')
+        self.assert_mutation_error(id, _('unauthorized.location'))
 
         # SP officer B can undelete individual from district B
         response = self.query(

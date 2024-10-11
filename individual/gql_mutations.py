@@ -1,7 +1,8 @@
 import graphene
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.db import transaction
 from django.db.models import Subquery, Q
+from django.utils.translation import gettext as _
 
 from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationMixin, BaseMutation, \
     BaseHistoryModelUpdateMutationMixin, BaseHistoryModelCreateMutationMixin
@@ -18,7 +19,7 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
     last_name = graphene.String(required=True, max_length=255)
     dob = graphene.Date(required=True)
     json_ext = graphene.types.json.JSONString(required=False)
-    village_id = graphene.Int(required=False)
+    location_id = graphene.Int(required=False)
 
 
 class UpdateIndividualInputType(CreateIndividualInputType):
@@ -58,7 +59,7 @@ class CreateGroupIndividualInputTypeInputObjectType(graphene.InputObjectType):
 class CreateGroupInputType(OpenIMISMutation.Input):
     code = graphene.String(required=True)
     individuals_data = graphene.List(CreateGroupIndividualInputTypeInputObjectType, required=False)
-    village_id = graphene.Int(required=False)
+    location_id = graphene.Int(required=False)
 
 
 class UpdateGroupInputType(CreateGroupInputType):
@@ -85,11 +86,15 @@ class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_individual_create_perms):
-            raise ValidationError("mutation.authentication_required")
-        if 'village_id' in data:
-            village = Location.objects.get(id=data['village_id'])
-            if village not in Location.get_queryset(None, user):
-                raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
+        if (
+            'location_id' in data and
+            not LocationManager().is_allowed(
+                user,
+                [data['location_id']]
+            )
+        ):
+            raise PermissionDenied(_("unauthorized.location"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -116,11 +121,21 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_individual_update_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
-        village = Individual.objects.get(id=data['id']).village
-        if village and village not in Location.get_queryset(None, user):
-            raise ValidationError("mutation.authentication_required")
+        location_from = Individual.objects.get(id=data['id']).location_id
+        
+        location_to_check = [data['location_id']] if 'location_id' in data else []
+        if location_from:
+            location_to_check.append(location_from)
+        if (
+            len(location_to_check)>0 and
+            not LocationManager().is_allowed(
+                user, 
+                location_to_check
+            )
+        ):
+            raise PermissionDenied(_("unauthorized.location"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -150,16 +165,14 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_individual_delete_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
-        villages_qs = Location.objects.filter(individual_id__in=data['ids'], type='V')
-        # must first check if villages_qs exists in case none of the individuals has location
-        if villages_qs.exists():
-            allowed_loc_ids = Location.get_queryset(None, user).values('id')
-            not_in_allowed = villages_qs.exclude(id__in=Subquery(allowed_loc_ids))
-            # all individuals' villages must be within permission for the given user
-            if not allowed_loc_ids.exists() or not_in_allowed.exists():
-                raise ValidationError("mutation.authentication_required")
+        locations_id = list(Location.objects.filter(individuals__id__in=data['ids']).values_list('id', flat=True))
+        if len(locations_id)>0 and not LocationManager().is_allowed(
+                user,
+                locations_id
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -173,8 +186,8 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
         ids = data.get('ids')
         if ids:
             with transaction.atomic():
-                for id in ids:
-                    obj_data = {'id': id}
+                for identifier in ids:
+                    obj_data = {'id': identifier}
                     if IndividualConfig.check_individual_delete:
                         service.create_delete_task(obj_data)
                     else:
@@ -194,16 +207,14 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_individual_undo_delete_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
-        villages_qs = Location.objects.filter(individual_id__in=data['ids'], type='V')
-        # must first check if villages_qs exists in case none of the individuals has location
-        if villages_qs.exists():
-            allowed_loc_ids = Location.get_queryset(None, user).values('id')
-            not_in_allowed = villages_qs.exclude(id__in=Subquery(allowed_loc_ids))
-            # all individuals' villages must be within permission for the given user
-            if not allowed_loc_ids.exists() or not_in_allowed.exists():
-                raise ValidationError("mutation.authentication_required")
+        locations_id = list(Location.objects.filter(individuals__id__in=data['ids']).values_list('id', flat=True))
+        if len(locations_id)>0 and not LocationManager().is_allowed(
+                user,
+                locations_id
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -217,8 +228,8 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
         ids = data.get('ids')
         if ids:
             with transaction.atomic():
-                for id in ids:
-                    service.undo_delete({'id': id})
+                for identifier in ids:
+                    service.undo_delete({'id': identifier})
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)
@@ -234,12 +245,15 @@ class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
-            raise ValidationError("mutation.authentication_required")
-        if 'village_id' in data:
-            village = Location.objects.get(id=data['village_id'])
-            if village not in Location.get_queryset(None, user):
-                raise ValidationError("mutation.authentication_required")
-
+            raise PermissionDenied(_("unauthorized"))
+        if (
+            'location_id' in data and
+            not LocationManager().is_allowed(
+                user,
+                [data['location_id']]
+            )
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -265,11 +279,18 @@ class UpdateGroupMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_update_perms):
-            raise ValidationError("mutation.authentication_required")
-        village = Group.objects.get(id=data['id']).village
-        if village and village not in Location.get_queryset(None, user):
-            raise ValidationError("mutation.authentication_required")
-
+            raise PermissionDenied(_("unauthorized"))
+        location_from = Group.objects.get(id=data['id']).location_id
+        location_to_check = [data['location_id']] if 'location_id' in data else []
+        if location_from:
+            location_to_check.append(location_from)
+        if (
+            len(location_to_check)>0 and not LocationManager().is_allowed(
+                user, 
+                location_to_check
+            )
+        ):
+            raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -295,17 +316,14 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_delete_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
-        villages_qs = Location.objects.filter(group__id__in=data['ids'], type='V')
-        # must first check if villages_qs exists in case none of the groups has location
-        if villages_qs.exists():
-            allowed_loc_ids = Location.get_queryset(None, user).values('id')
-            not_in_allowed = villages_qs.exclude(id__in=Subquery(allowed_loc_ids))
-            # all groups' villages must be within permission for the given user
-            if not allowed_loc_ids.exists() or not_in_allowed.exists():
-                raise ValidationError("mutation.authentication_required")
-
+        locations_id = list(Location.objects.filter(groups__id__in=data['ids']).values_list('id', flat=True))
+        if len(locations_id)>0 and not LocationManager().is_allowed(
+                user,
+                locations_id
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -318,8 +336,8 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
         ids = data.get('ids')
         if ids:
             with transaction.atomic():
-                for id in ids:
-                    service.delete({'id': id, 'user': user})
+                for identifier in ids:
+                    service.delete({'id': identifier})
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)
@@ -335,15 +353,19 @@ class CreateGroupIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMut
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
-            raise ValidationError("mutation.authentication_required")
-        group_village = Group.objects.get(id=data['group_id']).village
-        individual_village = Individual.objects.get(id=data['individual_id']).village
-        if group_village and individual_village:
-            if group_village.id != individual_village.id:
-                raise ValidationError("mutation.individual_group_village_mismatch")
-            elif group_village not in Location.get_queryset(None, user):
-                raise ValidationError("mutation.authentication_required")
-
+            raise PermissionDenied(_("unauthorized"))
+        group_location = Group.objects.get(id=data['group_id']).location_id
+        individual_location = Individual.objects.get(id=data['individual_id']).location_id
+        location_to_check = []
+        if group_location:
+            location_to_check.append(group_location)
+        if individual_location:
+            location_to_check.append(individual_location)
+        if len(location_to_check)>0 and not LocationManager().is_allowed(
+                user,
+                location_to_check
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -369,15 +391,19 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_update_perms):
-            raise ValidationError("mutation.authentication_required")
-        group_village = Group.objects.get(id=data['group_id']).village
-        individual_village = Individual.objects.get(id=data['individual_id']).village
-        if group_village and individual_village:
-            if group_village.id != individual_village.id:
-                raise ValidationError("mutation.individual_group_village_mismatch")
-            elif group_village not in Location.get_queryset(None, user):
-                raise ValidationError("mutation.authentication_required")
-
+            raise PermissionDenied(_("unauthorized"))
+        group_location = Group.objects.get(id=data['group_id']).location_id
+        individual_location = Individual.objects.get(id=data['individual_id']).location_id
+        location_to_check = []
+        if individual_location:
+            location_to_check.append(individual_location)
+        if group_location:
+            location_to_check.append(group_location)
+        if len(location_to_check)>0 and not LocationManager().is_allowed(
+                user,
+                location_to_check
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -406,21 +432,17 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_delete_perms):
-            raise ValidationError("mutation.authentication_required")
-        villages_qs = Location.objects.filter(
-            type='V'
-        ).filter(
-            Q(group__groupindividual__id__in=data['ids']) |
-            Q(individual__groupindividual__id__in=data['ids'])
-        )
-        # must first check if villages_qs exists in case none of the groups or individuals has location
-        if villages_qs.exists():
-            allowed_loc_ids = Location.get_queryset(None, user).values('id')
-            not_in_allowed = villages_qs.exclude(id__in=Subquery(allowed_loc_ids))
-            # all groups' & individuals' villages must be within permission for the given user
-            if not allowed_loc_ids.exists() or not_in_allowed.exists():
-                raise ValidationError("mutation.authentication_required")
-
+            raise PermissionDenied(_("unauthorized"))
+        locations_qs = list(Location.objects.filter(
+            Q(groups__groupindividuals__id__in=data['ids'])|
+            Q(individuals__groupindividuals__id__in=data['ids'])
+        ).values_list('id', flat=True))
+        # must first check if locations_qs exists in case none of the groups or individuals has location
+        if len(locations_qs)>0 and not LocationManager().is_allowed(
+                user,
+                locations_qs
+        ):        
+            raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -433,8 +455,8 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
         ids = data.get('ids')
         if ids:
             with transaction.atomic():
-                for id in ids:
-                    service.delete({'id': id, 'user': user})
+                for identifier in ids:
+                    service.delete({'id': identifier})
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)
@@ -450,7 +472,7 @@ class CreateGroupIndividualsMutation(BaseHistoryModelCreateMutationMixin, BaseMu
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -478,7 +500,7 @@ class CreateGroupAndMoveIndividualMutation(BaseHistoryModelCreateMutationMixin, 
 
         required_perms = IndividualConfig.gql_group_create_perms + IndividualConfig.gql_group_update_perms
         if not user.has_perms(required_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -508,7 +530,7 @@ class ConfirmIndividualEnrollmentMutation(BaseHistoryModelCreateMutationMixin, B
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
@@ -542,7 +564,7 @@ class ConfirmGroupEnrollmentMutation(BaseHistoryModelCreateMutationMixin, BaseMu
         super()._validate_mutation(user, **data)
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
-            raise ValidationError("mutation.authentication_required")
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):

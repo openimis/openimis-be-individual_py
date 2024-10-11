@@ -15,16 +15,16 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
 
         cls.individual_a, cls.group_a, _ = create_group_with_individual(
             cls.admin_user.username,
-            group_override={'village': cls.village_a},
-            individual_override={'village': cls.village_a},
+            group_override={'location': cls.village_a},
+            individual_override={'location': cls.village_a},
         )
         cls.individual_a_no_group = create_individual(
             cls.admin_user.username,
-            payload_override={'village': cls.village_a},
+            payload_override={'location': cls.village_a},
         )
         cls.individual_a_group_no_loc, cls.group_no_loc, _ = create_group_with_individual(
             cls.admin_user.username,
-            individual_override={'village': cls.village_a},
+            individual_override={'location': cls.village_a},
         )
 
         cls.individual_no_loc_group_a = create_individual(cls.admin_user.username)
@@ -38,8 +38,8 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
 
         cls.individual_b, cls.group_b, _ = create_group_with_individual(
             cls.admin_user.username,
-            group_override={'village': cls.village_b},
-            individual_override={'village': cls.village_b},
+            group_override={'location': cls.village_b},
+            individual_override={'location': cls.village_b},
         )
 
 
@@ -111,7 +111,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
                 id
                 uuid
                 code
-                village {{
+                location {{
                   id uuid code name type
                   parent {{
                     id uuid code name type
@@ -327,7 +327,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
                 firstName
                 lastName
                 dob
-                village {{
+                location {{
                   id uuid code name type
                   parent {{
                     id uuid code name type
