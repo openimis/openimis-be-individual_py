@@ -336,6 +336,8 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 group_individual_id = obj_data.get('id')
                 incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
+                if not group_individual:
+                    raise ValueError(f"no GroupIndividual found with this id {group_individual_id}")
 
                 if str(group_individual.group.id) == str(incoming_group_id):
                     return super().update(obj_data)
