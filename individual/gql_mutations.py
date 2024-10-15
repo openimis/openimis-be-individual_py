@@ -124,14 +124,14 @@ class UpdateIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation
             raise PermissionDenied(_("unauthorized"))
 
         location_from = Individual.objects.get(id=data['id']).location_id
-        
+
         location_to_check = [data['location_id']] if 'location_id' in data else []
         if location_from:
             location_to_check.append(location_from)
         if (
             len(location_to_check)>0 and
             not LocationManager().is_allowed(
-                user, 
+                user,
                 location_to_check
             )
         ):
@@ -171,7 +171,7 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
         if len(locations_id)>0 and not LocationManager().is_allowed(
                 user,
                 locations_id
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
 
     @classmethod
@@ -213,7 +213,7 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
         if len(locations_id)>0 and not LocationManager().is_allowed(
                 user,
                 locations_id
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
 
     @classmethod
@@ -252,7 +252,7 @@ class CreateGroupMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
                 user,
                 [data['location_id']]
             )
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
@@ -286,7 +286,7 @@ class UpdateGroupMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
             location_to_check.append(location_from)
         if (
             len(location_to_check)>0 and not LocationManager().is_allowed(
-                user, 
+                user,
                 location_to_check
             )
         ):
@@ -322,7 +322,7 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
         if len(locations_id)>0 and not LocationManager().is_allowed(
                 user,
                 locations_id
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):
@@ -354,18 +354,22 @@ class CreateGroupIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMut
         if not user.has_perms(
                 IndividualConfig.gql_group_create_perms):
             raise PermissionDenied(_("unauthorized"))
-        group_location = Group.objects.get(id=data['group_id']).location_id
-        individual_location = Individual.objects.get(id=data['individual_id']).location_id
+        group_location_id = Group.objects.get(id=data['group_id']).location_id
+        individual_location_id = Individual.objects.get(id=data['individual_id']).location_id
         location_to_check = []
-        if group_location:
-            location_to_check.append(group_location)
-        if individual_location:
-            location_to_check.append(individual_location)
+        if group_location_id:
+            location_to_check.append(group_location_id)
+        if individual_location_id:
+            location_to_check.append(individual_location_id)
         if len(location_to_check)>0 and not LocationManager().is_allowed(
                 user,
                 location_to_check
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
+
+        if group_location_id and individual_location_id and group_location_id != individual_location_id:
+            raise ValidationError(_("mutation.individual_group_location_mismatch"))
+
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -392,18 +396,23 @@ class UpdateGroupIndividualMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
         if not user.has_perms(
                 IndividualConfig.gql_group_update_perms):
             raise PermissionDenied(_("unauthorized"))
-        group_location = Group.objects.get(id=data['group_id']).location_id
-        individual_location = Individual.objects.get(id=data['individual_id']).location_id
+
+        group_location_id = Group.objects.get(id=data['group_id']).location_id
+        individual_location_id = Individual.objects.get(id=data['individual_id']).location_id
         location_to_check = []
-        if individual_location:
-            location_to_check.append(individual_location)
-        if group_location:
-            location_to_check.append(group_location)
+        if individual_location_id:
+            location_to_check.append(individual_location_id)
+        if group_location_id:
+            location_to_check.append(group_location_id)
         if len(location_to_check)>0 and not LocationManager().is_allowed(
                 user,
                 location_to_check
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
+
+        if group_location_id and individual_location_id and group_location_id != individual_location_id:
+            raise ValidationError(_("mutation.individual_group_location_mismatch"))
+
     @classmethod
     def _mutate(cls, user, **data):
         if "client_mutation_id" in data:
@@ -441,7 +450,7 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
         if len(locations_qs)>0 and not LocationManager().is_allowed(
                 user,
                 locations_qs
-        ):        
+        ):
             raise PermissionDenied(_("unauthorized.location"))
     @classmethod
     def _mutate(cls, user, **data):

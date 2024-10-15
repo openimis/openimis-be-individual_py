@@ -482,7 +482,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         internal_id = content['data']['addIndividualToGroup']['internalId']
-        self.assert_mutation_success(internal_id)
+        self.assert_mutation_error(internal_id, _('mutation.individual_group_location_mismatch'))
 
     @patch.object(IndividualConfig, 'check_group_individual_update', new=False)
     def test_edit_individual_in_group_general_permission(self):
