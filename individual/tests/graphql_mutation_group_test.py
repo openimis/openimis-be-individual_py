@@ -627,8 +627,9 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assertNotEqual(expected_gi.first().id, group_individual_a.id)
 
         # Moving a individual to a group with different locations is not allowed
+        query_str_updated = query_str.replace(str(group_individual_a.id), str(expected_gi.first().id))
         response = self.query(
-            query_str.replace(str(group_a.id), str(group_b.id)),
+            query_str_updated.replace(str(group_a.id), str(group_b.id)),
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
         )
         content = json.loads(response.content)
