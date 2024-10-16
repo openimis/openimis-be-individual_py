@@ -2,7 +2,8 @@ import logging
 import json
 import uuid
 import pandas as pd
-
+import concurrent.futures
+import math
 from pandas import DataFrame
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
@@ -66,7 +67,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
                 self.validation_class.validate_undo_delete(obj_data)
                 obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
                 obj_.is_deleted = False
-                obj_.save(username=self.user.username)
+                obj_.save(user=self.user.user)
                 return {
                     "success": True,
                     "message": "Ok",
@@ -204,7 +205,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 for individual_id in assigned_individuals_ids:
                     if str(individual_id) not in individual_ids:
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
-                        service.delete({'id': group_individual.id, 'user': self.user})
+                        service.delete({'id': group_individual.id})
 
                 for data in individuals_data:
                     if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
@@ -231,7 +232,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             for group_individual in group_individuals:
                 # cant use .delete() on query since it will completely remove instances from db instead of marking
                 # them as isDeleted
-                group_individual.delete(username=self.user.username)
+                group_individual.delete(user=self.user)
             return super().delete(obj_data)
 
     @transaction.atomic
@@ -244,7 +245,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             for individual in Individual.objects.filter(id__in=individual_ids)
         }
         group.json_ext["members"] = group_members
-        group.save(username=self.user.username)
+        group.save(user=self.user.user)
         return group
 
     @register_service_signal('group_service.select_groups_to_benefit_plan')
@@ -290,6 +291,9 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
                 self.validation_class.validate_create_group_and_move_individual(self.user, **obj_data)
                 group_individual_id = obj_data.pop('group_individual_id')
                 group = GroupService(self.user).create(obj_data)
+                # return group if it has errors
+                if not group['data']:
+                    return group
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
                 group_id = group['data']['id']
                 service = GroupIndividualService(self.user)
@@ -332,8 +336,10 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 group_individual_id = obj_data.get('id')
                 incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
+                if not group_individual:
+                    raise ValueError(f"no GroupIndividual found with this id {group_individual_id}")
 
-                if str(group_individual.group.id) == incoming_group_id:
+                if str(group_individual.group.id) == str(incoming_group_id):
                     return super().update(obj_data)
 
                 obj_data.pop('id', None)
@@ -454,7 +460,7 @@ class GroupAndGroupIndividualAlignmentService:
 
         if changes_to_save:
             group.json_ext.update(changes_to_save)
-            group.save(update_fields=['json_ext'], username=self.user.username)
+            group.save(update_fields=['json_ext'], user=self.user)
 
     def handle_assure_primary_recipient_in_group(self, group, recipient_type):
         """
@@ -480,7 +486,7 @@ class GroupAndGroupIndividualAlignmentService:
         new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
         if not head_exists:
             new_primary.role = GroupIndividual.Role.HEAD
-        new_primary.save(username=self.user.username)
+        new_primary.save(user=self.user.user)
 
     def _change_head(self, group_individual_id, group_id):
         heads_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
@@ -490,7 +496,7 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         old_head.role = None
-        old_head.save(username=self.user.username)
+        old_head.save(user=self.user.user)
 
     def _change_primary(self, group_individual_id, group_id):
         primaries_queryset = GroupIndividual.objects.filter(
@@ -502,7 +508,7 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         old_primary.recipient_type = None
-        old_primary.save(username=self.user.username)
+        old_primary.save(user=self.user.user)
 
 
 class IndividualImportService:
@@ -547,7 +553,7 @@ class IndividualImportService:
             workflow=workflow.name,
             json_ext={"group_aggregation_column": group_aggregation_column}
         )
-        record.save(username=self.user.username)
+        record.save(user=self.user.user)
 
     def validate_import_individuals(self, upload_id: uuid, individual_sources):
         dataframe = self._load_dataframe(individual_sources)
@@ -560,29 +566,65 @@ class IndividualImportService:
     def synchronize_data_for_reporting(self, upload_id: uuid):
         self._synchronize_individual(upload_id)
 
-    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
-        schema_dict = json.loads(IndividualConfig.individual_schema)
-        properties = schema_dict.get("properties", {})
-        validated_dataframe = []
 
-        def validate_row(row):
+    @staticmethod
+    def process_chunk(chunk, properties, unique_validations, calculation, calculation_uuid):
+        validated_dataframe = []
+        for _, row in chunk.iterrows():
             field_validation = {'row': row.to_dict(), 'validations': {}}
             for field, field_properties in properties.items():
-                if "validationCalculation" in field_properties:
-                    if field in row:
-                        field_validation['validations'][f'{field}'] = self._handle_validation_calculation(
-                            row, field, field_properties
-                        )
-                if "uniqueness" in field_properties:
-                    if field in row:
-                        field_validation['validations'][f'{field}_uniqueness'] = self._handle_uniqueness(
-                            row, field, field_properties, dataframe
-                        )
-            validated_dataframe.append(field_validation)
-            self.__save_validation_error_in_data_source(row, field_validation)
-            return row
+                
+                # Validation Calculation
+                if "validationCalculation" in field_properties and field in row:
+                    validation_name = field_properties["validationCalculation"]["name"]
+                    field_validation['validations'][field] = calculation.calculate_if_active_for_object(
+                        validation_name,
+                        calculation_uuid,
+                        field_name=field,
+                        field_value=row[field]
+                    )
+                
+                # Uniqueness Check
+                if "uniqueness" in field_properties and field in row:
+                    field_validation['validations'][f'{field}_uniqueness'] = not unique_validations[field].loc[row.name]
 
-        dataframe.apply(validate_row, axis='columns')
+            validated_dataframe.append(field_validation)
+        
+        return validated_dataframe
+    
+    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid, num_workers=4):
+        schema_dict = json.loads(IndividualConfig.individual_schema)
+        properties = schema_dict.get("properties", {})
+        
+        calculation_uuid = IndividualConfig.validation_calculation_uuid
+        calculation = get_calculation_object(calculation_uuid)
+        
+        unique_fields = [field for field, props in properties.items() if "uniqueness" in props]
+        unique_validations = {}
+        if unique_fields:
+            unique_validations = {
+                field: dataframe[field].duplicated(keep=False) 
+                for field in unique_fields
+            }
+
+        chunk_size = math.ceil(len(dataframe) / num_workers)
+        data_chunks = [dataframe[i:i + chunk_size] for i in range(0, dataframe.shape[0], chunk_size)]
+
+        validated_dataframe = []
+        with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+            futures = [executor.submit(
+                self.process_chunk, 
+                chunk, 
+                properties, 
+                unique_validations, 
+                calculation, 
+                calculation_uuid
+            ) for chunk in data_chunks]
+            
+            for future in concurrent.futures.as_completed(futures):
+                validated_dataframe.extend(future.result())
+
+        self.save_validation_error_in_data_source_bulk(validated_dataframe)
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
 
@@ -631,11 +673,20 @@ class IndividualImportService:
         return self.import_loaders[import_file.content_type](import_file)
 
     def _save_data_source(self, dataframe: pd.DataFrame, upload: IndividualDataSourceUpload):
-        dataframe.apply(self._save_row, axis='columns', args=(upload,))
+        data_source_objects = []
+        
+        for _, row in dataframe.iterrows():
+            ds = IndividualDataSource(
+                upload=upload,
+                json_ext=json.loads(row.to_json()),
+                validations={},
+                user_created=self.user,
+                user_updated=self.user,
+                uuid=uuid.uuid4()
+            )
+            data_source_objects.append(ds)
 
-    def _save_row(self, row, upload):
-        ds = IndividualDataSource(upload=upload, json_ext=json.loads(row.to_json()), validations={})
-        ds.save(username=self.user.login_name)
+        IndividualDataSource.objects.bulk_create(data_source_objects)
 
     def _load_dataframe(self, individual_sources) -> pd.DataFrame:
         return load_dataframe(individual_sources)
@@ -664,18 +715,29 @@ class IndividualImportService:
             upload.save(username=self.user.login_name)
             return upload
 
-    def __save_validation_error_in_data_source(self, row, field_validation):
-        error_fields = []
-        for key, value in field_validation['validations'].items():
-            if not value['success']:
-                error_fields.append({
-                    "field_name": value['field_name'],
-                    "note": value['note']
-                })
-        individual_data_source = IndividualDataSource.objects.get(id=row['id'])
-        validation_column = {'validation_errors': error_fields}
-        individual_data_source.validations = validation_column
-        individual_data_source.save(username=self.user.username)
+    def save_validation_error_in_data_source_bulk(self, validated_dataframe):
+        data_sources_to_update = []
+
+        for field_validation in validated_dataframe:
+            row = field_validation['row']
+            error_fields = []
+
+            for key, value in field_validation['validations'].items():
+                if not value.get('success', False):
+                    error_fields.append({
+                        "field_name": value.get('field_name'),
+                        "note": value.get('note')
+                    })
+
+            data_sources_to_update.append(
+                IndividualDataSource(
+                    id=row['id'],
+                    validations={'validation_errors': error_fields}
+                )
+            )
+
+        if data_sources_to_update:
+            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'])
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
@@ -725,7 +787,7 @@ class IndividualImportService:
                 individual.json_ext.update(synch_status)
             else:
                 individual.json_ext = synch_status
-            individual.save(username=self.user.username)
+            individual.save(user=self.user.user)
 
 
 class IndividualTaskCreatorService:
@@ -770,7 +832,7 @@ class IndividualTaskCreatorService:
 
         data_upload = upload_record.data_upload
         data_upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
-        data_upload.save(username=self.user.username)
+        data_upload.save(user=self.user.user)
 
     def __calculate_percentage_of_invalid_items(self, upload_id):
         number_of_valid_items = len(fetch_summary_of_valid_items(upload_id))
