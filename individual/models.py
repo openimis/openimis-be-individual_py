@@ -44,10 +44,10 @@ class Individual(HistoryModel):
             user_districts_match_individual = LocationManager().build_user_location_filter_query(
                 user._u
             )
-            individual_has_group = models.Q(("groupindividuals__group__isnull", False))
+            individual_has_group = models.Q(("groupindividual__group__isnull", False))
             user_districts_match_individual_group = LocationManager().build_user_location_filter_query(
                 user._u,
-                prefix='groupindividuals__group__location'
+                prefix='groupindividual__group__location'
             )
             return queryset.filter(
                 models.Q(
@@ -141,16 +141,8 @@ class GroupIndividual(HistoryModel):
         PRIMARY = 'PRIMARY', _('PRIMARY')
         SECONDARY = 'SECONDARY', _('SECONDARY')
 
-    group = models.ForeignKey(
-        Group,
-        models.DO_NOTHING,
-        related_name='groupindividuals'
-    )
-    individual = models.ForeignKey(
-        Individual,
-        models.DO_NOTHING,
-        related_name='groupindividuals'
-    )
+    group = models.ForeignKey(Group, models.DO_NOTHING)
+    individual = models.ForeignKey(Individual, models.DO_NOTHING)
     role = models.CharField(max_length=255, choices=Role.choices, null=True, blank=True)
     recipient_type = models.CharField(max_length=255, choices=RecipientType.choices, null=True, blank=True)
 

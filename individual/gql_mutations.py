@@ -443,8 +443,8 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
                 IndividualConfig.gql_group_delete_perms):
             raise PermissionDenied(_("unauthorized"))
         locations_qs = list(Location.objects.filter(
-            Q(groups__groupindividuals__id__in=data['ids'])|
-            Q(individuals__groupindividuals__id__in=data['ids'])
+            Q(groups__groupindividual__id__in=data['ids'])|
+            Q(individuals__groupindividual__id__in=data['ids'])
         ).values_list('id', flat=True))
         # must first check if locations_qs exists in case none of the groups or individuals has location
         if len(locations_qs)>0 and not LocationManager().is_allowed(

@@ -37,9 +37,9 @@ class CreateGroupAndMoveIndividualServiceTest(TestCase):
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
         group_individual_id = self.payload.get("group_individual_id")
-        self.assertTrue(query.filter(groupindividuals__id=group_individual_id).exists())
+        self.assertTrue(query.filter(groupindividual__id=group_individual_id).exists())
         empty_group_query = self.query_all.filter(id=self.group.id)
-        self.assertFalse(empty_group_query.filter(groupindividuals__id=group_individual_id).exists())
+        self.assertFalse(empty_group_query.filter(groupindividual__id=group_individual_id).exists())
 
     @classmethod
     def __create_individual(cls):

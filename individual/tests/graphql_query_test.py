@@ -59,6 +59,11 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
                 id
                 uuid
                 code
+                head {{
+                  id
+                  firstName
+                  lastName
+                }}
               }}
             }}
           }}
@@ -385,6 +390,47 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
+
+
+    def test_individual_query_with_group(self):
+        date_created = str(self.individual_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          individual(dateCreated_Gte: "{date_created}", groupId: "{self.group_a.id}") {{
+            totalCount
+            pageInfo {{
+              hasNextPage
+              hasPreviousPage
+              startCursor
+              endCursor
+            }}
+            edges {{
+              node {{
+                id
+                uuid
+                firstName
+                lastName
+                dob
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
 
 
     def test_individual_history_query_row_security(self):
