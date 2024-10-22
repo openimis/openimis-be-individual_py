@@ -27,7 +27,6 @@ DEFAULT_CONFIG = {
     "validation_calculation_uuid": "4362f958-5894-435b-9bda-df6cadf88352",
     "validation_import_valid_items": "individual_validation.import_valid_items",
     "validation_import_group_valid_items": "individual_validation.import_group_valid_items",
-    "unique_class_validation": "DeduplicationIndividualValidationStrategy",
     "validation_upload_valid_items": "individual_validation.upload_valid_items",
     "validation_upload_valid_items_workflow": "individual-upload-valid-items.individual-upload-valid-items",
     "enable_python_workflows": True,
@@ -69,7 +68,6 @@ class IndividualConfig(AppConfig):
     validation_import_valid_items_workflow = None
     validation_import_valid_items = None
     validation_import_group_valid_items = None
-    unique_class_validation = None
 
     enable_python_workflows = None
     enable_maker_checker_logic_import = None
