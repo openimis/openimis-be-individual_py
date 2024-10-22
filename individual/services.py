@@ -556,7 +556,7 @@ class IndividualImportService:
         record.save(user=self.user.user)
 
     def validate_import_individuals(self, upload_id: uuid, individual_sources):
-        dataframe = self._load_dataframe(individual_sources)
+        dataframe = load_dataframe(individual_sources)
         validated_dataframe, invalid_items = self._validate_possible_individuals(
             dataframe,
             upload_id
@@ -565,33 +565,25 @@ class IndividualImportService:
 
     def synchronize_data_for_reporting(self, upload_id: uuid):
         self._synchronize_individual(upload_id)
-
-
     @staticmethod
     def process_chunk(chunk, properties, unique_validations, calculation, calculation_uuid):
         validated_dataframe = []
         for _, row in chunk.iterrows():
             field_validation = {'row': row.to_dict(), 'validations': {}}
             for field, field_properties in properties.items():
-                
+
                 # Validation Calculation
                 if "validationCalculation" in field_properties and field in row:
-                    validation_name = field_properties["validationCalculation"]["name"]
-                    field_validation['validations'][field] = calculation.calculate_if_active_for_object(
-                        validation_name,
-                        calculation_uuid,
-                        field_name=field,
-                        field_value=row[field]
-                    )
-                
+                    field_validation['validations'][field] = IndividualImportService._handle_validation_calculation(row, field, field_properties)
+
                 # Uniqueness Check
                 if "uniqueness" in field_properties and field in row:
-                    field_validation['validations'][f'{field}_uniqueness'] = not unique_validations[field].loc[row.name]
+                    field_validation['validations'][f'{field}_uniqueness'] = IndividualImportService._handle_uniqueness(row, field, unique_validations)
 
             validated_dataframe.append(field_validation)
-        
+
         return validated_dataframe
-    
+
     def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid, num_workers=4):
         schema_dict = json.loads(IndividualConfig.individual_schema)
         properties = schema_dict.get("properties", {})
@@ -620,7 +612,7 @@ class IndividualImportService:
                 calculation, 
                 calculation_uuid
             ) for chunk in data_chunks]
-            
+
             for future in concurrent.futures.as_completed(futures):
                 validated_dataframe.extend(future.result())
 
@@ -628,20 +620,21 @@ class IndividualImportService:
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
 
-    def _handle_uniqueness(self, row, field, field_properties, dataframe):
-        unique_class_validation = IndividualConfig.unique_class_validation
-        calculation_uuid = IndividualConfig.validation_calculation_uuid
-        calculation = get_calculation_object(calculation_uuid)
-        result_row = calculation.calculate_if_active_for_object(
-            unique_class_validation,
-            calculation_uuid,
-            field_name=field,
-            field_value=row[field],
-            incoming_data=dataframe
-        )
-        return result_row
 
-    def _handle_validation_calculation(self, row, field, field_properties):
+    @staticmethod
+    def _handle_uniqueness(row, field, unique_validations):
+        success = not unique_validations[field].loc[row.name]
+        result = {
+            "success": success,
+            "field_name": field,
+        }
+        if not success:
+            result["note"] = f"'{field}' Field value '{row[field]}' is duplicated"
+        return result
+
+
+    @staticmethod
+    def _handle_validation_calculation(row, field, field_properties):
         validation_calculation = field_properties.get("validationCalculation", {}).get("name")
         if not validation_calculation:
             raise ValueError("Missing validation name")
@@ -687,9 +680,6 @@ class IndividualImportService:
             data_source_objects.append(ds)
 
         IndividualDataSource.objects.bulk_create(data_source_objects)
-
-    def _load_dataframe(self, individual_sources) -> pd.DataFrame:
-        return load_dataframe(individual_sources)
 
     def _trigger_workflow(self,
                           workflow: WorkflowHandler,

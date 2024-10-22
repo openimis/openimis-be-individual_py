@@ -1,5 +1,8 @@
 import csv
+import json
 import os
+import pandas as pd
+import uuid
 from core.test_helpers import LogInHelper
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -10,7 +13,7 @@ from individual.models import (
     IndividualDataUploadRecords,
 )
 from individual.tests.test_helpers import generate_random_string
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 def count_csv_records(file_path):
@@ -85,3 +88,75 @@ class IndividualImportServiceTest(TestCase):
         mock_workflow.name = 'Test Workflow'
         return mock_workflow
 
+    @patch('individual.services.load_dataframe')
+    @patch('individual.services.fetch_summary_of_broken_items')
+    def test_validate_import_individuals_success(self, mock_fetch_summary, mock_load_dataframe):
+        upload_id = uuid.uuid4()
+
+        dataframe = pd.DataFrame({
+            'id': [1, 2],
+            'first_name': ['John', 'Jane'],
+            'last_name': ['Doe', 'Smith'],
+            'email': ['john@example.com', 'jane@example.com']
+        })
+        mock_load_dataframe.return_value = dataframe
+
+        mock_invalid_items = {"invalid_items_count": 0}
+        mock_fetch_summary.return_value = mock_invalid_items
+
+        individual_sources = MagicMock()
+        result = self.service.validate_import_individuals(upload_id, individual_sources)
+
+        mock_load_dataframe.assert_called_once_with(individual_sources)
+
+        # Assert that the result contains the validated dataframe and summary of invalid items
+        self.assertEqual(result['success'], True)
+        self.assertEqual(len(result['data']), 2)  # Two records were validated
+        self.assertEqual(result['summary_invalid_items'], mock_invalid_items)
+
+        # Check the validation logic on the dataframe
+        validated_rows = result['data']
+        for row in validated_rows:
+            self.assertIn('validations', row)
+            self.assertTrue(all(v.get('success', True) for v in row['validations'].values()))
+
+    @patch('individual.services.IndividualConfig.individual_schema', json.dumps({
+        "properties": {
+            "email": {"type": "string", "uniqueness": True}
+        }
+    }))  # Mock schema for testing uniqueness
+    @patch('individual.services.load_dataframe')
+    @patch('individual.services.fetch_summary_of_broken_items')
+    def test_validate_import_individuals_with_duplicate_emails(self, mock_fetch_summary, mock_load_dataframe):
+        upload_id = uuid.uuid4()
+
+        # Create a dataframe with duplicate emails to test uniqueness validation
+        email = 'john@example.com'
+        dataframe = pd.DataFrame({
+            'id': [1, 2],
+            'email': [email, email]
+        })
+        mock_load_dataframe.return_value = dataframe
+
+        mock_invalid_items = {"invalid_items_count": 1}
+        mock_fetch_summary.return_value = mock_invalid_items
+
+        individual_sources = MagicMock()
+        result = self.service.validate_import_individuals(upload_id, individual_sources)
+
+        mock_load_dataframe.assert_called_once_with(individual_sources)
+
+        # Assert that the result contains the validated dataframe and summary of invalid items
+        self.assertEqual(result['success'], True)
+        self.assertEqual(len(result['data']), 2)  # Two records were validated
+        self.assertEqual(result['summary_invalid_items'], mock_invalid_items)
+
+        # Check that the validation flagged the duplicate emails
+        validated_rows = result['data']
+        for row in validated_rows:
+            if row['row']['email'] == email:
+                self.assertIn('validations', row)
+                email_validation = row['validations']['email_uniqueness']
+                self.assertFalse(email_validation.get('success'))
+                self.assertEqual(email_validation.get('field_name'), 'email')
+                self.assertEqual(email_validation.get('note'), "'email' Field value 'john@example.com' is duplicated")
