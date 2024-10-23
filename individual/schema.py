@@ -53,7 +53,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     module_name = "individual"
     object_type = "Individual"
     object_type_group = "Group"
-    related_field_individual = "groupindividual__individual"
+    related_field_individual = "groupindividuals__individual"
 
     individual = OrderedDjangoFilterConnectionField(
         IndividualGQLType,
@@ -167,7 +167,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         group_id = kwargs.get("groupId")
         if group_id:
-            filters.append(Q(groupindividual__group__id=group_id))
+            filters.append(Q(groupindividuals__group__id=group_id))
 
         benefit_plan_to_enroll = kwargs.get("benefitPlanToEnroll")
         if benefit_plan_to_enroll:
@@ -302,11 +302,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         first_name = kwargs.get("first_name", None)
         if first_name:
-            filters.append(Q(groupindividual__individual__first_name__icontains=first_name))
+            filters.append(Q(groupindividuals__individual__first_name__icontains=first_name))
 
         last_name = kwargs.get("last_name", None)
         if last_name:
-            filters.append(Q(groupindividual__individual__last_name__icontains=last_name))
+            filters.append(Q(groupindividuals__individual__last_name__icontains=last_name))
 
         benefit_plan_to_enroll = kwargs.get("benefitPlanToEnroll")
         if benefit_plan_to_enroll:

@@ -182,7 +182,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
             if group:
                 assigned_individual_ids = list(Individual.objects.filter(
-                    groupindividual__group=group, is_deleted=False
+                    groupindividuals__group=group, is_deleted=False
                 ).values_list('id', flat=True))
                 assigned_individual_ids_str = [str(uuid) for uuid in assigned_individual_ids]
                 updated_ids = list(set(ids_str + assigned_individual_ids_str))

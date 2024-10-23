@@ -126,9 +126,9 @@ class GroupGQLType(DjangoObjectType):
 
     def resolve_head(self, info):
         return Individual.objects.filter(
-            groupindividual__group__id=self.id,
-            groupindividual__role=GroupIndividual.Role.HEAD,
-            groupindividual__is_deleted=False,
+            groupindividuals__group__id=self.id,
+            groupindividuals__role=GroupIndividual.Role.HEAD,
+            groupindividuals__is_deleted=False,
         ).first()
 
     class Meta:
@@ -156,9 +156,9 @@ class GroupHistoryGQLType(DjangoObjectType):
 
     def resolve_head(self, info):
         return Individual.objects.filter(
-            groupindividual__group__id=self.id,
-            groupindividual__role=GroupIndividual.Role.HEAD,
-            groupindividual__is_deleted=False,
+            groupindividuals__group__id=self.id,
+            groupindividuals__role=GroupIndividual.Role.HEAD,
+            groupindividuals__is_deleted=False,
         ).first()
 
     def resolve_user_updated(self, info):
