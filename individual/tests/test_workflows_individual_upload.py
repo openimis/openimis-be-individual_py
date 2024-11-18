@@ -1,3 +1,4 @@
+from django.db import connection
 from django.test import TestCase
 from core.test_helpers import create_test_interactive_user
 from individual.models import (
@@ -12,8 +13,13 @@ from individual.models import (
 from individual.workflows.base_individual_upload import process_import_individuals_workflow
 from individual.tests.test_helpers import create_test_village
 from unittest.mock import patch
+from unittest import skipIf
 
 
+@skipIf(
+    connection.vendor != "postgresql",
+    "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
+)
 class ProcessImportIndividualsWorkflowTest(TestCase):
 
     @classmethod

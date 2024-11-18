@@ -1,3 +1,4 @@
+from django.db import connection
 from django.test import TestCase
 from core.test_helpers import create_test_interactive_user
 from individual.models import (
@@ -9,6 +10,7 @@ from individual.models import (
 from individual.workflows.base_individual_update import process_update_individuals_workflow
 from individual.tests.test_helpers import create_test_village, create_individual
 from unittest.mock import patch
+from unittest import skipIf
 import uuid
 
 
@@ -92,6 +94,10 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         )
         self.invalid_data_source.save(user=self.user)
 
+    @skipIf(
+        connection.vendor != "postgresql",
+        "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
+    )
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
     def test_process_update_individuals_workflow_successful_execution(self):
         process_update_individuals_workflow(self.user_uuid, self.upload_uuid)
@@ -122,6 +128,10 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         individual2_from_db = Individual.objects.get(id=self.individual2.id)
         self.assertNotEqual(individual2_from_db.first_name, self.individual2_updated_first_name)
 
+    @skipIf(
+        connection.vendor != "postgresql",
+        "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
+    )
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
     def test_process_update_individuals_workflow_with_all_valid_entries(self):
         # Update invalid entry in IndividualDataSource to valid data
