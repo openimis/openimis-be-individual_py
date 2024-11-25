@@ -43,7 +43,8 @@ def generate_fake_individual(group_code, recipient_info, individual_role, locati
         "number_of_elderly": fake.random_int(min=0, max=5),
         "number_of_children": fake.random_int(min=0, max=10),
         "beneficiary_data_source": fake.company(),
-        "location_name": location.name if location else ""
+        "location_name": location.name if location else "",
+        "location_code": location.code if location else "",
     }
 
 

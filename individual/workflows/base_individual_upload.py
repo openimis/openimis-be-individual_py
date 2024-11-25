@@ -69,6 +69,7 @@ DO $$
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
+                    AND loc."LocationCode" = ds."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
             WHERE ds.upload_id=current_upload_id 
                 AND ds.individual_id is null

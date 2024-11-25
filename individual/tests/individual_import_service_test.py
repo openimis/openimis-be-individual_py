@@ -21,6 +21,7 @@ from individual.tests.test_helpers import (
 from unittest.mock import MagicMock, patch
 from core.utils import filter_validity
 from core.models.user import Role
+from location.models import Location
 
 
 def count_csv_records(file_path):
@@ -53,11 +54,11 @@ class IndividualImportServiceTest(TestCase):
     def setUpTestData(cls):
         cls.village_a = create_test_village({
             'name': 'Washington DC',
-            'code': 'VsA',
+            'code': '202',
         })
         cls.village_b = create_test_village({
             'name': 'Fairfax',
-            'code': 'VsB'
+            'code': '703'
         })
 
 
@@ -247,7 +248,7 @@ class IndividualImportServiceTest(TestCase):
             self.assertEqual(loc_validation.get('field_name'), 'location_name')
             self.assertEqual(
                 loc_validation.get('note'),
-                f"'location_name' value '{self.village_b.name}' is outside the current user's location permissions."
+                f"Location with name '{self.village_b.name}' and code '{self.village_b.code}' is outside the current user's location permissions."
             )
 
         # Unknown individual location
@@ -259,7 +260,7 @@ class IndividualImportServiceTest(TestCase):
             self.assertEqual(loc_validation.get('field_name'), 'location_name')
             self.assertEqual(
                 loc_validation.get('note'),
-                "'location_name' value 'Washington D.C.' is not a valid location name. "
+                "Location with name 'Washington D.C.' and code '202' is not valid. "
                 "Please check the spelling against the list of locations in the system."
             )
 
@@ -267,10 +268,12 @@ class IndividualImportServiceTest(TestCase):
     @patch('individual.services.load_dataframe')
     @patch('individual.services.fetch_summary_of_broken_items')
     def test_validate_import_individuals_ambiguous_location_name(self, mock_fetch_summary, mock_load_dataframe):
-        # set up another location also named Fairfax and save to DB
-        loc_dup_name = create_test_village({
+        # set up another location with the same named and code in DB
+        loc_dup = Location.objects.create(**{
             'name': 'Fairfax',
-            'code': 'VsB2',
+            'code': '703',
+            'type': 'V',
+            'parent': self.village_b.parent,
         })
 
         dataframe = pd.read_csv(self.csv_file_path, na_filter=False)
@@ -296,14 +299,14 @@ class IndividualImportServiceTest(TestCase):
         # Check that the validation flagged lack of permission and unrecognized locations
         validated_rows = result['data']
 
-        rows_ambiguous_loc = [row for row in validated_rows if row['row']['location_name'] == loc_dup_name.name]
-        self.assertTrue(rows_ambiguous_loc, f'Expected at least one row with location_name={loc_dup_name.name}')
+        rows_ambiguous_loc = [row for row in validated_rows if row['row']['location_name'] == loc_dup.name]
+        self.assertTrue(rows_ambiguous_loc, f'Expected at least one row with location_name={loc_dup.name}')
         for row in rows_ambiguous_loc:
             loc_validation = row['validations']['location_name']
             self.assertFalse(loc_validation.get('success'))
             self.assertEqual(loc_validation.get('field_name'), 'location_name')
             self.assertEqual(
                 loc_validation.get('note'),
-                "'location_name' value 'Fairfax' is ambiguous, "
-                "because there are more than one location with this name found in the system."
+                "Location with name 'Fairfax' and code '703' is ambiguous, "
+                "because there are more than one location with this name and code found in the system."
             )

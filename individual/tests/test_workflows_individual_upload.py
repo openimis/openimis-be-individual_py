@@ -71,6 +71,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
                 "last_name": "Doe",
                 "dob": "1980-01-01",
                 "location_name": self.village.name,
+                "location_code": self.village.code,
             }
         )
         self.valid_data_source.save(user=self.user)
@@ -117,6 +118,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
             "last_name": "Doe",
             "dob": "1982-01-01",
             "location_name": None,
+            "location_code": None,
         }
         self.invalid_data_source.save(user=self.user)
 

@@ -91,6 +91,7 @@ BEGIN
             FROM individual_individualdatasource ids 
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
+                    AND loc."LocationCode" = ids."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
             WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID
             AND ids.upload_id = current_upload_id
@@ -212,6 +213,7 @@ BEGIN
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
+                    AND loc."LocationCode" = ids."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
             WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID 
             AND ids.upload_id = current_upload_id

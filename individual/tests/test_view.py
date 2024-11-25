@@ -29,7 +29,7 @@ class TestView(APITestCase):
             response['Content-Disposition']
         )
 
-        expected_base_csv_header = f'first_name,last_name,dob,location_name,id'
+        expected_base_csv_header = f'first_name,last_name,dob,location_name,location_code,id'
         content = b"".join(response.streaming_content).decode('utf-8')
         self.assertTrue(
             expected_base_csv_header in content,

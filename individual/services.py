@@ -584,9 +584,9 @@ class IndividualImportService:
         chunk,
         properties,
         unique_validations,
-        loc_name_dist_ids_from_db,
+        loc_name_code_district_ids_from_db,
         user_allowed_loc_ids,
-        duplicate_village_names,
+        duplicate_village_name_code_tuples,
     ):
         validated_dataframe = []
         check_location = 'location_name' in chunk.columns
@@ -607,9 +607,10 @@ class IndividualImportService:
                 field_validation['validations']['location_name'] = (
                     IndividualImportService._validate_location(
                         row.location_name,
-                        loc_name_dist_ids_from_db,
+                        row.location_code,
+                        loc_name_code_district_ids_from_db,
                         user_allowed_loc_ids,
-                        duplicate_village_names,
+                        duplicate_village_name_code_tuples,
                     )
                 )
 
@@ -632,22 +633,22 @@ class IndividualImportService:
         check_location = 'location_name' in dataframe.columns
         if check_location:
             # Issue a single DB query instead of per row for efficiency
-            loc_name_dist_ids_from_db = self._query_location_district_ids(dataframe.location_name)
+            loc_name_code_district_ids_from_db = self._query_location_district_ids(dataframe)
             user_allowed_loc_ids = LocationManager().get_allowed_ids(self.user)
-            duplicate_village_names = self._query_dupcliate_village_names()
+            duplicate_village_name_code_tuples = self._query_duplicate_village_name_code()
         else:
-            loc_name_dist_ids_from_db = None
+            loc_name_code_district_ids_from_db = None
             user_allowed_loc_ids = None
-            duplicate_village_names = None
+            duplicate_village_name_code_tuples = None
 
         # TODO: Use ProcessPoolExecutor after resolving django dependency loading issue
         validated_dataframe = IndividualImportService.process_chunk(
             dataframe,
             properties,
             unique_validations,
-            loc_name_dist_ids_from_db,
+            loc_name_code_district_ids_from_db,
             user_allowed_loc_ids,
-            duplicate_village_names,
+            duplicate_village_name_code_tuples,
         )
 
         self.save_validation_error_in_data_source_bulk(validated_dataframe)
@@ -655,39 +656,49 @@ class IndividualImportService:
         return validated_dataframe, invalid_items
 
     @staticmethod
-    def _query_location_district_ids(location_names):
-        locations = Location.objects.filter(type="V", name__in=location_names.unique().tolist())
-        return {loc.name: loc.parent.parent.id for loc in locations}
+    def _query_location_district_ids(df):
+        unique_tuples = df[['location_name', 'location_code']].drop_duplicates()
+        query = Q()
+        for _, row in unique_tuples.iterrows():
+            query |= Q(name=row['location_name'], code=row['location_code'])
+        locations = Location.objects.filter(type="V").filter(query)
+        return {(loc.name, loc.code): loc.parent.parent.id for loc in locations}
 
     @staticmethod
-    def _query_dupcliate_village_names():
+    def _query_duplicate_village_name_code():
         return (
             Location.objects
             .filter(type="V")
-            .values('name')
-            .annotate(name_count=Count('name'))
+            .values('name', 'code')
+            .annotate(name_count=Count('id'))
             .filter(name_count__gt=1)
-            .values_list('name', flat=True)
+            .values_list('name', 'code')
         )
 
     @staticmethod
-    def _validate_location(location_name, loc_name_dist_ids_from_db, user_allowed_loc_ids, duplicate_village_names):
+    def _validate_location(
+        location_name,
+        location_code,
+        loc_name_code_district_ids_from_db,
+        user_allowed_loc_ids,
+        duplicate_village_name_code_tuples
+    ):
         result = {
             'field_name': 'location_name',
         }
-        if location_name is None or location_name == "":
+        if (location_name is None or location_name == "") and (location_code is None or location_code == ""):
             result['success'] = True
-        elif loc_name_dist_ids_from_db is None and user_allowed_loc_ids is None:
+        elif loc_name_code_district_ids_from_db is None and user_allowed_loc_ids is None:
             result['success'] = True
-        elif location_name not in loc_name_dist_ids_from_db:
+        elif (location_name, location_code) not in loc_name_code_district_ids_from_db:
             result['success'] = False
-            result['note'] = f"'location_name' value '{location_name}' is not a valid location name. Please check the spelling against the list of locations in the system."
-        elif location_name in duplicate_village_names:
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is not valid. Please check the spelling against the list of locations in the system."
+        elif (location_name, location_code) in duplicate_village_name_code_tuples:
             result['success'] = False
-            result['note'] = f"'location_name' value '{location_name}' is ambiguous, because there are more than one location with this name found in the system."
-        elif loc_name_dist_ids_from_db[location_name] not in user_allowed_loc_ids:
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is ambiguous, because there are more than one location with this name and code found in the system."
+        elif loc_name_code_district_ids_from_db[(location_name, location_code)] not in user_allowed_loc_ids:
             result['success'] = False
-            result['note'] = f"'location_name' value '{location_name}' is outside the current user's location permissions."
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is outside the current user's location permissions."
         else:
             result['success'] = True
         return result

@@ -32,7 +32,7 @@ class TestBasePythonWorkflowExecutor(TestCase):
         patch.stopall()
 
     def test_validate_dataframe_headers_valid(self):
-        self.executor.df = pd.DataFrame(columns=['first_name', 'last_name', 'dob', 'id', 'location_name'])
+        self.executor.df = pd.DataFrame(columns=['first_name', 'last_name', 'dob', 'id', 'location_name', 'location_code'])
         try:
             self.executor.validate_dataframe_headers()
         except PythonWorkflowHandlerException:
@@ -40,7 +40,7 @@ class TestBasePythonWorkflowExecutor(TestCase):
 
     def test_validate_dataframe_headers_missing_required_fields(self):
         # DataFrame missing required 'first_name' column
-        self.executor.df = pd.DataFrame(columns=['last_name', 'dob', 'id', 'location_name'])
+        self.executor.df = pd.DataFrame(columns=['last_name', 'dob', 'id', 'location_name', 'location_code'])
 
         with self.assertRaises(PythonWorkflowHandlerException) as cm:
             self.executor.validate_dataframe_headers()
@@ -49,7 +49,7 @@ class TestBasePythonWorkflowExecutor(TestCase):
 
     def test_validate_dataframe_headers_invalid_headers(self):
         # DataFrame with an invalid column
-        self.executor.df = pd.DataFrame(columns=['first_name', 'last_name', 'dob', 'id', 'location_name', 'unexpected_column'])
+        self.executor.df = pd.DataFrame(columns=['first_name', 'last_name', 'dob', 'id', 'location_name', 'location_code', 'unexpected_column'])
 
         with self.assertRaises(PythonWorkflowHandlerException) as cm:
             self.executor.validate_dataframe_headers()
@@ -58,7 +58,7 @@ class TestBasePythonWorkflowExecutor(TestCase):
 
     def test_validate_dataframe_headers_update_missing_id(self):
         # DataFrame missing 'ID' when is_update=True
-        columns = ['first_name', 'last_name', 'dob', 'id', 'location_name']
+        columns = ['first_name', 'last_name', 'dob', 'id', 'location_name', 'location_code']
         self.executor.df = pd.DataFrame(columns=columns)
 
         with self.assertRaises(PythonWorkflowHandlerException) as cm:

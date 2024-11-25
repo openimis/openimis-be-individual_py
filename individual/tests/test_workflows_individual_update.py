@@ -80,6 +80,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
                 "last_name": "Doe",
                 "dob": "1980-01-01",
                 "location_name": self.village.name,
+                "location_code": self.village.code,
             }
         )
         self.valid_data_source.save(user=self.user)
@@ -139,6 +140,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
             "ID": str(self.individual2.id),
             "first_name": self.individual2_updated_first_name,
             "location_name": None,
+            "location_code": None,
         }
         self.invalid_data_source.save(user=self.user)
 
@@ -170,6 +172,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
             "ID": str(self.individual2.id),
             "first_name": "Jane",
             "location_name": None,
+            "location_code": None,
         }
         self.invalid_data_source.save(user=self.user)
 
