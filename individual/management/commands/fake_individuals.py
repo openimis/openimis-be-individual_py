@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand
 from individual.models import GroupIndividual
 from individual.tests.test_helpers import generate_random_string
 from location.models import Location
+from core import filter_validity
 from core.models import User
 
 
@@ -65,7 +66,7 @@ class Command(BaseCommand):
         location_qs = Location.objects
         if user:
             location_qs = Location.get_queryset(location_qs, user)
-        permitted_locations = list(location_qs.filter(type='V'))
+        permitted_locations = list(location_qs.filter(type='V', *filter_validity()))
 
         individuals = []
         num_individuals = 100

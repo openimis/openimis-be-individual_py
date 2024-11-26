@@ -71,6 +71,7 @@ DO $$
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
                     AND loc."LocationCode" = ds."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
+                    AND loc."ValidityTo" IS NULL
             WHERE ds.upload_id=current_upload_id 
                 AND ds.individual_id is null
                 AND ds."isDeleted"=False

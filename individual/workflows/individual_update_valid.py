@@ -93,6 +93,7 @@ BEGIN
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
                     AND loc."LocationCode" = ids."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
+                    AND loc."ValidityTo" IS NULL
             WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID
             AND ids.upload_id = current_upload_id
             AND validations ->> 'validation_errors' = '[]'
@@ -215,6 +216,7 @@ BEGIN
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
                     AND loc."LocationCode" = ids."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
+                    AND loc."ValidityTo" IS NULL
             WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID 
             AND ids.upload_id = current_upload_id
             AND (ids."UUID" = ANY(accepted))

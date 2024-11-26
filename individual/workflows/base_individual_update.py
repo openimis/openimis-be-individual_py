@@ -88,6 +88,7 @@ BEGIN
                     ON loc."LocationName" = f."Json_ext"->>'location_name'
                     AND loc."LocationCode" = f."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
+                    AND loc."ValidityTo" IS NULL
             WHERE individual_individual."UUID" = (f."Json_ext" ->> 'ID')::UUID
             returning individual_individual."UUID", f."UUID" as "individualdatasource_id")
 

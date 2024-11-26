@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
 
 from calculation.services import get_calculation_object
+from core import filter_validity
 from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService
@@ -661,14 +662,14 @@ class IndividualImportService:
         query = Q()
         for _, row in unique_tuples.iterrows():
             query |= Q(name=row['location_name'], code=row['location_code'])
-        locations = Location.objects.filter(type="V").filter(query)
+        locations = Location.objects.filter(type="V", *filter_validity()).filter(query)
         return {(loc.name, loc.code): loc.parent.parent.id for loc in locations}
 
     @staticmethod
     def _query_duplicate_village_name_code():
         return (
             Location.objects
-            .filter(type="V")
+            .filter(type="V", *filter_validity())
             .values('name', 'code')
             .annotate(name_count=Count('id'))
             .filter(name_count__gt=1)
