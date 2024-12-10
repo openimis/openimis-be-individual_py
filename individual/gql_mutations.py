@@ -63,8 +63,11 @@ class CreateGroupInputType(OpenIMISMutation.Input):
     location_id = graphene.Int(required=False)
 
 
-class UpdateGroupInputType(CreateGroupInputType):
+class UpdateGroupInputType(OpenIMISMutation.Input):
     id = graphene.UUID(required=True)
+    code = graphene.String(required=False)
+    individuals_data = graphene.List(CreateGroupIndividualInputTypeInputObjectType, required=False)
+    location_id = graphene.Int(required=False)
 
 
 class UpdateGroupIndividualInputType(CreateGroupIndividualInputType):

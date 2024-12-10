@@ -128,7 +128,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
               updateGroup(
                 input: {{
                   id: "{group.id}"
-                  code: "GFOO"
                   locationId: {self.village_a.id}
                 }}
               ) {{
@@ -138,21 +137,21 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
             }}
         '''
 
-        # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
-
         # IMIS admin can do everything
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
         )
+        self.assertResponseNoErrors(response)
         content = json.loads(response.content)
         internal_id = content['data']['updateGroup']['internalId']
         self.assert_mutation_success(internal_id)
+
+        # Anonymous User has no permission
+        response = self.query(query_str)
+        content = json.loads(response.content)
+        internal_id = content['data']['updateGroup']['internalId']
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
