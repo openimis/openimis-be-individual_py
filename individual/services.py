@@ -55,6 +55,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     @register_service_signal('individual_service.update')
     def update(self, obj_data):
         self._update_json_ext(obj_data)
+        print('test')
         return super().update(obj_data)
 
     @register_service_signal('individual_service.delete')
