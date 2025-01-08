@@ -1,10 +1,12 @@
 import json
 from individual.tests.test_helpers import (
     create_individual,
+    create_group,
     create_group_with_individual,
     add_individual_to_group,
     IndividualGQLTestCase,
 )
+from location.test_helpers import create_test_village
 
 
 class IndividualGQLQueryTest(IndividualGQLTestCase):
@@ -18,20 +20,14 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             group_override={'location': cls.village_a},
             individual_override={'location': cls.village_a},
         )
+
         cls.individual_a_no_group = create_individual(
             cls.admin_user.username,
             payload_override={'location': cls.village_a},
         )
-        cls.individual_a_group_no_loc, cls.group_no_loc, _ = create_group_with_individual(
-            cls.admin_user.username,
-            individual_override={'location': cls.village_a},
-        )
 
-        cls.individual_no_loc_group_a = create_individual(cls.admin_user.username)
-        add_individual_to_group(
+        cls.individual_no_loc, cls.group_no_loc, _ = create_group_with_individual(
             cls.admin_user.username,
-            cls.individual_no_loc_group_a,
-            cls.group_a,
         )
 
         cls.individual_no_loc_no_group = create_individual(cls.admin_user.username)
@@ -169,6 +165,100 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.group_b.uuid) in group_uuids)
         self.assertTrue(str(self.group_no_loc.uuid) in group_uuids)
 
+    def test_group_query_filter_by_location(self):
+        date_created = str(self.group_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          group(
+            dateCreated_Gte: "{date_created}",
+            parentLocation: "{self.village_a.uuid}",
+            parentLocationLevel: 3
+        ) {{
+            edges {{
+              node {{
+                uuid
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        group_data = content['data']['group']
+
+        group_uuids = list(
+            e['node']['uuid'] for e in group_data['edges']
+        )
+        self.assertTrue(str(self.group_a.uuid) in group_uuids)
+        self.assertFalse(str(self.group_b.uuid) in group_uuids)
+        self.assertFalse(str(self.group_no_loc.uuid) in group_uuids)
+
+        # Create another group whose village is in the same ward as village a
+        other_village_dist_a = create_test_village()
+        other_village_dist_a.parent = self.village_a.parent
+        other_village_dist_a.save()
+        other_ward_a_group = create_group(self.admin_user.username, {
+            'location': other_village_dist_a,
+        })
+
+        # query goes up one loc level
+        query_str = query_str.replace(
+            str(self.village_a.uuid), str(self.village_a.parent.uuid)
+        ).replace(
+            f"parentLocationLevel: 3", f"parentLocationLevel: 2"
+        )
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        group_data = content['data']['group']
+
+        group_uuids = list(
+            e['node']['uuid'] for e in group_data['edges']
+        )
+        self.assertTrue(str(self.group_a.uuid) in group_uuids)
+        self.assertTrue(str(other_ward_a_group.uuid) in group_uuids)
+        self.assertFalse(str(self.group_b.uuid) in group_uuids)
+        self.assertFalse(str(self.group_no_loc.uuid) in group_uuids)
+
+    def test_group_query_filter_by_location_is_null(self):
+        date_created = str(self.group_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          group(
+            dateCreated_Gte: "{date_created}",
+            location_Isnull: true,
+        ) {{
+            edges {{
+              node {{
+                uuid
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        group_data = content['data']['group']
+
+        group_uuids = list(
+            e['node']['uuid'] for e in group_data['edges']
+        )
+        self.assertFalse(str(self.group_a.uuid) in group_uuids)
+        self.assertFalse(str(self.group_b.uuid) in group_uuids)
+        self.assertTrue(str(self.group_no_loc.uuid) in group_uuids)
 
     def test_group_history_query_row_security(self):
         def send_group_history_query(group_uuid, as_user_token):
@@ -209,7 +299,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             )
 
         # SP officer A sees only group from their assigned districts and
-        # groups wihtout location
+        # groups without location
         permitted_uuids = [
             self.group_a.uuid,
             self.group_no_loc.uuid,
@@ -233,7 +323,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
 
 
         # SP officer B sees only group from their assigned district and
-        # groups wihtout location
+        # groups without location
         permitted_uuids = [
             self.group_b.uuid,
             self.group_no_loc.uuid,
@@ -301,9 +391,8 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_b.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
         # Health Enrollment Officier (role=1) sees nothing
         response = self.query(
@@ -350,7 +439,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         }}'''
 
         # SP officer A sees only individual from their assigned districts
-        # individuals wihtout location, and individuals whose group has no location
+        # individuals without location, and individuals whose group has no location
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
@@ -366,12 +455,11 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
         # SP officer B sees only individual from their assigned district,
-        # individuals wihtout location, and individuals whose group has no location
+        # individuals without location, and individuals whose group has no location
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -387,9 +475,110 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertFalse(str(self.individual_a.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_b.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
+
+    def test_individual_query_filter_by_location(self):
+        date_created = str(self.individual_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          individual(
+            dateCreated_Gte: "{date_created}",
+            parentLocation: "{self.village_a.uuid}",
+            parentLocationLevel: 3
+          ) {{
+            edges {{
+              node {{
+                uuid
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
+
+        # Create another individual whose village is in the same district as village a
+        other_village_dist_a = create_test_village()
+        district_a = self.village_a.parent.parent
+        other_village_dist_a.parent.parent = district_a
+        other_village_dist_a.parent.save()
+        other_dist_a_individual = create_individual(self.admin_user.username, {
+            'location': other_village_dist_a,
+        })
+
+        # query goes up two loc levels
+        query_str = query_str.replace(
+            str(self.village_a.uuid), str(district_a.uuid)
+        ).replace(
+            f"parentLocationLevel: 3", f"parentLocationLevel: 1"
+        )
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
+        self.assertTrue(str(other_dist_a_individual.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
+
+    def test_individual_query_filter_by_location_is_null(self):
+        date_created = str(self.individual_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          individual(
+            dateCreated_Gte: "{date_created}",
+            location_Isnull: true
+          ) {{
+            edges {{
+              node {{
+                uuid
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertFalse(str(self.individual_a.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
 
 
     def test_individual_query_with_group(self):
@@ -428,7 +617,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             e['node']['uuid'] for e in individual_data['edges']
         )
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
 
@@ -478,9 +667,8 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         permitted_uuids = [
             self.individual_a.uuid,
             self.individual_a_no_group.uuid,
-            self.individual_a_group_no_loc.uuid,
+            self.individual_no_loc.uuid,
             self.individual_no_loc_no_group.uuid,
-            self.individual_no_loc_group_a.uuid,
         ]
 
         not_permitted_uuids = [
@@ -501,12 +689,11 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
 
 
         # SP officer B sees only individual from their assigned district,
-        # individuals wihtout location, and individuals whose group has no location
+        # individuals without location, and individuals whose group has no location
         permitted_uuids = [
             self.individual_b.uuid,
-            self.individual_a_group_no_loc.uuid,
             self.individual_no_loc_no_group.uuid,
-            self.individual_no_loc_group_a.uuid,
+            self.individual_no_loc.uuid,
         ]
 
         not_permitted_uuids = [
@@ -574,7 +761,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         response = send_group_individual_query(self.group_a.uuid, self.dist_a_user_token)
         self.assertResponseNoErrors(response)
         content = json.loads(response.content)
-        self.assertEqual(content['data']['groupIndividual']['totalCount'], 2)
+        self.assertEqual(content['data']['groupIndividual']['totalCount'], 1)
 
         group_data = content['data']['groupIndividual']
 
@@ -582,7 +769,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             e['node']['individual']['uuid'] for e in group_data['edges']
         )
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
         # SP officer A shouldn't see group individuals from other districts
         response = send_group_individual_query(self.group_b.uuid, self.dist_a_user_token)
@@ -654,11 +840,10 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             )
 
         # SP officer A sees only individuals from their assigned districts and
-        # from groups wihtout location
+        # from groups without location
         permitted_uuids = [
             self.individual_a.uuid,
-            self.individual_a_group_no_loc.uuid,
-            self.individual_no_loc_group_a.uuid,
+            self.individual_no_loc.uuid,
         ]
 
         not_permitted_uuids = [
@@ -681,15 +866,14 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             self.assertEqual(content['data']['groupIndividualHistory']['totalCount'], 0)
 
         # SP officer B sees only group from their assigned district and
-        # from groups wihtout location
+        # from groups without location
         permitted_uuids = [
             self.individual_b.uuid,
-            self.individual_a_group_no_loc.uuid,
+            self.individual_no_loc.uuid,
         ]
 
         not_permitted_uuids = [
             self.individual_a.uuid,
-            self.individual_no_loc_group_a.uuid,
         ]
 
         for uuid in permitted_uuids:

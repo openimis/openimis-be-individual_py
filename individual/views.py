@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 from django.db.models import Q
-from django.http import HttpResponse, StreamingHttpResponse
+from django.http import StreamingHttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -21,25 +21,6 @@ from workflow.services import WorkflowService
 
 logger = logging.getLogger(__name__)
 
-_import_loaders = {
-    # .csv
-    'text/csv': lambda f, **kwargs: pd.read_csv(f, **kwargs),
-    # .xlsx
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': lambda f, **kwargs: pd.read_excel(f, **kwargs),
-    # .xls
-    'application/vnd.ms-excel': lambda f, **kwargs: pd.read_excel(f, **kwargs),
-    # .ods
-    'application/vnd.oasis.opendocument.spreadsheet': lambda f, **kwargs: pd.read_excel(f, **kwargs),
-}
-
-
-def load_spreadsheet(file: InMemoryUploadedFile, **kwargs) -> pd.DataFrame:
-    content_type = file.content_type
-    if content_type not in _import_loaders:
-        raise ValueError("Unsupported content type: {}".format(content_type))
-
-    return _import_loaders[content_type](file, **kwargs)
-
 
 def get_global_schema_fields():
     schema = json.loads(IndividualConfig.individual_schema)
@@ -52,7 +33,7 @@ def get_global_schema_fields():
 @permission_classes([check_user_rights(IndividualConfig.gql_individual_create_perms, )])
 def download_template_file(request):
     try:
-        base_fields = ['first_name', 'last_name', 'dob', 'id']
+        base_fields = IndividualConfig.individual_base_fields
         extra_fields = get_global_schema_fields()
         all_fields = base_fields + extra_fields
         template_df = pd.DataFrame(columns=all_fields)

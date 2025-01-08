@@ -36,11 +36,11 @@ class IndividualGQLType(DjangoObjectType):
             "first_name": ["iexact", "istartswith", "icontains"],
             "last_name": ["iexact", "istartswith", "icontains"],
             "dob": ["exact", "lt", "lte", "gt", "gte"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+            "location": ["isnull"],
         }
         connection_class = ExtendedConnection
 
@@ -64,7 +64,6 @@ class IndividualHistoryGQLType(DjangoObjectType):
             "first_name": ["iexact", "istartswith", "icontains"],
             "last_name": ["iexact", "istartswith", "icontains"],
             "dob": ["exact", "lt", "lte", "gt", "gte"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
@@ -92,7 +91,6 @@ class IndividualDataSourceUploadGQLType(DjangoObjectType):
             "status": ["iexact", "istartswith", "icontains"],
             "source_type": ["iexact", "istartswith", "icontains"],
             "source_name": ["iexact", "istartswith", "icontains"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
@@ -109,7 +107,6 @@ class IndividualDataSourceGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact", "isnull"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
@@ -141,6 +138,7 @@ class GroupGQLType(DjangoObjectType):
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+            "location": ["isnull"],
         }
         connection_class = ExtendedConnection
 
@@ -266,7 +264,6 @@ class GroupDataSourceGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact", "isnull"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],

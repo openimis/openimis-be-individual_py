@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import Subquery, Q
 from django.utils.translation import gettext as _
 
+from core import filter_validity
 from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationMixin, BaseMutation, \
     BaseHistoryModelUpdateMutationMixin, BaseHistoryModelCreateMutationMixin
 from core.schema import OpenIMISMutation
@@ -62,8 +63,11 @@ class CreateGroupInputType(OpenIMISMutation.Input):
     location_id = graphene.Int(required=False)
 
 
-class UpdateGroupInputType(CreateGroupInputType):
+class UpdateGroupInputType(OpenIMISMutation.Input):
     id = graphene.UUID(required=True)
+    code = graphene.String(required=False)
+    individuals_data = graphene.List(CreateGroupIndividualInputTypeInputObjectType, required=False)
+    location_id = graphene.Int(required=False)
 
 
 class UpdateGroupIndividualInputType(CreateGroupIndividualInputType):
@@ -167,7 +171,12 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
                 IndividualConfig.gql_individual_delete_perms):
             raise PermissionDenied(_("unauthorized"))
 
-        locations_id = list(Location.objects.filter(individuals__id__in=data['ids']).values_list('id', flat=True))
+        locations_id = list(
+            Location.objects.filter(
+                individuals__id__in=data['ids'],
+                *filter_validity()
+            ).values_list('id', flat=True)
+        )
         if len(locations_id)>0 and not LocationManager().is_allowed(
                 user,
                 locations_id
@@ -209,7 +218,12 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
                 IndividualConfig.gql_individual_undo_delete_perms):
             raise PermissionDenied(_("unauthorized"))
 
-        locations_id = list(Location.objects.filter(individuals__id__in=data['ids']).values_list('id', flat=True))
+        locations_id = list(
+            Location.objects.filter(
+                individuals__id__in=data['ids'],
+                *filter_validity()
+            ).values_list('id', flat=True)
+        )
         if len(locations_id)>0 and not LocationManager().is_allowed(
                 user,
                 locations_id
@@ -318,7 +332,12 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
                 IndividualConfig.gql_group_delete_perms):
             raise PermissionDenied(_("unauthorized"))
 
-        locations_id = list(Location.objects.filter(groups__id__in=data['ids']).values_list('id', flat=True))
+        locations_id = list(
+            Location.objects.filter(
+                groups__id__in=data['ids'],
+                *filter_validity()
+            ).values_list('id', flat=True)
+        )
         if len(locations_id)>0 and not LocationManager().is_allowed(
                 user,
                 locations_id
@@ -337,7 +356,11 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
         if ids:
             with transaction.atomic():
                 for identifier in ids:
-                    service.delete({'id': identifier})
+                    obj_data = {'id': identifier}
+                    if IndividualConfig.check_group_delete:
+                        service.create_delete_task(obj_data)
+                    else:
+                        service.delete(obj_data)
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)
@@ -442,10 +465,12 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
         if not user.has_perms(
                 IndividualConfig.gql_group_delete_perms):
             raise PermissionDenied(_("unauthorized"))
-        locations_qs = list(Location.objects.filter(
-            Q(groups__groupindividuals__id__in=data['ids'])|
-            Q(individuals__groupindividuals__id__in=data['ids'])
-        ).values_list('id', flat=True))
+        locations_qs = list(
+            Location.objects.filter(
+                Q(groups__groupindividuals__id__in=data['ids'])|
+                Q(individuals__groupindividuals__id__in=data['ids'])
+            ).filter(*filter_validity()).values_list('id', flat=True)
+        )
         # must first check if locations_qs exists in case none of the groups or individuals has location
         if len(locations_qs)>0 and not LocationManager().is_allowed(
                 user,

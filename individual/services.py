@@ -9,12 +9,13 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
 
 from calculation.services import get_calculation_object
+from core import filter_validity
 from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.utils.translation import gettext as _
-from django.db.models import Q, OuterRef, Subquery
+from django.db.models import Q, OuterRef, Subquery, Count
 from individual.apps import IndividualConfig
 from individual.models import (
     Individual,
@@ -37,6 +38,7 @@ from individual.validation import (
 )
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
+from location.models import Location, LocationManager
 from tasks_management.models import Task
 from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
     crud_business_data_builder, DeleteCheckerLogicServiceMixin
@@ -149,7 +151,12 @@ class IndividualDataSourceService(BaseService):
         super().__init__(user, validation_class)
 
 
-class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLogicServiceMixin):
+class GroupService(
+    BaseService,
+    CreateCheckerLogicServiceMixin,
+    UpdateCheckerLogicServiceMixin,
+    DeleteCheckerLogicServiceMixin
+):
     OBJECT_TYPE = Group
 
     def __init__(self, user, validation_class=GroupValidation):
@@ -470,6 +477,18 @@ class GroupAndGroupIndividualAlignmentService:
             return
         self._assure_primary_recipient_in_group(group)
 
+    def ensure_location_consistent(self, group, individual, role):
+        if group.location_id == individual.location_id:
+            return
+
+        if role == GroupIndividual.Role.HEAD and group.location_id is None:
+            group.location_id = individual.location_id
+            group.save(user=self.user.user)
+        else:
+            individual.location_id = group.location_id
+            individual.save(user=self.user.user)
+
+
     def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group=group, is_deleted=False)
         primary_exists = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).exists()
@@ -556,7 +575,7 @@ class IndividualImportService:
         record.save(user=self.user.user)
 
     def validate_import_individuals(self, upload_id: uuid, individual_sources):
-        dataframe = self._load_dataframe(individual_sources)
+        dataframe = load_dataframe(individual_sources)
         validated_dataframe, invalid_items = self._validate_possible_individuals(
             dataframe,
             upload_id
@@ -566,39 +585,49 @@ class IndividualImportService:
     def synchronize_data_for_reporting(self, upload_id: uuid):
         self._synchronize_individual(upload_id)
 
-
     @staticmethod
-    def process_chunk(chunk, properties, unique_validations, calculation, calculation_uuid):
+    def process_chunk(
+        chunk,
+        properties,
+        unique_validations,
+        loc_name_code_district_ids_from_db,
+        user_allowed_loc_ids,
+        duplicate_village_name_code_tuples,
+    ):
         validated_dataframe = []
+        check_location = 'location_name' in chunk.columns
+
         for _, row in chunk.iterrows():
             field_validation = {'row': row.to_dict(), 'validations': {}}
             for field, field_properties in properties.items():
-                
+
                 # Validation Calculation
                 if "validationCalculation" in field_properties and field in row:
-                    validation_name = field_properties["validationCalculation"]["name"]
-                    field_validation['validations'][field] = calculation.calculate_if_active_for_object(
-                        validation_name,
-                        calculation_uuid,
-                        field_name=field,
-                        field_value=row[field]
-                    )
-                
+                    field_validation['validations'][field] = IndividualImportService._handle_validation_calculation(row, field, field_properties)
+
                 # Uniqueness Check
                 if "uniqueness" in field_properties and field in row:
-                    field_validation['validations'][f'{field}_uniqueness'] = not unique_validations[field].loc[row.name]
+                    field_validation['validations'][f'{field}_uniqueness'] = IndividualImportService._handle_uniqueness(row, field, unique_validations)
+
+            if 'location_name' in chunk.columns:
+                field_validation['validations']['location_name'] = (
+                    IndividualImportService._validate_location(
+                        row.location_name,
+                        row.location_code,
+                        loc_name_code_district_ids_from_db,
+                        user_allowed_loc_ids,
+                        duplicate_village_name_code_tuples,
+                    )
+                )
 
             validated_dataframe.append(field_validation)
-        
+
         return validated_dataframe
-    
-    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid, num_workers=4):
+
+    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
         schema_dict = json.loads(IndividualConfig.individual_schema)
         properties = schema_dict.get("properties", {})
-        
-        calculation_uuid = IndividualConfig.validation_calculation_uuid
-        calculation = get_calculation_object(calculation_uuid)
-        
+
         unique_fields = [field for field, props in properties.items() if "uniqueness" in props]
         unique_validations = {}
         if unique_fields:
@@ -607,41 +636,94 @@ class IndividualImportService:
                 for field in unique_fields
             }
 
-        chunk_size = math.ceil(len(dataframe) / num_workers)
-        data_chunks = [dataframe[i:i + chunk_size] for i in range(0, dataframe.shape[0], chunk_size)]
+        check_location = 'location_name' in dataframe.columns
+        if check_location:
+            # Issue a single DB query instead of per row for efficiency
+            loc_name_code_district_ids_from_db = self._query_location_district_ids(dataframe)
+            user_allowed_loc_ids = LocationManager().get_allowed_ids(self.user)
+            duplicate_village_name_code_tuples = self._query_duplicate_village_name_code()
+        else:
+            loc_name_code_district_ids_from_db = None
+            user_allowed_loc_ids = None
+            duplicate_village_name_code_tuples = None
 
-        validated_dataframe = []
-        with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = [executor.submit(
-                self.process_chunk, 
-                chunk, 
-                properties, 
-                unique_validations, 
-                calculation, 
-                calculation_uuid
-            ) for chunk in data_chunks]
-            
-            for future in concurrent.futures.as_completed(futures):
-                validated_dataframe.extend(future.result())
+        # TODO: Use ProcessPoolExecutor after resolving django dependency loading issue
+        validated_dataframe = IndividualImportService.process_chunk(
+            dataframe,
+            properties,
+            unique_validations,
+            loc_name_code_district_ids_from_db,
+            user_allowed_loc_ids,
+            duplicate_village_name_code_tuples,
+        )
 
         self.save_validation_error_in_data_source_bulk(validated_dataframe)
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
 
-    def _handle_uniqueness(self, row, field, field_properties, dataframe):
-        unique_class_validation = IndividualConfig.unique_class_validation
-        calculation_uuid = IndividualConfig.validation_calculation_uuid
-        calculation = get_calculation_object(calculation_uuid)
-        result_row = calculation.calculate_if_active_for_object(
-            unique_class_validation,
-            calculation_uuid,
-            field_name=field,
-            field_value=row[field],
-            incoming_data=dataframe
-        )
-        return result_row
+    @staticmethod
+    def _query_location_district_ids(df):
+        unique_tuples = df[['location_name', 'location_code']].drop_duplicates()
+        query = Q()
+        for _, row in unique_tuples.iterrows():
+            query |= Q(name=row['location_name'], code=row['location_code'])
+        locations = Location.objects.filter(type="V", *filter_validity()).filter(query)
+        return {(loc.name, loc.code): loc.parent.parent.id for loc in locations}
 
-    def _handle_validation_calculation(self, row, field, field_properties):
+    @staticmethod
+    def _query_duplicate_village_name_code():
+        return (
+            Location.objects
+            .filter(type="V", *filter_validity())
+            .values('name', 'code')
+            .annotate(name_count=Count('id'))
+            .filter(name_count__gt=1)
+            .values_list('name', 'code')
+        )
+
+    @staticmethod
+    def _validate_location(
+        location_name,
+        location_code,
+        loc_name_code_district_ids_from_db,
+        user_allowed_loc_ids,
+        duplicate_village_name_code_tuples
+    ):
+        result = {
+            'field_name': 'location_name',
+        }
+        if (location_name is None or location_name == "") and (location_code is None or location_code == ""):
+            result['success'] = True
+        elif loc_name_code_district_ids_from_db is None and user_allowed_loc_ids is None:
+            result['success'] = True
+        elif (location_name, location_code) not in loc_name_code_district_ids_from_db:
+            result['success'] = False
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is not valid. Please check the spelling against the list of locations in the system."
+        elif (location_name, location_code) in duplicate_village_name_code_tuples:
+            result['success'] = False
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is ambiguous, because there are more than one location with this name and code found in the system."
+        elif loc_name_code_district_ids_from_db[(location_name, location_code)] not in user_allowed_loc_ids:
+            result['success'] = False
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is outside the current user's location permissions."
+        else:
+            result['success'] = True
+        return result
+
+
+    @staticmethod
+    def _handle_uniqueness(row, field, unique_validations):
+        success = not unique_validations[field].loc[row.name]
+        result = {
+            "success": success,
+            "field_name": field,
+        }
+        if not success:
+            result["note"] = f"'{field}' Field value '{row[field]}' is duplicated"
+        return result
+
+
+    @staticmethod
+    def _handle_validation_calculation(row, field, field_properties):
         validation_calculation = field_properties.get("validationCalculation", {}).get("name")
         if not validation_calculation:
             raise ValueError("Missing validation name")
@@ -687,9 +769,6 @@ class IndividualImportService:
             data_source_objects.append(ds)
 
         IndividualDataSource.objects.bulk_create(data_source_objects)
-
-    def _load_dataframe(self, individual_sources) -> pd.DataFrame:
-        return load_dataframe(individual_sources)
 
     def _trigger_workflow(self,
                           workflow: WorkflowHandler,

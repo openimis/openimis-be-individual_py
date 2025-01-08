@@ -5,10 +5,12 @@ from individual.tests.test_helpers import (
     create_group_with_individual,
     IndividualGQLTestCase,
 )
-from individual.models import GroupIndividual
+from individual.models import GroupIndividual, Group
+from tasks_management.models import Task
 from unittest.mock import patch
 from individual.apps import IndividualConfig
 from django.utils.translation import gettext as _
+from django.contrib.contenttypes.models import ContentType
 
 
 class GroupGQLMutationTest(IndividualGQLTestCase):
@@ -126,7 +128,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
               updateGroup(
                 input: {{
                   id: "{group.id}"
-                  code: "GFOO"
                   locationId: {self.village_a.id}
                 }}
               ) {{
@@ -136,21 +137,21 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
             }}
         '''
 
-        # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
-
         # IMIS admin can do everything
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
         )
+        self.assertResponseNoErrors(response)
         content = json.loads(response.content)
         internal_id = content['data']['updateGroup']['internalId']
         self.assert_mutation_success(internal_id)
+
+        # Anonymous User has no permission
+        response = self.query(query_str)
+        content = json.loads(response.content)
+        internal_id = content['data']['updateGroup']['internalId']
+        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -216,6 +217,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         internal_id = content['data']['updateGroup']['internalId']
         self.assert_mutation_success(internal_id)
 
+    @patch.object(IndividualConfig, 'check_group_delete', False)
     def test_delete_group_general_permission(self):
         group1 = create_group(
             self.admin_user.username,
@@ -263,6 +265,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         internal_id = content['data']['deleteGroup']['internalId']
         self.assert_mutation_success(internal_id)
 
+    @patch.object(IndividualConfig, 'check_group_delete', False)
     def test_delete_group_row_security(self):
         group_a1 = create_group(
             self.admin_user.username,
@@ -347,6 +350,46 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         internal_id = content['data']['deleteGroup']['internalId']
         self.assert_mutation_success(internal_id)
+
+    @patch.object(IndividualConfig, 'check_group_delete', True)
+    def test_delete_group_with_check(self):
+        group = create_group(self.admin_user.username)
+        query_str = f'''
+                mutation {{
+                  deleteGroup(
+                    input: {{
+                      ids: ["{group.id}"]
+                    }}
+                  ) {{
+                    clientMutationId
+                    internalId
+                  }}
+                }}
+            '''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        internal_id = content['data']['deleteGroup']['internalId']
+        self.assert_mutation_success(internal_id)
+
+        # Check that the group is not yet deleted
+        group_query = Group.objects.filter(
+            is_deleted=False,
+            id=group.id,
+        )
+        self.assertEqual(group_query.count(), 1)
+
+        # Check that a group delete task is created
+        task_query = Task.objects.filter(
+            entity_type=ContentType.objects.get_for_model(Group),
+            entity_id=group.id,
+            business_event='GroupService.delete',
+        )
+        self.assertEqual(task_query.count(), 1)
+
 
     def test_add_individual_to_group_general_permission(self):
         group = create_group(self.admin_user.username)
@@ -466,15 +509,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         internal_id = content['data']['addIndividualToGroup']['internalId']
         self.assert_mutation_success(internal_id)
 
-        # SP officer A can add individual from district A to group without location
-        response = self.query(
-            query_str.replace(str(group_a.id), str(group_no_loc.id)),
-            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
-        )
-        content = json.loads(response.content)
-        internal_id = content['data']['addIndividualToGroup']['internalId']
-        self.assert_mutation_success(internal_id)
-
         # Adding a individual to a group with different locations is not allowed
         response = self.query(
             query_str.replace(str(group_a.id), str(group_b.id)),
@@ -483,6 +517,15 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         internal_id = content['data']['addIndividualToGroup']['internalId']
         self.assert_mutation_error(internal_id, _('mutation.individual_group_location_mismatch'))
+
+        # SP officer A can add individual from district A to group without location
+        response = self.query(
+            query_str.replace(str(group_a.id), str(group_no_loc.id)),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
+        )
+        content = json.loads(response.content)
+        internal_id = content['data']['addIndividualToGroup']['internalId']
+        self.assert_mutation_success(internal_id)
 
     @patch.object(IndividualConfig, 'check_group_individual_update', new=False)
     def test_edit_individual_in_group_general_permission(self):
@@ -614,6 +657,16 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assertTrue(expected_gi.exists())
         self.assertNotEqual(expected_gi.first().id, group_individual.id)
 
+        # Moving a individual to a group with different locations is not allowed
+        query_str_updated = query_str.replace(str(group_individual_a.id), str(expected_gi.first().id))
+        response = self.query(
+            query_str_updated.replace(str(group_a.id), str(group_b.id)),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        internal_id = content['data']['editIndividualInGroup']['internalId']
+        self.assert_mutation_error(internal_id, _('mutation.individual_group_location_mismatch'))
+
         # SP officer A can move individual from district A to group without location
         response = self.query(
             query_str.replace(str(group_a.id), str(group.id)),
@@ -625,16 +678,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         expected_gi = GroupIndividual.objects.filter(group_id=group.id, individual_id=individual_a.id)
         self.assertTrue(expected_gi.exists())
         self.assertNotEqual(expected_gi.first().id, group_individual_a.id)
-
-        # Moving a individual to a group with different locations is not allowed
-        query_str_updated = query_str.replace(str(group_individual_a.id), str(expected_gi.first().id))
-        response = self.query(
-            query_str_updated.replace(str(group_a.id), str(group_b.id)),
-            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
-        )
-        content = json.loads(response.content)
-        internal_id = content['data']['editIndividualInGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.individual_group_location_mismatch'))
 
     def test_remove_individuals_from_group_general_permission(self):
         __, __, group_individual = create_group_with_individual(self.admin_user.username)

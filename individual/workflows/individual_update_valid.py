@@ -83,11 +83,17 @@ BEGIN
             -- Update individual_individual
           with updated_individuals as ( UPDATE individual_individual
             SET first_name = COALESCE(ids."Json_ext"->>'first_name', first_name),
-            last_name = COALESCE(ids."Json_ext"->>'last_name', last_name),
-            dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
-            "DateUpdated" = NOW(),
-            "Json_ext" = ids."Json_ext"
+                last_name = COALESCE(ids."Json_ext"->>'last_name', last_name),
+                dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
+                location_id = loc."LocationId",
+                "DateUpdated" = NOW(),
+                "Json_ext" = ids."Json_ext"
             FROM individual_individualdatasource ids 
+            LEFT JOIN "tblLocations" AS loc
+                    ON loc."LocationName" = ids."Json_ext"->>'location_name'
+                    AND loc."LocationCode" = ids."Json_ext"->>'location_code'
+                    AND loc."LocationType"='V'
+                    AND loc."ValidityTo" IS NULL
             WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID
             AND ids.upload_id = current_upload_id
             AND validations ->> 'validation_errors' = '[]'
@@ -202,9 +208,15 @@ BEGIN
             SET first_name = COALESCE(ids."Json_ext"->>'first_name', first_name),
                 last_name = COALESCE(ids."Json_ext"->>'last_name', last_name),
                 dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
+                location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
                 "Json_ext" = ids."Json_ext"
             FROM individual_individualdatasource ids
+            LEFT JOIN "tblLocations" AS loc
+                    ON loc."LocationName" = ids."Json_ext"->>'location_name'
+                    AND loc."LocationCode" = ids."Json_ext"->>'location_code'
+                    AND loc."LocationType"='V'
+                    AND loc."ValidityTo" IS NULL
             WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID 
             AND ids.upload_id = current_upload_id
             AND (ids."UUID" = ANY(accepted))
