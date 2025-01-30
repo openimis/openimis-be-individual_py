@@ -149,6 +149,12 @@ class GroupIndividual(HistoryModel):
         GRANDMOTHER = 'GRANDMOTHER', _('GRANDMOTHER')
         MOTHER = 'MOTHER', _('MOTHER')
         FATHER = 'FATHER', _('FATHER')
+        GRANDSON = 'GRANDSON', _('GRANDSON')
+        GRANDDAUGHTER = 'GRANDDAUGHTER', _('GRANDDAUGHTER')
+        SISTER = 'SISTER', _('SISTER')
+        BROTHER = 'BROTHER', _('BROTHER')
+        OTHER_RELATIVE = 'OTHER RELATIVE', _('OTHER RELATIVE')
+        NOT_RELATED = 'NOT RELATED', _('NOT RELATED')
 
     class RecipientType(models.TextChoices):
         PRIMARY = 'PRIMARY', _('PRIMARY')
