@@ -15,10 +15,6 @@ if 'opensearch_reports' in apps.app_configs:
         Group
     )
 
-    # skip indexing on model update when running unit tests to avoid connection issues
-    auto_refresh = not is_unit_test_env
-
-    @registry.register_document
     class IndividualDocument(BaseSyncDocument):
         DASHBOARD_NAME = 'Individual'
 
@@ -34,7 +30,7 @@ if 'opensearch_reports' in apps.app_configs:
                 'number_of_shards': 1,
                 'number_of_replicas': 0
             }
-            auto_refresh = auto_refresh
+            auto_refresh = True
 
         class Django:
             model = Individual
@@ -59,7 +55,6 @@ if 'opensearch_reports' in apps.app_configs:
             return items
 
 
-    @registry.register_document
     class GroupIndividualDocument(BaseSyncDocument):
         DASHBOARD_NAME = 'Group'
 
@@ -83,7 +78,7 @@ if 'opensearch_reports' in apps.app_configs:
                 'number_of_shards': 1,
                 'number_of_replicas': 0
             }
-            auto_refresh = auto_refresh
+            auto_refresh = True
 
         class Django:
             model = GroupIndividual
@@ -117,7 +112,6 @@ if 'opensearch_reports' in apps.app_configs:
             return items
 
 
-    @registry.register_document
     class IndividualDataSourceDocument(BaseSyncDocument):
         DASHBOARD_NAME = 'DataUpdates'
 
@@ -133,7 +127,7 @@ if 'opensearch_reports' in apps.app_configs:
                 'number_of_shards': 1,
                 'number_of_replicas': 0
             }
-            auto_refresh = auto_refresh
+            auto_refresh = True
 
         class Django:
             model = IndividualDataSourceUpload
@@ -141,3 +135,10 @@ if 'opensearch_reports' in apps.app_configs:
                 'id'
             ]
             queryset_pagination = 5000
+
+
+# skip registering when running unit tests to avoid connection issues
+if not is_unit_test_env:
+    registry.register_document(IndividualDocument)
+    registry.register_document(GroupIndividualDocument)
+    registry.register_document(IndividualDataSourceDocument)
