@@ -1,6 +1,7 @@
 import graphene
 from django.contrib.auth.models import AnonymousUser
 from graphene_django import DjangoObjectType
+import graphene_django_optimizer as gql_optimizer
 
 from core import prefix_filterset, ExtendedConnection
 from core.gql_queries import UserGQLType
@@ -35,13 +36,17 @@ class IndividualGQLType(DjangoObjectType):
             "first_name": ["iexact", "istartswith", "icontains"],
             "last_name": ["iexact", "istartswith", "icontains"],
             "dob": ["exact", "lt", "lte", "gt", "gte"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+            "location": ["isnull"],
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return Individual.get_queryset(queryset, info.context.user)
 
 
 class IndividualHistoryGQLType(DjangoObjectType):
@@ -59,7 +64,6 @@ class IndividualHistoryGQLType(DjangoObjectType):
             "first_name": ["iexact", "istartswith", "icontains"],
             "last_name": ["iexact", "istartswith", "icontains"],
             "dob": ["exact", "lt", "lte", "gt", "gte"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
@@ -67,6 +71,13 @@ class IndividualHistoryGQLType(DjangoObjectType):
             **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        accessible_individual_query = Individual.get_queryset(None, info.context.user)
+        accessible_individuals = gql_optimizer.query(accessible_individual_query, info)
+        accessible_uuids = set(accessible_individuals.values_list('uuid', flat=True))
+        return queryset.filter(id__in=accessible_uuids)
 
 
 class IndividualDataSourceUploadGQLType(DjangoObjectType):
@@ -80,7 +91,6 @@ class IndividualDataSourceUploadGQLType(DjangoObjectType):
             "status": ["iexact", "istartswith", "icontains"],
             "source_type": ["iexact", "istartswith", "icontains"],
             "source_name": ["iexact", "istartswith", "icontains"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
@@ -97,7 +107,6 @@ class IndividualDataSourceGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact", "isnull"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
@@ -114,9 +123,9 @@ class GroupGQLType(DjangoObjectType):
 
     def resolve_head(self, info):
         return Individual.objects.filter(
-            groupindividual__group__id=self.id,
-            groupindividual__role=GroupIndividual.Role.HEAD,
-            groupindividual__is_deleted=False,
+            groupindividuals__group__id=self.id,
+            groupindividuals__role=GroupIndividual.Role.HEAD,
+            groupindividuals__is_deleted=False,
         ).first()
 
     class Meta:
@@ -129,8 +138,13 @@ class GroupGQLType(DjangoObjectType):
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+            "location": ["isnull"],
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return Group.get_queryset(queryset, info.context.user)
 
 
 class GroupHistoryGQLType(DjangoObjectType):
@@ -140,9 +154,9 @@ class GroupHistoryGQLType(DjangoObjectType):
 
     def resolve_head(self, info):
         return Individual.objects.filter(
-            groupindividual__group__id=self.id,
-            groupindividual__role=GroupIndividual.Role.HEAD,
-            groupindividual__is_deleted=False,
+            groupindividuals__group__id=self.id,
+            groupindividuals__role=GroupIndividual.Role.HEAD,
+            groupindividuals__is_deleted=False,
         ).first()
 
     def resolve_user_updated(self, info):
@@ -160,6 +174,13 @@ class GroupHistoryGQLType(DjangoObjectType):
             **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        accessible_group_query = Group.get_queryset(None, info.context.user)
+        accessible_groups = gql_optimizer.query(accessible_group_query, info)
+        accessible_uuids = set(accessible_groups.values_list('uuid', flat=True))
+        return queryset.filter(id__in=accessible_uuids)
 
 
 class GroupIndividualGQLType(DjangoObjectType):
@@ -180,6 +201,10 @@ class GroupIndividualGQLType(DjangoObjectType):
             **prefix_filterset("group__", GroupGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return GroupIndividual.get_queryset(queryset, info.context.user)
 
 
 class GroupIndividualHistoryGQLType(DjangoObjectType):
@@ -204,6 +229,13 @@ class GroupIndividualHistoryGQLType(DjangoObjectType):
             **prefix_filterset("user_updated__", UserGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        accessible_group_query = Group.get_queryset(None, info.context.user)
+        accessible_groups = gql_optimizer.query(accessible_group_query, info)
+        accessible_uuids = set(accessible_groups.values_list('uuid', flat=True))
+        return queryset.filter(group__id__in=accessible_uuids)
 
 
 class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
@@ -232,7 +264,6 @@ class GroupDataSourceGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact", "isnull"],
-
             "date_created": ["exact", "lt", "lte", "gt", "gte"],
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],

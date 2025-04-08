@@ -21,13 +21,13 @@ DEFAULT_CONFIG = {
     "check_individual_delete": True,
     "check_group_individual_update": True,
     "check_group_create": True,
+    "check_group_delete": True,
     "individual_schema": "{}",
     "individual_accept_enrolment": "individual_service.create_accept_enrolment_task",
     "validation_import_valid_items_workflow": "individual-import-valid-items",
     "validation_calculation_uuid": "4362f958-5894-435b-9bda-df6cadf88352",
     "validation_import_valid_items": "individual_validation.import_valid_items",
     "validation_import_group_valid_items": "individual_validation.import_group_valid_items",
-    "unique_class_validation": "DeduplicationIndividualValidationStrategy",
     "validation_upload_valid_items": "individual_validation.upload_valid_items",
     "validation_upload_valid_items_workflow": "individual-upload-valid-items.individual-upload-valid-items",
     "enable_python_workflows": True,
@@ -40,6 +40,9 @@ DEFAULT_CONFIG = {
     "individual_mask_fields": [
         'json_ext.beneficiary_data_source',
         'json_ext.educated_level'
+    ],
+    "individual_base_fields": [
+        'first_name', 'last_name', 'dob', 'location_name', 'location_code', 'id'
     ]
 }
 
@@ -61,6 +64,7 @@ class IndividualConfig(AppConfig):
     check_individual_delete = None
     check_group_individual_update = None
     check_group_create = None
+    check_group_delete = None
     python_individual_import_workflow_group = None
     python_individual_import_workflow_name = None
     individual_schema = None
@@ -69,7 +73,6 @@ class IndividualConfig(AppConfig):
     validation_import_valid_items_workflow = None
     validation_import_valid_items = None
     validation_import_group_valid_items = None
-    unique_class_validation = None
 
     enable_python_workflows = None
     enable_maker_checker_logic_import = None
@@ -83,6 +86,7 @@ class IndividualConfig(AppConfig):
     enable_maker_checker_for_group_update = None
     individual_mask_fields = None
     individual_masking_enabled = None
+    individual_base_fields = None
 
     def ready(self):
         from core.models import ModuleConfiguration

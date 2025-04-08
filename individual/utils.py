@@ -14,6 +14,11 @@ def load_dataframe(individual_sources: Iterable[IndividualDataSource]) -> pd.Dat
         individual_source.json_ext["id"] = individual_source.id
         data_from_source.append(json_ext)
     recreated_df = pd.DataFrame(data_from_source)
+
+    # Ensure 'location_code' is treated as a string if it exists
+    if "location_code" in recreated_df.columns:
+        recreated_df["location_code"] = recreated_df["location_code"].astype("string")
+
     return recreated_df
 
 

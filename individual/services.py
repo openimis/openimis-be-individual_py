@@ -2,18 +2,21 @@ import logging
 import json
 import uuid
 import pandas as pd
-
+import concurrent.futures
+import math
 from pandas import DataFrame
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
 
 from calculation.services import get_calculation_object
+from core import filter_validity
 from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
+from django.apps import apps
 from django.utils.translation import gettext as _
-from django.db.models import Q, OuterRef, Subquery
+from django.db.models import Q, OuterRef, Subquery, Count
 from individual.apps import IndividualConfig
 from individual.models import (
     Individual,
@@ -36,6 +39,7 @@ from individual.validation import (
 )
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
+from location.models import Location, LocationManager
 from tasks_management.models import Task
 from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
     crud_business_data_builder, DeleteCheckerLogicServiceMixin
@@ -48,6 +52,10 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     @register_service_signal('individual_service.create')
     def create(self, obj_data):
         return super().create(obj_data)
+
+    def create_update_task(self, obj_data):
+        self._update_json_ext(obj_data)
+        return super().create_update_task(obj_data)
 
     @register_service_signal('individual_service.update')
     def update(self, obj_data):
@@ -66,7 +74,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
                 self.validation_class.validate_undo_delete(obj_data)
                 obj_ = self.OBJECT_TYPE.objects.filter(id=obj_data['id']).first()
                 obj_.is_deleted = False
-                obj_.save(username=self.user.username)
+                obj_.save(user=self.user.user)
                 return {
                     "success": True,
                     "message": "Ok",
@@ -108,18 +116,19 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
         pass
 
     def _update_json_ext(self, obj_data):
-        if not obj_data or 'json_ext' not in obj_data:
+        if not obj_data or 'json_ext' not in obj_data or 'location_id' not in obj_data:
             return
 
         json_ext = obj_data['json_ext']
         if not json_ext:
             return
 
-        for field in ('first_name', 'last_name', 'dob'):
-            individual_field_value = obj_data.get(field)
-            json_ext_value = json_ext.get(field)
-            if json_ext_value and json_ext_value != individual_field_value:
-                json_ext[field] = individual_field_value
+        location_id = obj_data['location_id']
+        if location_id:
+            location = Location.objects.get(id=location_id)
+            json_ext['location_str'] = str(location)
+        else:
+            json_ext['location_str'] = None
 
         obj_data['json_ext'] = json_ext
 
@@ -148,7 +157,12 @@ class IndividualDataSourceService(BaseService):
         super().__init__(user, validation_class)
 
 
-class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLogicServiceMixin):
+class GroupService(
+    BaseService,
+    CreateCheckerLogicServiceMixin,
+    UpdateCheckerLogicServiceMixin,
+    DeleteCheckerLogicServiceMixin
+):
     OBJECT_TYPE = Group
 
     def __init__(self, user, validation_class=GroupValidation):
@@ -204,7 +218,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
                 for individual_id in assigned_individuals_ids:
                     if str(individual_id) not in individual_ids:
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
-                        service.delete({'id': group_individual.id, 'user': self.user})
+                        service.delete({'id': group_individual.id})
 
                 for data in individuals_data:
                     if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
@@ -231,7 +245,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             for group_individual in group_individuals:
                 # cant use .delete() on query since it will completely remove instances from db instead of marking
                 # them as isDeleted
-                group_individual.delete(username=self.user.username)
+                group_individual.delete(user=self.user)
             return super().delete(obj_data)
 
     @transaction.atomic
@@ -244,7 +258,7 @@ class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLog
             for individual in Individual.objects.filter(id__in=individual_ids)
         }
         group.json_ext["members"] = group_members
-        group.save(username=self.user.username)
+        group.save(user=self.user.user)
         return group
 
     @register_service_signal('group_service.select_groups_to_benefit_plan')
@@ -290,6 +304,9 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
                 self.validation_class.validate_create_group_and_move_individual(self.user, **obj_data)
                 group_individual_id = obj_data.pop('group_individual_id')
                 group = GroupService(self.user).create(obj_data)
+                # return group if it has errors
+                if not group['data']:
+                    return group
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
                 group_id = group['data']['id']
                 service = GroupIndividualService(self.user)
@@ -332,8 +349,10 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 group_individual_id = obj_data.get('id')
                 incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
+                if not group_individual:
+                    raise ValueError(f"no GroupIndividual found with this id {group_individual_id}")
 
-                if str(group_individual.group.id) == incoming_group_id:
+                if str(group_individual.group.id) == str(incoming_group_id):
                     return super().update(obj_data)
 
                 obj_data.pop('id', None)
@@ -454,7 +473,7 @@ class GroupAndGroupIndividualAlignmentService:
 
         if changes_to_save:
             group.json_ext.update(changes_to_save)
-            group.save(update_fields=['json_ext'], username=self.user.username)
+            group.save(update_fields=['json_ext'], user=self.user)
 
     def handle_assure_primary_recipient_in_group(self, group, recipient_type):
         """
@@ -463,6 +482,18 @@ class GroupAndGroupIndividualAlignmentService:
         if recipient_type == GroupIndividual.RecipientType.PRIMARY:
             return
         self._assure_primary_recipient_in_group(group)
+
+    def ensure_location_consistent(self, group, individual, role):
+        if group.location_id == individual.location_id:
+            return
+
+        if role == GroupIndividual.Role.HEAD and group.location_id is None:
+            group.location_id = individual.location_id
+            group.save(user=self.user.user)
+        else:
+            individual.location_id = group.location_id
+            individual.save(user=self.user.user)
+
 
     def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group=group, is_deleted=False)
@@ -480,7 +511,7 @@ class GroupAndGroupIndividualAlignmentService:
         new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
         if not head_exists:
             new_primary.role = GroupIndividual.Role.HEAD
-        new_primary.save(username=self.user.username)
+        new_primary.save(user=self.user.user)
 
     def _change_head(self, group_individual_id, group_id):
         heads_queryset = GroupIndividual.objects.filter(group_id=group_id, role=GroupIndividual.Role.HEAD)
@@ -490,7 +521,7 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         old_head.role = None
-        old_head.save(username=self.user.username)
+        old_head.save(user=self.user.user)
 
     def _change_primary(self, group_individual_id, group_id):
         primaries_queryset = GroupIndividual.objects.filter(
@@ -502,7 +533,7 @@ class GroupAndGroupIndividualAlignmentService:
             return
 
         old_primary.recipient_type = None
-        old_primary.save(username=self.user.username)
+        old_primary.save(user=self.user.user)
 
 
 class IndividualImportService:
@@ -547,10 +578,10 @@ class IndividualImportService:
             workflow=workflow.name,
             json_ext={"group_aggregation_column": group_aggregation_column}
         )
-        record.save(username=self.user.username)
+        record.save(user=self.user.user)
 
     def validate_import_individuals(self, upload_id: uuid, individual_sources):
-        dataframe = self._load_dataframe(individual_sources)
+        dataframe = load_dataframe(individual_sources)
         validated_dataframe, invalid_items = self._validate_possible_individuals(
             dataframe,
             upload_id
@@ -558,48 +589,154 @@ class IndividualImportService:
         return {'success': True, 'data': validated_dataframe, 'summary_invalid_items': invalid_items}
 
     def synchronize_data_for_reporting(self, upload_id: uuid):
-        self._synchronize_individual(upload_id)
+        if 'opensearch_reports' in apps.app_configs:
+            from individual.documents import IndividualDocument
+
+            individuals = Individual.objects.filter(individualdatasource__upload=upload_id)
+            if not individuals:
+                return
+
+            IndividualDocument().update(individuals, 'index')
+
+    @staticmethod
+    def process_chunk(
+        chunk,
+        properties,
+        unique_validations,
+        loc_name_code_district_ids_from_db,
+        user_allowed_loc_ids,
+        duplicate_village_name_code_tuples,
+    ):
+        validated_dataframe = []
+        check_location = 'location_name' in chunk.columns
+
+        for _, row in chunk.iterrows():
+            field_validation = {'row': row.to_dict(), 'validations': {}}
+            for field, field_properties in properties.items():
+
+                # Validation Calculation
+                if "validationCalculation" in field_properties and field in row:
+                    field_validation['validations'][field] = IndividualImportService._handle_validation_calculation(row, field, field_properties)
+
+                # Uniqueness Check
+                if "uniqueness" in field_properties and field in row:
+                    field_validation['validations'][f'{field}_uniqueness'] = IndividualImportService._handle_uniqueness(row, field, unique_validations)
+
+            if 'location_name' in chunk.columns:
+                field_validation['validations']['location_name'] = (
+                    IndividualImportService._validate_location(
+                        row.location_name,
+                        row.location_code,
+                        loc_name_code_district_ids_from_db,
+                        user_allowed_loc_ids,
+                        duplicate_village_name_code_tuples,
+                    )
+                )
+
+            validated_dataframe.append(field_validation)
+
+        return validated_dataframe
 
     def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
         schema_dict = json.loads(IndividualConfig.individual_schema)
         properties = schema_dict.get("properties", {})
-        validated_dataframe = []
 
-        def validate_row(row):
-            field_validation = {'row': row.to_dict(), 'validations': {}}
-            for field, field_properties in properties.items():
-                if "validationCalculation" in field_properties:
-                    if field in row:
-                        field_validation['validations'][f'{field}'] = self._handle_validation_calculation(
-                            row, field, field_properties
-                        )
-                if "uniqueness" in field_properties:
-                    if field in row:
-                        field_validation['validations'][f'{field}_uniqueness'] = self._handle_uniqueness(
-                            row, field, field_properties, dataframe
-                        )
-            validated_dataframe.append(field_validation)
-            self.__save_validation_error_in_data_source(row, field_validation)
-            return row
+        unique_fields = [field for field, props in properties.items() if "uniqueness" in props]
+        unique_validations = {}
+        if unique_fields:
+            unique_validations = {
+                field: dataframe[field].duplicated(keep=False) 
+                for field in unique_fields
+            }
 
-        dataframe.apply(validate_row, axis='columns')
+        check_location = 'location_name' in dataframe.columns
+        if check_location:
+            # Issue a single DB query instead of per row for efficiency
+            loc_name_code_district_ids_from_db = self._query_location_district_ids(dataframe)
+            user_allowed_loc_ids = LocationManager().get_allowed_ids(self.user)
+            duplicate_village_name_code_tuples = self._query_duplicate_village_name_code()
+        else:
+            loc_name_code_district_ids_from_db = None
+            user_allowed_loc_ids = None
+            duplicate_village_name_code_tuples = None
+
+        # TODO: Use ProcessPoolExecutor after resolving django dependency loading issue
+        validated_dataframe = IndividualImportService.process_chunk(
+            dataframe,
+            properties,
+            unique_validations,
+            loc_name_code_district_ids_from_db,
+            user_allowed_loc_ids,
+            duplicate_village_name_code_tuples,
+        )
+
+        self.save_validation_error_in_data_source_bulk(validated_dataframe)
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
 
-    def _handle_uniqueness(self, row, field, field_properties, dataframe):
-        unique_class_validation = IndividualConfig.unique_class_validation
-        calculation_uuid = IndividualConfig.validation_calculation_uuid
-        calculation = get_calculation_object(calculation_uuid)
-        result_row = calculation.calculate_if_active_for_object(
-            unique_class_validation,
-            calculation_uuid,
-            field_name=field,
-            field_value=row[field],
-            incoming_data=dataframe
-        )
-        return result_row
+    @staticmethod
+    def _query_location_district_ids(df):
+        unique_tuples = df[['location_name', 'location_code']].drop_duplicates()
+        query = Q()
+        for _, row in unique_tuples.iterrows():
+            query |= Q(name=row['location_name'], code=row['location_code'])
+        locations = Location.objects.filter(type="V", *filter_validity()).filter(query)
+        return {(loc.name, loc.code): loc.parent.parent.id for loc in locations}
 
-    def _handle_validation_calculation(self, row, field, field_properties):
+    @staticmethod
+    def _query_duplicate_village_name_code():
+        return (
+            Location.objects
+            .filter(type="V", *filter_validity())
+            .values('name', 'code')
+            .annotate(name_count=Count('id'))
+            .filter(name_count__gt=1)
+            .values_list('name', 'code')
+        )
+
+    @staticmethod
+    def _validate_location(
+        location_name,
+        location_code,
+        loc_name_code_district_ids_from_db,
+        user_allowed_loc_ids,
+        duplicate_village_name_code_tuples
+    ):
+        result = {
+            'field_name': 'location_name',
+        }
+        if (pd.isna(location_name) or location_name == "") and (pd.isna(location_code) or location_code == ""):
+            result['success'] = True
+        elif loc_name_code_district_ids_from_db is None and user_allowed_loc_ids is None:
+            result['success'] = True
+        elif (location_name, location_code) not in loc_name_code_district_ids_from_db:
+            result['success'] = False
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is not valid. Please check the spelling against the list of locations in the system."
+        elif (location_name, location_code) in duplicate_village_name_code_tuples:
+            result['success'] = False
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is ambiguous, because there are more than one location with this name and code found in the system."
+        elif loc_name_code_district_ids_from_db[(location_name, location_code)] not in user_allowed_loc_ids:
+            result['success'] = False
+            result['note'] = f"Location with name '{location_name}' and code '{location_code}' is outside the current user's location permissions."
+        else:
+            result['success'] = True
+        return result
+
+
+    @staticmethod
+    def _handle_uniqueness(row, field, unique_validations):
+        success = not unique_validations[field].loc[row.name]
+        result = {
+            "success": success,
+            "field_name": field,
+        }
+        if not success:
+            result["note"] = f"'{field}' Field value '{row[field]}' is duplicated"
+        return result
+
+
+    @staticmethod
+    def _handle_validation_calculation(row, field, field_properties):
         validation_calculation = field_properties.get("validationCalculation", {}).get("name")
         if not validation_calculation:
             raise ValueError("Missing validation name")
@@ -631,14 +768,20 @@ class IndividualImportService:
         return self.import_loaders[import_file.content_type](import_file)
 
     def _save_data_source(self, dataframe: pd.DataFrame, upload: IndividualDataSourceUpload):
-        dataframe.apply(self._save_row, axis='columns', args=(upload,))
+        data_source_objects = []
+        
+        for _, row in dataframe.iterrows():
+            ds = IndividualDataSource(
+                upload=upload,
+                json_ext=json.loads(row.to_json()),
+                validations={},
+                user_created=self.user,
+                user_updated=self.user,
+                uuid=uuid.uuid4()
+            )
+            data_source_objects.append(ds)
 
-    def _save_row(self, row, upload):
-        ds = IndividualDataSource(upload=upload, json_ext=json.loads(row.to_json()), validations={})
-        ds.save(username=self.user.login_name)
-
-    def _load_dataframe(self, individual_sources) -> pd.DataFrame:
-        return load_dataframe(individual_sources)
+        IndividualDataSource.objects.bulk_create(data_source_objects)
 
     def _trigger_workflow(self,
                           workflow: WorkflowHandler,
@@ -664,18 +807,29 @@ class IndividualImportService:
             upload.save(username=self.user.login_name)
             return upload
 
-    def __save_validation_error_in_data_source(self, row, field_validation):
-        error_fields = []
-        for key, value in field_validation['validations'].items():
-            if not value['success']:
-                error_fields.append({
-                    "field_name": value['field_name'],
-                    "note": value['note']
-                })
-        individual_data_source = IndividualDataSource.objects.get(id=row['id'])
-        validation_column = {'validation_errors': error_fields}
-        individual_data_source.validations = validation_column
-        individual_data_source.save(username=self.user.username)
+    def save_validation_error_in_data_source_bulk(self, validated_dataframe):
+        data_sources_to_update = []
+
+        for field_validation in validated_dataframe:
+            row = field_validation['row']
+            error_fields = []
+
+            for key, value in field_validation['validations'].items():
+                if not value.get('success', False):
+                    error_fields.append({
+                        "field_name": value.get('field_name'),
+                        "note": value.get('note')
+                    })
+
+            data_sources_to_update.append(
+                IndividualDataSource(
+                    id=row['id'],
+                    validations={'validation_errors': error_fields}
+                )
+            )
+
+        if data_sources_to_update:
+            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'])
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
@@ -711,22 +865,6 @@ class IndividualImportService:
                 record.data_upload.id,
                 self.user
             ).run_workflow()
-
-    def _synchronize_individual(self, upload_id):
-        individuals_to_update = Individual.objects.filter(
-            individualdatasource__upload=upload_id
-        )
-        for individual in individuals_to_update:
-            synch_status = {
-                'report_synch': 'true',
-                'version': individual.version + 1,
-            }
-            if individual.json_ext:
-                individual.json_ext.update(synch_status)
-            else:
-                individual.json_ext = synch_status
-            individual.save(username=self.user.username)
-
 
 class IndividualTaskCreatorService:
 
@@ -770,7 +908,7 @@ class IndividualTaskCreatorService:
 
         data_upload = upload_record.data_upload
         data_upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
-        data_upload.save(username=self.user.username)
+        data_upload.save(user=self.user.user)
 
     def __calculate_percentage_of_invalid_items(self, upload_id):
         number_of_valid_items = len(fetch_summary_of_valid_items(upload_id))
