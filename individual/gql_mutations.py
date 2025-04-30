@@ -13,6 +13,7 @@ from individual.models import Individual, Group, GroupIndividual
 from individual.services import IndividualService, GroupService, GroupIndividualService, \
     CreateGroupAndMoveIndividualService
 from location.models import Location, LocationManager
+from social_protection.apps import SocialProtectionConfig
 
 
 class CreateIndividualInputType(OpenIMISMutation.Input):
@@ -30,6 +31,7 @@ class UpdateIndividualInputType(CreateIndividualInputType):
 RoleEnum = graphene.Enum.from_enum(GroupIndividual.Role)
 RecipientTypeEnum = graphene.Enum.from_enum(GroupIndividual.RecipientType)
 
+DEFAULT_BENEFICIARY_STATUS = SocialProtectionConfig.default_beneficiary_status
 
 class CreateGroupIndividualInputType(OpenIMISMutation.Input):
     group_id = graphene.UUID(required=False)
@@ -574,7 +576,8 @@ class ConfirmIndividualEnrollmentMutation(BaseHistoryModelCreateMutationMixin, B
             data.pop('client_mutation_label')
         custom_filters = data.pop('custom_filters', None)
         benefit_plan_id = data.pop('benefit_plan_id', None)
-        status = data.pop('status', "ACTIVE")
+        # TODO check consistency of default status
+        status = data.pop('status', DEFAULT_BENEFICIARY_STATUS)
         service = IndividualService(user)
         service.select_individuals_to_benefit_plan(
             custom_filters,
@@ -608,7 +611,7 @@ class ConfirmGroupEnrollmentMutation(BaseHistoryModelCreateMutationMixin, BaseMu
             data.pop('client_mutation_label')
         custom_filters = data.pop('custom_filters', None)
         benefit_plan_id = data.pop('benefit_plan_id', None)
-        status = data.pop('status', "ACTIVE")
+        status = data.pop('status', DEFAULT_BENEFICIARY_STATUS)
         service = GroupService(user)
         service.select_groups_to_benefit_plan(
             custom_filters,

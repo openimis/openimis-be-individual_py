@@ -25,6 +25,8 @@ from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, 
     GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+from individual.services import IndividualService, GroupService
+from social_protection.apps import SocialProtectionConfig
 from location.apps import LocationConfig
 
 
@@ -38,6 +40,7 @@ def patch_details(data_df: pd.DataFrame):
         return df_final
     return data_df
 
+DEFAULT_BENEFICIARY_STATUS = SocialProtectionConfig.default_beneficiary_status
 
 class Query(ExportableQueryMixin, graphene.ObjectType):
     export_patches = {
@@ -141,7 +144,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     individual_enrollment_summary = graphene.Field(
         IndividualSummaryEnrollmentGQLType,
         customFilters=graphene.List(of_type=graphene.String),
-        benefitPlanId=graphene.String()
+        benefitPlanId=graphene.String(),
+        status=graphene.String(),
     )
 
     individual_data_upload_history = OrderedDjangoFilterConnectionField(
@@ -156,7 +160,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     group_enrollment_summary = graphene.Field(
         GroupSummaryEnrollmentGQLType,
         customFilters=graphene.List(of_type=graphene.String),
-        benefitPlanId=graphene.String()
+        benefitPlanId=graphene.String(),
+        status=graphene.String(),
     )
 
     global_schema = graphene.Field(GlobalSchemaType)
@@ -215,43 +220,44 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         return gql_optimizer.query(query, info)
 
     def resolve_individual_enrollment_summary(self, info, **kwargs):
-        Query._check_permissions(info.context.user,
-                                 IndividualConfig.gql_individual_search_perms)
-        subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
-        query = Individual.objects.filter(is_deleted=False)
+        user = info.context.user
+        Query._check_permissions(user, IndividualConfig.gql_individual_search_perms)
+        
+        service = IndividualService(user)
         custom_filters = kwargs.get("customFilters", None)
         benefit_plan_id = kwargs.get("benefitPlanId", None)
-        if custom_filters:
-            query = CustomFilterWizardStorage.build_custom_filters_queryset(
-                Query.module_name,
-                Query.object_type,
-                custom_filters,
-                query,
-            )
-        query = query.filter(~Q(pk__in=Subquery(subquery))).distinct()
-        # Aggregation for selected individuals
-        number_of_selected_individuals = query.count()
+        status = kwargs.get("status", DEFAULT_BENEFICIARY_STATUS)
 
-        # Aggregation for total number of individuals
-        total_number_of_individuals = Individual.objects.filter(is_deleted=False).count()
-        individuals_not_assigned_to_programme = query.\
+        enrollment_checks = service.run_enrollment_checks(
+            custom_filters,
+            benefit_plan_id,
+            status,
+            user
+        )
+
+        total_number_of_individuals = enrollment_checks["total_number_of_individuals"]
+        selected_individuals = enrollment_checks["individual_query_with_filters"]
+        num_assigned_to_selected_programme = enrollment_checks["individuals_assigned_to_selected_programme"].count()
+
+        number_of_individuals_assigned_to_selected_programme_and_status = enrollment_checks["num_individuals_assigned_to_selected_programme_and_status"]
+        number_of_individuals_to_upload = enrollment_checks["num_individuals_to_enroll"]
+        max_active_beneficiaries_exceeded = enrollment_checks["max_active_beneficiaries_exceeded"]
+
+        number_of_selected_individuals = selected_individuals.count()
+
+        num_individuals_not_assigned_to_programme = selected_individuals.\
             filter(is_deleted=False, beneficiary__benefit_plan_id__isnull=True).count()
-        individuals_assigned_to_programme = number_of_selected_individuals - individuals_not_assigned_to_programme
-
-        individuals_assigned_to_selected_programme = "0"
-        number_of_individuals_to_upload = number_of_selected_individuals
-        if benefit_plan_id:
-            individuals_assigned_to_selected_programme = query. \
-                filter(is_deleted=False, beneficiary__benefit_plan_id=benefit_plan_id).count()
-            number_of_individuals_to_upload = number_of_individuals_to_upload - individuals_assigned_to_selected_programme
+        num_individuals_assigned_to_programme = number_of_selected_individuals - num_individuals_not_assigned_to_programme
 
         return IndividualSummaryEnrollmentGQLType(
             number_of_selected_individuals=number_of_selected_individuals,
             total_number_of_individuals=total_number_of_individuals,
-            number_of_individuals_not_assigned_to_programme=individuals_not_assigned_to_programme,
-            number_of_individuals_assigned_to_programme=individuals_assigned_to_programme,
-            number_of_individuals_assigned_to_selected_programme=individuals_assigned_to_selected_programme,
-            number_of_individuals_to_upload=number_of_individuals_to_upload
+            number_of_individuals_not_assigned_to_programme=num_individuals_not_assigned_to_programme,
+            number_of_individuals_assigned_to_programme=num_individuals_assigned_to_programme,
+            number_of_individuals_assigned_to_selected_programme=num_assigned_to_selected_programme,
+            number_of_individuals_assigned_to_selected_programme_and_status=number_of_individuals_assigned_to_selected_programme_and_status,
+            number_of_individuals_to_upload=number_of_individuals_to_upload,
+            max_active_beneficiaries_exceeded=max_active_beneficiaries_exceeded
         )
 
     def resolve_individual_history(self, info, **kwargs):
@@ -410,41 +416,44 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         return gql_optimizer.query(query, info)
 
     def resolve_group_enrollment_summary(self, info, **kwargs):
-        Query._check_permissions(info.context.user,
-                                 IndividualConfig.gql_group_search_perms)
-        query = Group.objects.filter(is_deleted=False)
+        user = info.context.user
+        Query._check_permissions(user, IndividualConfig.gql_group_search_perms)
+        
+        service = GroupService(user)
         custom_filters = kwargs.get("customFilters", None)
         benefit_plan_id = kwargs.get("benefitPlanId", None)
-        if custom_filters:
-            query = CustomFilterWizardStorage.build_custom_filters_queryset(
-                Query.module_name,
-                "Group",
-                custom_filters,
-                query,
-            )
-        # Aggregation for selected groups
-        number_of_selected_groups = query.count()
+        status = kwargs.get("status", DEFAULT_BENEFICIARY_STATUS)
 
-        # Aggregation for total number of groups
-        total_number_of_groups = Group.objects.filter(is_deleted=False).count()
-        groups_not_assigned_to_programme = query.\
+        enrollment_checks = service.run_enrollment_checks(
+            custom_filters,
+            benefit_plan_id,
+            status,
+            user
+        )
+        
+        total_number_of_groups = enrollment_checks["total_number_of_groups"]
+        selected_groups = enrollment_checks["group_query_with_filters"]
+        num_assigned_to_selected_programme = enrollment_checks["groups_assigned_to_selected_programme"].count()
+
+        number_of_groups_assigned_to_selected_programme_and_status = enrollment_checks["num_groups_assigned_to_selected_programme_and_status"]
+        number_of_groups_to_upload = enrollment_checks["num_groups_to_enroll"]
+        max_active_beneficiaries_exceeded = enrollment_checks["max_active_beneficiaries_exceeded"]
+
+        number_of_selected_groups = selected_groups.count()
+
+        num_groups_not_assigned_to_programme = selected_groups.\
             filter(is_deleted=False, groupbeneficiary__benefit_plan_id__isnull=True).count()
-        groups_assigned_to_programme = number_of_selected_groups - groups_not_assigned_to_programme
-
-        groups_assigned_to_selected_programme = "0"
-        number_of_groups_to_upload = number_of_selected_groups
-        if benefit_plan_id:
-            groups_assigned_to_selected_programme = query. \
-                filter(is_deleted=False, groupbeneficiary__benefit_plan_id=benefit_plan_id).count()
-            number_of_groups_to_upload = number_of_groups_to_upload - groups_assigned_to_selected_programme
+        num_groups_assigned_to_programme = number_of_selected_groups - num_groups_not_assigned_to_programme
 
         return GroupSummaryEnrollmentGQLType(
             number_of_selected_groups=number_of_selected_groups,
             total_number_of_groups=total_number_of_groups,
-            number_of_groups_not_assigned_to_programme=groups_not_assigned_to_programme,
-            number_of_groups_assigned_to_programme=groups_assigned_to_programme,
-            number_of_groups_assigned_to_selected_programme=groups_assigned_to_selected_programme,
-            number_of_groups_to_upload=number_of_groups_to_upload
+            number_of_groups_not_assigned_to_programme=num_groups_not_assigned_to_programme,
+            number_of_groups_assigned_to_programme=num_groups_assigned_to_programme,
+            number_of_groups_assigned_to_selected_programme=num_assigned_to_selected_programme,
+            number_of_groups_assigned_to_selected_programme_and_status=number_of_groups_assigned_to_selected_programme_and_status,
+            number_of_groups_to_upload=number_of_groups_to_upload,
+            max_active_beneficiaries_exceeded=max_active_beneficiaries_exceeded,
         )
 
     def resolve_global_schema(self, info):
