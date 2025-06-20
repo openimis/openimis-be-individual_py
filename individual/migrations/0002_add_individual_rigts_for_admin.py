@@ -14,7 +14,8 @@ def add_rights(apps, schema_editor):
 
 
 def _add_right_for_role(role, right_id, RoleRight):
-    RoleRight.objects.create(role=role, right_id=right_id, audit_user_id=1)
+    from datetime import datetime
+    RoleRight.objects.create(role=role, right_id=right_id, audit_user_id=1, validity_from=datetime.now())
 
 
 def remove_rights(apps, schema_editor):
