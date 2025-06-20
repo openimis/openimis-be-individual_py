@@ -816,7 +816,6 @@ class IndividualImportService:
 
             values.append((row['id'], json.dumps({"validation_errors": error_fields})))
 
-        print(values, 'xxxxxx')
         if values:
             # Ensure correct column name "UUID" (as seen in your original bulk_update query)
             update_queries = []
@@ -831,7 +830,6 @@ class IndividualImportService:
                 )
 
             query = sql.SQL(" ").join(update_queries)
-            print(query)
             with connection.cursor() as cursor:
                 cursor.execute(query)
 
