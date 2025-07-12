@@ -12,6 +12,7 @@ from location.models import Location, LocationManager
 
 
 class Individual(HistoryModel):
+    USE_CACHE = False
     first_name = models.CharField(max_length=255, null=False)
     last_name = models.CharField(max_length=255, null=False)
     dob = core.fields.DateField(null=False)
@@ -62,6 +63,8 @@ class Individual(HistoryModel):
         return queryset
 
 class IndividualDataSourceUpload(HistoryModel):
+    USE_CACHE = False
+
     class Status(models.TextChoices):
         PENDING = 'PENDING', _('Pending')
         TRIGGERED = 'TRIGGERED', _('Triggered')
@@ -79,12 +82,14 @@ class IndividualDataSourceUpload(HistoryModel):
 
 
 class IndividualDataSource(HistoryModel):
+    USE_CACHE = False
     individual = models.ForeignKey(Individual, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
     validations = models.JSONField(blank=True, default=dict)
 
 
 class IndividualDataUploadRecords(HistoryModel):
+    USE_CACHE = False
     data_upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=False)
     workflow = models.CharField(max_length=50)
 
@@ -93,6 +98,7 @@ class IndividualDataUploadRecords(HistoryModel):
 
 
 class Group(HistoryModel):
+    USE_CACHE = False
     code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
     location = models.ForeignKey(
@@ -134,12 +140,14 @@ def update_member_individuals_location(sender, instance, **kwargs):
                 individual.save(user=instance.user_updated)
 
 class GroupDataSource(HistoryModel):
+    USE_CACHE = False
     group = models.ForeignKey(Group, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
     validations = models.JSONField(blank=True, default=dict)
 
 
 class GroupIndividual(HistoryModel):
+    USE_CACHE = False
     class Role(models.TextChoices):
         HEAD = 'HEAD', _('HEAD')
         SPOUSE = 'SPOUSE', _('SPOUSE')

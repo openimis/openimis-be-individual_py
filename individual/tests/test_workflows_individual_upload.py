@@ -61,7 +61,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
             workflow='my workflow',
             json_ext={"group_aggregation_column": None}
         )
-        upload_record.save(user=self.user.user)
+        upload_record.save(user=self.user)
 
         self.village = create_test_village({
             'name': 'McLean',

@@ -37,7 +37,7 @@ class GroupIndividualServiceTest(TestCase):
         self.assertEqual(query.count(), 1)
 
     def test_add_group_individual_validations(self):
-        with patch('core.validation.base.IS_TESTING', False):            
+        with patch('django.conf.settings.IS_TESTING', False):            
             result = self.service.create({
                 "individual_id": self.individual1.id,
             })
