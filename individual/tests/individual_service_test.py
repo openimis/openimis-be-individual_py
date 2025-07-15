@@ -90,7 +90,7 @@ class IndividualServiceTest(TestCase):
 
         summary = self.service.select_individuals_to_benefit_plan(
             custom_filters=custom_filters,
-            benefit_plan_id=benefit_plan.id,
+            benefit_plan_id=str(benefit_plan.id),
             status=status,
             user=self.user
         )
@@ -101,13 +101,13 @@ class IndividualServiceTest(TestCase):
         self.assertEqual(summary['individuals_not_assigned_to_selected_programme'].count(), 1)
 
         # Delete the group and groupindividual
-        self.group_a.delete(username=self.user.username)
-        self.group_individual_a.delete(username=self.user.username)
+        self.group_a.delete(user=self.user)
+        self.group_individual_a.delete(user=self.user)
 
         # Verify the individual is now counted in the enrollment summary
         summary = self.service.select_individuals_to_benefit_plan(
             custom_filters=custom_filters,
-            benefit_plan_id=benefit_plan.id,
+            benefit_plan_id=str(benefit_plan.id),
             status=status,
             user=self.user
         )
