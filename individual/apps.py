@@ -111,13 +111,18 @@ class IndividualConfig(AppConfig):
 
     def _reload_module_config(self, sender, instance, **kwargs):
         if instance.module == self.name and instance.layer == 'be':
-            # Reload the schema from the new config
-            IndividualConfig.individual_schema = json.loads(instance.config).get('individual_schema', '{}')
+            db_config = json.loads(instance.config)
+            config = {**DEFAULT_CONFIG, **db_config}
+            self.__load_config(config)
+            self.__validate_individual_schema(config)
 
             # Reinitialize custom filters to apply the new schema
             self.__initialize_custom_filters()
 
-            # TODO: handle reloading of workflows and masking configs
+            # Workflow needs to be re-registered, otherwise default/invalid ones would apply
+            self._set_up_workflows()
+
+            # TODO: handle reloading of masking configs
 
             logger.info(f"Reloaded schema and filters for {self.name} module: {IndividualConfig.individual_schema}")
 
