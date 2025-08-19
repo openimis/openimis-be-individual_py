@@ -123,8 +123,7 @@ class IndividualConfig(AppConfig):
             self._set_up_workflows()
 
             # TODO: handle reloading of masking configs
-
-            logger.info(f"Reloaded schema and filters for {self.name} module: {IndividualConfig.individual_schema}")
+            logger.info(f"Reloaded app configs (except masking configs) for {self.name} module")
 
     @classmethod
     def __load_config(cls, cfg):
