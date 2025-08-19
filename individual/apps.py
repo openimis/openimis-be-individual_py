@@ -117,6 +117,8 @@ class IndividualConfig(AppConfig):
             # Reinitialize custom filters to apply the new schema
             self.__initialize_custom_filters()
 
+            # TODO: handle reloading of workflows and masking configs
+
             logger.info(f"Reloaded schema and filters for {self.name} module: {IndividualConfig.individual_schema}")
 
     @classmethod

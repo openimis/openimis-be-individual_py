@@ -51,7 +51,7 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
         possible_filters = content['data']['customFilters']['possibleFilters']
         self.assertEqual(possible_filters, [])
 
-        # Then update individual config to with the fixgure config
+        # Then update individual config to with the fixture config
         with open(self.test_config_path, 'rb') as test_file:
             config.config = test_file.read()
         config.save()
