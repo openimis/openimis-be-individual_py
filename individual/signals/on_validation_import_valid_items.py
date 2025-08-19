@@ -105,7 +105,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
         data_upload = self.upload_record.data_upload
         data_upload.status = IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION
-        data_upload.save(username=self.user.username)
+        data_upload.save(user=self.user)
 
     @staticmethod
     def group_data_sources_into_entities(upload_id, user, accepted: List[str] = None):
@@ -160,7 +160,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
             cleaned_json_ext = clean_json_ext(original_json_ext.copy() if original_json_ext else None)
             if cleaned_json_ext != original_json_ext:
                 individual.json_ext = cleaned_json_ext
-                individual.save(username=self.user.username)
+                individual.save(user=self.user)
 
     def _query_individuals(self):
         return Individual.objects.filter(
@@ -220,7 +220,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
     def _create_group_data_source(self, json_ext_data):
         data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data)
-        data_source.save(username=self.user.username)
+        data_source.save(user=self.user)
 
     def _create_groups(self):
         for individual_group in self.grouped_individuals:
