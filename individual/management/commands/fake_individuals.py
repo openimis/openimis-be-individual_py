@@ -58,6 +58,18 @@ class Command(BaseCommand):
             type=str,
             help="Specify the username such that their permitted locations are assigned to individuals"
         )
+        parser.add_argument(
+            '--num-individuals',
+            type=int,
+            default=100,
+            help="Number of individuals to generate (default: 100)"
+        )
+        parser.add_argument(
+            '--num-groups',
+            type=int,
+            default=20,
+            help="Number of groups to generate (default: 20)"
+        )
 
     def handle(self, *args, **options):
         # Retrieves the user with the specified username
@@ -71,20 +83,26 @@ class Command(BaseCommand):
         permitted_locations = list(location_qs.filter(type='V', *filter_validity()))
 
         individuals = []  # List to store fake individuals
-        num_individuals = 100  # Total number of individuals to generate
-        num_households = 20  # Number of households/groups
+        num_individuals = options.get('num_individuals')
+        num_groups = options.get('num_groups')
 
         # Exclude the HEAD role from available choices to ensure only one head per group
         available_role_choices = [choice for choice in GroupIndividual.Role if choice != GroupIndividual.Role.HEAD]
 
+        base_count = num_individuals // num_groups
+        remainder = num_individuals % num_groups
+
         # Generate individuals for each household/group
-        for group_index in range(0, num_households):
-            group_code = generate_random_string()  # Unique code for the group
+        for group_index in range(0, num_groups):
+            group_code = generate_random_string()
             assign_location = random.choice([True, False])  # Randomly decide whether to assign a location
             location = random.choice(permitted_locations) if assign_location else None
 
+            # Add one extra individual to groups while distributing the remainder
+            group_size = base_count + (1 if group_index < remainder else 0)
+
             # Generate individuals for the current group
-            for i in range(num_individuals // num_households):
+            for i in range(group_size):
                 recipient_info = 1 if i == 0 else 0  # Mark the first individual as a recipient
                 individual_role = GroupIndividual.Role.HEAD if i == 0 else random.choice(available_role_choices)
                 individual = generate_fake_individual(group_code, recipient_info, individual_role, location)
