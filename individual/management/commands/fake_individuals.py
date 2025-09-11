@@ -68,7 +68,11 @@ class Command(BaseCommand):
             '--num-groups',
             type=int,
             default=20,
-            help="Number of groups to generate (default: 20)"
+            help=(
+                "Number of groups to generate (default: 20). "
+                "If set to 0, individuals will be generated without group-related fields "
+                "(i.e., group_code, recipient_info, individual_role)."
+            )
         )
 
     def handle(self, *args, **options):
@@ -86,26 +90,36 @@ class Command(BaseCommand):
         num_individuals = options.get('num_individuals')
         num_groups = options.get('num_groups')
 
-        # Exclude the HEAD role from available choices to ensure only one head per group
-        available_role_choices = [choice for choice in GroupIndividual.Role if choice != GroupIndividual.Role.HEAD]
+        if num_groups > 0:
+            # Exclude the HEAD role from available choices to ensure only one head per group
+            available_role_choices = [choice for choice in GroupIndividual.Role if choice != GroupIndividual.Role.HEAD]
 
-        base_count = num_individuals // num_groups
-        remainder = num_individuals % num_groups
+            base_count = num_individuals // num_groups
+            remainder = num_individuals % num_groups
 
-        # Generate individuals for each household/group
-        for group_index in range(0, num_groups):
-            group_code = generate_random_string()
-            assign_location = random.choice([True, False])  # Randomly decide whether to assign a location
-            location = random.choice(permitted_locations) if assign_location else None
+            # Generate individuals for each household/group
+            for group_index in range(0, num_groups):
+                group_code = generate_random_string()
+                assign_location = random.choice([True] * 3 + [False])  # Randomly decide whether to assign a location
+                location = random.choice(permitted_locations) if assign_location else None
 
-            # Add one extra individual to groups while distributing the remainder
-            group_size = base_count + (1 if group_index < remainder else 0)
+                # Add one extra individual to groups while distributing the remainder
+                group_size = base_count + (1 if group_index < remainder else 0)
 
-            # Generate individuals for the current group
-            for i in range(group_size):
-                recipient_info = 1 if i == 0 else 0  # Mark the first individual as a recipient
-                individual_role = GroupIndividual.Role.HEAD if i == 0 else random.choice(available_role_choices)
-                individual = generate_fake_individual(group_code, recipient_info, individual_role, location)
+                # Generate individuals for the current group
+                for i in range(group_size):
+                    recipient_info = 1 if i == 0 else 0  # Mark the first individual as a recipient
+                    individual_role = GroupIndividual.Role.HEAD if i == 0 else random.choice(available_role_choices)
+                    individual = generate_fake_individual(group_code, recipient_info, individual_role, location)
+                    individuals.append(individual)
+        else:
+            for _ in range(num_individuals):
+                assign_location = random.choice([True] * 3 + [False])
+                location = random.choice(permitted_locations) if assign_location else None
+                individual = generate_fake_individual(group_code=None, recipient_info=None, individual_role=None, location=location)
+                # Remove group-specific fields
+                for field in ['group_code', 'recipient_info', 'individual_role']:
+                    individual.pop(field, None)
                 individuals.append(individual)
 
         # Write the generated individuals to a temporary CSV file
