@@ -125,10 +125,11 @@ class TestView(APITestCase):
 
         test_file_name = "test_individuals.csv"
         dir_path = os.path.dirname(IndividualConfig.get_individual_upload_file_path(test_file_name))
-        for filename in default_storage.listdir(dir_path)[1]:  # files only
-            path = os.path.join(dir_path, filename)
-            if default_storage.exists(path):
-                default_storage.delete(path)
+        if default_storage.exists(dir_path):
+            for filename in default_storage.listdir(dir_path)[1]:  # files only
+                path = os.path.join(dir_path, filename)
+                if default_storage.exists(path):
+                    default_storage.delete(path)
 
         with open(self.test_file_path, 'rb') as test_file:
             upload_content = test_file.read()
