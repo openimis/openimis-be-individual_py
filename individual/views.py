@@ -6,7 +6,9 @@ import os
 import numpy as np
 import pandas as pd
 from django.db.models import Q
+from django.core.files.storage import default_storage
 from django.http import StreamingHttpResponse
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -202,12 +204,18 @@ def download_individual_upload(request):
 
 # Function to handle file uploads and save them to a specified path
 def _handle_file_upload(file):
-    try:
-        target_file_path = IndividualConfig.get_individual_upload_file_path(file.name)
-        file_handler = DefaultStorageFileHandler(target_file_path)
-        file_handler.save_file(file)
-    except FileExistsError as exc:
-        raise exc
+    original_name = file.name
+    target_file_path = IndividualConfig.get_individual_upload_file_path(original_name)
+
+    if default_storage.exists(target_file_path):
+        base_name, ext = os.path.splitext(original_name)
+        timestamp = timezone.now().strftime('%Y%m%d%H%M%S')
+        unique_name = f"{base_name}_{timestamp}{ext}"
+        target_file_path = IndividualConfig.get_individual_upload_file_path(unique_name)
+        file.name = unique_name
+
+    file_handler = DefaultStorageFileHandler(target_file_path)
+    file_handler.save_file(file)
 
 # Function to remove a file from storage
 def _remove_file(file):
