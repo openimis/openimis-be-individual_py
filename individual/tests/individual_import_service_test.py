@@ -330,6 +330,21 @@ class IndividualImportServiceTest(TestCase):
                 "because there are more than one location with this name and code found in the system."
             )
 
+    def test_csv_location_code_parsed_as_string(self):
+        uploaded_csv_name = f"{generate_random_string(12)}.csv"
+        csv_file = SimpleUploadedFile(
+            uploaded_csv_name,
+            self.csv_content,
+            content_type="text/csv"
+        )
+
+        service = IndividualImportService(self.admin_user)
+        df = service._load_import_file(csv_file)
+
+        self.assertIn('location_code', df.columns)
+        self.assertEqual(df['location_code'].dtype, object)  # object dtype means it's read as string
+        self.assertEqual(df['location_code'].iloc[0], '202')
+
     @patch.object(BaseSyncDocument, 'update')
     def test_synchronize_data_for_reporting(self, mock_update):
         service = IndividualImportService(self.admin_user)
