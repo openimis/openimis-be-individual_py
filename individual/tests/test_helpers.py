@@ -4,7 +4,7 @@ import random
 import string
 from core.models import Role, RoleRight
 from core.models.base_mutation import MutationLog
-from core.test_helpers import create_test_interactive_user
+from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role
 from core.utils import TimeUtils
 from graphql_jwt.shortcuts import get_token
 from individual.models import Individual, Group, GroupIndividual
@@ -137,9 +137,9 @@ class IndividualGQLTestCase(openIMISGraphQLTestCase):
         district_b_code = cls.village_b.parent.parent.code
         assign_user_districts(cls.dist_b_user, [district_b_code])
         cls.dist_b_user_token = BaseTestContext(user=cls.dist_b_user).get_jwt()
-
+        eo_role = create_enrolment_officer_role()
         cls.med_enroll_officer = create_test_interactive_user(
-            username="medEONoRight", roles=[1]) # 1 is the med enrollment officer role
+            username="medEONoRight", roles=[eo_role.id]) # 1 is the med enrollment officer role
         cls.med_enroll_officer_context = BaseTestContext(user=cls.med_enroll_officer)
         cls.med_enroll_officer_token = cls.med_enroll_officer_context.get_jwt()
 
