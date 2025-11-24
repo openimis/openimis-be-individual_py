@@ -19,18 +19,18 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
 
     def test_create_individual_general_permission(self):
         query_str = '''
-            mutation {{
+            mutation {
               createIndividual(
-                input: {{
+                input: {
                   firstName: "Alice"
                   lastName: "Foo"
                   dob: "2020-02-20"
-                }}
-              ) {{
+                }
+              ) {
                 clientMutationId
                 internalId
-              }}
-            }}
+              }
+            }
         '''
 
         # Anonymous User has no permission
