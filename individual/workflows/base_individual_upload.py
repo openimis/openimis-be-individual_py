@@ -36,8 +36,8 @@ DO $$
     WHERE upload_id=current_upload_id and individual_id is null and "isDeleted"=False AND NOT "Json_ext" ? 'last_name';
     SELECT ARRAY_AGG("UUID") INTO failing_entries_dob
     FROM individual_individualdatasource
-    WHERE upload_id=current_upload_id and individual_id is null and "isDeleted"=False AND NOT "Json_ext" ? 'dob';  
-    
+    WHERE upload_id=current_upload_id and individual_id is null and "isDeleted"=False AND NOT "Json_ext" ? 'dob';
+
     -- If any entries do not meet the criteria or missing required fields, set the error message in the upload table and do not proceed further
     IF failing_entries_invalid_json IS NOT NULL or failing_entries_first_name IS NOT NULL OR failing_entries_last_name IS NOT NULL OR failing_entries_dob IS NOT NULL THEN
         UPDATE individual_individualdatasourceupload
@@ -72,7 +72,7 @@ DO $$
                     AND loc."LocationCode" = ds."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
                     AND loc."ValidityTo" IS NULL
-            WHERE ds.upload_id=current_upload_id 
+            WHERE ds.upload_id=current_upload_id
                 AND ds.individual_id is null
                 AND ds."isDeleted"=False
             RETURNING "UUID", "Json_ext"  -- also return the Json_ext

@@ -1,9 +1,7 @@
 import csv
 import json
 from faker import Faker
-from datetime import datetime, timedelta
 import random
-import json
 import tempfile
 
 from django.core.management.base import BaseCommand
@@ -17,8 +15,9 @@ from core.models import User
 fake = Faker()
 individual_schema = json.loads(IndividualConfig.individual_schema)['properties']
 
+
 def generate_fake_individual(group_code, recipient_info, individual_role, location=None):
-    required_info =  {
+    required_info = {
         "first_name": fake.first_name(),
         "last_name": fake.last_name(),
         "dob": fake.date_of_birth(minimum_age=16, maximum_age=90).isoformat(),
@@ -47,6 +46,7 @@ def generate_fake_individual(group_code, recipient_info, individual_role, locati
         **required_info,
         **{k: v for k, v in others.items() if k in allowed_fields}
     }
+
 
 # Django management command to create a CSV file with fake individuals
 class Command(BaseCommand):

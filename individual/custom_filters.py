@@ -63,8 +63,8 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
 
         else:
             logger.warning('Cannot retrieve definitions of filters based '
-                            'on the provided schema due to either empty schema '
-                            'or missing properties in schema file')
+                           'on the provided schema due to either empty schema '
+                           'or missing properties in schema file')
 
         return tuples_with_definitions
 

@@ -80,8 +80,8 @@ BEGIN
                     AND loc."LocationType"='V'
                     AND loc."ValidityTo" IS NULL
             WHERE ds.upload_id = current_upload_id
-                AND ds.individual_id IS NULL 
-                AND ds."isDeleted" = False 
+                AND ds.individual_id IS NULL
+                AND ds."isDeleted" = False
                 AND ds.validations ->> 'validation_errors' = '[]'
             RETURNING "UUID", "Json_ext"
         )
@@ -106,9 +106,9 @@ BEGIN
         WHERE upload_id = current_upload_id
           AND "isDeleted" = FALSE;
 
-        -- Change status to SUCCESS if no invalid items, change to PARTIAL_SUCCESS otherwise 
+        -- Change status to SUCCESS if no invalid items, change to PARTIAL_SUCCESS otherwise
             UPDATE individual_individualdatasourceupload
-            SET 
+            SET
                 status = CASE
                     WHEN total_valid_entries = total_entries THEN 'SUCCESS'
                     ELSE 'PARTIAL_SUCCESS'
@@ -151,21 +151,26 @@ BEGIN
     -- Check if all required fields are present in the entries, with accepted filter applied if not NULL
     SELECT ARRAY_AGG("UUID") INTO failing_entries_first_name
     FROM individual_individualdatasource
-    WHERE upload_id = current_upload_id AND individual_id IS NULL AND "isDeleted" = False AND NOT "Json_ext" ? 'first_name'
+    WHERE upload_id = current_upload_id AND individual_id IS NULL
+    AND "isDeleted" = False AND NOT "Json_ext" ? 'first_name'
     AND (accepted IS NULL OR "UUID" = ANY(accepted));
-    
+
     SELECT ARRAY_AGG("UUID") INTO failing_entries_last_name
     FROM individual_individualdatasource
-    WHERE upload_id = current_upload_id AND individual_id IS NULL AND "isDeleted" = False AND NOT "Json_ext" ? 'last_name'
+    WHERE upload_id = current_upload_id AND individual_id IS NULL
+    AND "isDeleted" = False AND NOT "Json_ext" ? 'last_name'
     AND (accepted IS NULL OR "UUID" = ANY(accepted));
-    
+
     SELECT ARRAY_AGG("UUID") INTO failing_entries_dob
     FROM individual_individualdatasource
-    WHERE upload_id = current_upload_id AND individual_id IS NULL AND "isDeleted" = False AND NOT "Json_ext" ? 'dob'
+    WHERE upload_id = current_upload_id AND individual_id IS NULL
+    AND "isDeleted" = False AND NOT "Json_ext" ? 'dob'
     AND (accepted IS NULL OR "UUID" = ANY(accepted));
-    
-    -- If any entries do not meet the criteria or missing required fields, set the error message in the upload table and do not proceed further
-    IF failing_entries_first_name IS NOT NULL OR failing_entries_last_name IS NOT NULL OR failing_entries_dob IS NOT NULL THEN
+
+    -- If any entries do not meet the criteria or missing required fields,
+    -- set the error message in the upload table and do not proceed further
+    IF failing_entries_first_name IS NOT NULL OR failing_entries_last_name IS NOT NULL OR
+    failing_entries_dob IS NOT NULL THEN
         UPDATE individual_individualdatasourceupload
         SET error = coalesce(error, '{}'::jsonb) || jsonb_build_object('errors', jsonb_build_object(
                             'error', 'Invalid entries',
@@ -197,7 +202,7 @@ BEGIN
                     AND loc."LocationCode" = ds."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
                     AND loc."ValidityTo" IS NULL
-            WHERE ds.upload_id = current_upload_id 
+            WHERE ds.upload_id = current_upload_id
                 AND ds.individual_id IS NULL
                 AND ds."isDeleted" = False
                 AND ds.validations ->> 'validation_errors' = '[]'

@@ -37,7 +37,7 @@ class GroupIndividualServiceTest(TestCase):
         self.assertEqual(query.count(), 1)
 
     def test_add_group_individual_validations(self):
-        with patch('django.conf.settings.IS_TESTING', False):            
+        with patch('django.conf.settings.IS_TESTING', False):
             result = self.service.create({
                 "individual_id": self.individual1.id,
             })
@@ -87,7 +87,6 @@ class GroupIndividualServiceTest(TestCase):
         individual.save(username=cls.user.username)
 
         return individual
-
 
     @classmethod
     def __create_group(cls):

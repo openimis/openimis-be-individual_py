@@ -20,8 +20,8 @@ class ModuleConfigTest(TestCase):
 
         # Update config should trigger a reload
         updated_config = {
-          "enable_maker_checker_for_individual_upload": False,
-          "enable_maker_checker_for_individual_update": False,
+            "enable_maker_checker_for_individual_upload": False,
+            "enable_maker_checker_for_individual_update": False,
         }
         config.config = json.dumps(updated_config)
         config.save()

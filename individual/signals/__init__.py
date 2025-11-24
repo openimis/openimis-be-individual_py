@@ -2,8 +2,12 @@ import logging
 
 from core.service_signals import ServiceSignalBindType
 from core.signals import bind_service_signal
-from individual.services import GroupIndividualService, IndividualService, CreateGroupAndMoveIndividualService, \
-     GroupService
+from individual.services import (
+    GroupIndividualService,
+    IndividualService,
+    CreateGroupAndMoveIndividualService,
+    GroupService,
+)
 from individual.signals.on_validation_import_valid_items import on_task_complete_import_validated, on_task_resolve
 
 from tasks_management.services import on_task_complete_service_handler

@@ -15,7 +15,6 @@ import uuid
 from unittest import skipIf
 
 
-
 class ProcessUpdateIndividualsWorkflowTest(TestCase):
 
     @classmethod

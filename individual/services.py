@@ -2,8 +2,6 @@ import logging
 import json
 import uuid
 import pandas as pd
-import concurrent.futures
-import math
 from pandas import DataFrame
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
@@ -15,7 +13,7 @@ from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.apps import apps
-from django.utils.translation import gettext as _
+# from django.utils.translation import gettext as _
 from django.db.models import Q, OuterRef, Subquery, Count
 from individual.apps import IndividualConfig
 from individual.models import (
@@ -498,7 +496,6 @@ class GroupAndGroupIndividualAlignmentService:
             individual.location_id = group.location_id
             individual.save(user=self.user)
 
-
     def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group=group, is_deleted=False)
         primary_exists = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).exists()
@@ -612,9 +609,8 @@ class IndividualImportService:
         duplicate_village_name_code_tuples,
     ):
         validated_dataframe = []
-        check_location = 'location_name' in chunk.columns
 
-        for _, row in chunk.iterrows():
+        for __, row in chunk.iterrows():
             field_validation = {'row': row.to_dict(), 'validations': {}}
             for field, field_properties in properties.items():
 
@@ -649,7 +645,7 @@ class IndividualImportService:
         unique_validations = {}
         if unique_fields:
             unique_validations = {
-                field: dataframe[field].duplicated(keep=False) 
+                field: dataframe[field].duplicated(keep=False)
                 for field in unique_fields
             }
 
@@ -682,7 +678,7 @@ class IndividualImportService:
     def _query_location_district_ids(df):
         unique_tuples = df[['location_name', 'location_code']].drop_duplicates()
         query = Q()
-        for _, row in unique_tuples.iterrows():
+        for __, row in unique_tuples.iterrows():
             query |= Q(name=row['location_name'], code=row['location_code'])
         locations = Location.objects.filter(type="V", *filter_validity()).filter(query)
         return {(loc.name, loc.code): loc.parent.parent.id for loc in locations}
@@ -726,7 +722,6 @@ class IndividualImportService:
             result['success'] = True
         return result
 
-
     @staticmethod
     def _handle_uniqueness(row, field, unique_validations):
         success = not unique_validations[field].loc[row.name]
@@ -737,7 +732,6 @@ class IndividualImportService:
         if not success:
             result["note"] = f"'{field}' Field value '{row[field]}' is duplicated"
         return result
-
 
     @staticmethod
     def _handle_validation_calculation(row, field, field_properties):
@@ -773,8 +767,8 @@ class IndividualImportService:
 
     def _save_data_source(self, dataframe: pd.DataFrame, upload: IndividualDataSourceUpload):
         data_source_objects = []
-        
-        for _, row in dataframe.iterrows():
+
+        for __, row in dataframe.iterrows():
             ds = IndividualDataSource(
                 upload=upload,
                 json_ext=json.loads(row.to_json()),
@@ -870,6 +864,7 @@ class IndividualImportService:
                 self.user
             ).run_workflow()
 
+
 class IndividualTaskCreatorService:
 
     def __init__(self, user):
@@ -886,7 +881,6 @@ class IndividualTaskCreatorService:
     def _create_task(self, upload_id, business_event):
         from tasks_management.services import TaskService
         from tasks_management.apps import TasksManagementConfig
-        from tasks_management.models import Task
         upload_record = IndividualDataUploadRecords.objects.get(
             data_upload_id=upload_id,
             is_deleted=False

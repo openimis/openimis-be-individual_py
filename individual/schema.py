@@ -179,15 +179,17 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         benefit_plan_to_enroll = kwargs.get("benefitPlanToEnroll")
         if benefit_plan_to_enroll:
             filters.append(
-                Q(is_deleted=False) &
-                ~Q(beneficiary__benefit_plan_id=benefit_plan_to_enroll)
+                Q(is_deleted=False) & ~Q(
+                    beneficiary__benefit_plan_id=benefit_plan_to_enroll
+                )
             )
 
         benefit_plan_id = kwargs.get("benefitPlanId")
         if benefit_plan_id:
             filters.append(
-                Q(is_deleted=False) &
-                Q(beneficiary__benefit_plan_id=benefit_plan_id)
+                Q(is_deleted=False) & Q(
+                    beneficiary__benefit_plan_id=benefit_plan_id
+                )
             )
 
         filter_not_attached_to_group = kwargs.get("filterNotAttachedToGroup")
@@ -336,8 +338,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         benefit_plan_to_enroll = kwargs.get("benefitPlanToEnroll")
         if benefit_plan_to_enroll:
             filters.append(
-                Q(is_deleted=False) &
-                ~Q(groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll)
+                Q(
+                    is_deleted=False
+                ) & ~Q(
+                    groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll
+                )
             )
 
         parent_location = kwargs.get('parent_location')

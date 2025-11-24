@@ -3,12 +3,11 @@ from individual.tests.test_helpers import (
     create_individual,
     create_group,
     create_group_with_individual,
-    add_individual_to_group,
     IndividualGQLTestCase,
 )
 from location.test_helpers import create_test_village
 from social_protection.tests.test_helpers import (
-  create_benefit_plan
+    create_benefit_plan
 )
 
 
@@ -40,7 +39,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             group_override={'location': cls.village_b},
             individual_override={'location': cls.village_b},
         )
-
 
     def test_group_query_general_permission(self):
         date_created = str(self.group_a.date_created).replace(' ', 'T')
@@ -212,7 +210,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         query_str = query_str.replace(
             str(self.village_a.uuid), str(self.village_a.parent.uuid)
         ).replace(
-            f"parentLocationLevel: 3", f"parentLocationLevel: 2"
+            "parentLocationLevel: 3", "parentLocationLevel: 2"
         )
 
         response = self.query(
@@ -324,7 +322,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             content = json.loads(response.content)
             self.assertEqual(content['data']['groupHistory']['totalCount'], 0)
 
-
         # SP officer B sees only group from their assigned district and
         # groups without location
         permitted_uuids = [
@@ -347,7 +344,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             self.assertResponseNoErrors(response)
             content = json.loads(response.content)
             self.assertEqual(content['data']['groupHistory']['totalCount'], 0)
-
 
     def test_individual_query_general_permission(self):
         date_created = str(self.individual_a.date_created).replace(' ', 'T')
@@ -404,7 +400,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         )
         content = json.loads(response.content)
         self.assertEqual(content['errors'][0]['message'], 'Unauthorized')
-
 
     def test_individual_query_row_security(self):
         date_created = str(self.individual_a.date_created).replace(' ', 'T')
@@ -528,7 +523,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         query_str = query_str.replace(
             str(self.village_a.uuid), str(district_a.uuid)
         ).replace(
-            f"parentLocationLevel: 3", f"parentLocationLevel: 1"
+            "parentLocationLevel: 3", "parentLocationLevel: 1"
         )
 
         response = self.query(
@@ -583,7 +578,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
 
-
     def test_individual_query_with_group(self):
         date_created = str(self.individual_a.date_created).replace(' ', 'T')
         query_str = f'''query {{
@@ -623,7 +617,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
-
 
     def test_individual_history_query_row_security(self):
         def send_individual_history_query(individual_uuid, as_user_token):
@@ -690,7 +683,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             content = json.loads(response.content)
             self.assertEqual(content['data']['individualHistory']['totalCount'], 0)
 
-
         # SP officer B sees only individual from their assigned district,
         # individuals without location, and individuals whose group has no location
         permitted_uuids = [
@@ -715,7 +707,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             self.assertResponseNoErrors(response)
             content = json.loads(response.content)
             self.assertEqual(content['data']['individualHistory']['totalCount'], 0)
-
 
     def test_group_individual_query_row_security(self):
         def send_group_individual_query(group_uuid, as_user_token):

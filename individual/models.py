@@ -6,9 +6,7 @@ from django.utils.translation import gettext_lazy as _
 
 import core
 from core.models import HistoryModel
-from graphql import ResolveInfo
 from location.models import Location, LocationManager
-
 
 
 class Individual(HistoryModel):
@@ -16,7 +14,7 @@ class Individual(HistoryModel):
     first_name = models.CharField(max_length=255, null=False)
     last_name = models.CharField(max_length=255, null=False)
     dob = core.fields.DateField(null=False)
-    #TODO WHY the HistoryModel json_ext was not enough
+    # TODO WHY the HistoryModel json_ext was not enough
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
     location = models.ForeignKey(
@@ -53,14 +51,14 @@ class Individual(HistoryModel):
                 user._u,
                 prefix='groupindividuals__group__location'
             )
-            return queryset.filter(
-                models.Q(
-                    user_districts_match_individual
-                    | (individual_has_group & user_districts_match_individual_group)
+            return queryset.filter(models.Q(
+                user_districts_match_individual | (
+                    individual_has_group & user_districts_match_individual_group
                 )
-            )
+            ))
 
         return queryset
+
 
 class IndividualDataSourceUpload(HistoryModel):
     USE_CACHE = False
@@ -128,6 +126,7 @@ class Group(HistoryModel):
             )
         return queryset
 
+
 @receiver(post_save, sender=Group)
 def update_member_individuals_location(sender, instance, **kwargs):
     with transaction.atomic():
@@ -136,8 +135,9 @@ def update_member_individuals_location(sender, instance, **kwargs):
             # only update individual location if group location is present,
             # because individuals import would create a group with empty locaiton which then takes on the location of the head
             if instance.location_id and individual.location_id != instance.location_id:
-                individual.location_id=instance.location_id
+                individual.location_id = instance.location_id
                 individual.save(user=instance.user_updated)
+
 
 class GroupDataSource(HistoryModel):
     USE_CACHE = False
@@ -148,6 +148,7 @@ class GroupDataSource(HistoryModel):
 
 class GroupIndividual(HistoryModel):
     USE_CACHE = False
+
     class Role(models.TextChoices):
         HEAD = 'HEAD', _('HEAD')
         SPOUSE = 'SPOUSE', _('SPOUSE')
@@ -188,7 +189,7 @@ class GroupIndividual(HistoryModel):
         if user:
             super().save(user=user)
         else:
-            super().save(username=kwargs.get('username'))  
+            super().save(username=kwargs.get('username'))
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.handle_head_change(self.id, self.role, self.group_id)
@@ -203,7 +204,7 @@ class GroupIndividual(HistoryModel):
             super().delete(user=user)
         else:
             super().delete(username=kwargs.get('username'))
-        
+
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.update_json_ext_for_group(self.group)

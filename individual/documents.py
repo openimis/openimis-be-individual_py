@@ -6,7 +6,7 @@ is_unit_test_env = getattr(settings, 'IS_UNIT_TEST_ENV', False)
 # Check if the 'opensearch_reports' app is in INSTALLED_APPS
 if 'opensearch_reports' in apps.app_configs:
     from opensearch_reports.service import BaseSyncDocument
-    from django_opensearch_dsl import Document, fields as opensearch_fields
+    from django_opensearch_dsl import fields as opensearch_fields
     from django_opensearch_dsl.registries import registry
     from individual.models import (
         Individual,
@@ -57,7 +57,6 @@ if 'opensearch_reports' in apps.app_configs:
                 else:
                     items[new_key] = v
             return items
-
 
     @registry.register_document
     class GroupIndividualDocument(BaseSyncDocument):
@@ -115,7 +114,6 @@ if 'opensearch_reports' in apps.app_configs:
                 else:
                     items[new_key] = v
             return items
-
 
     @registry.register_document
     class IndividualDataSourceDocument(BaseSyncDocument):

@@ -2,11 +2,11 @@ import copy
 import json
 import random
 import string
+import time
 from core.models import Role, RoleRight
 from core.models.base_mutation import MutationLog
 from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role
 from core.utils import TimeUtils
-from graphql_jwt.shortcuts import get_token
 from individual.models import Individual, Group, GroupIndividual
 from individual.tests.data import (
     service_add_individual_payload
@@ -22,6 +22,7 @@ def generate_random_string(length=6):
     letters = string.ascii_uppercase
     return ''.join(random.choice(letters) for i in range(length))
 
+
 def merge_dicts(original, override):
     updated = copy.deepcopy(original)
     for key, value in override.items():
@@ -31,6 +32,7 @@ def merge_dicts(original, override):
             updated[key] = value
     return updated
 
+
 def create_individual(username, payload_override={}):
     updated_payload = merge_dicts(service_add_individual_payload, payload_override)
     individual = Individual(**updated_payload)
@@ -38,11 +40,13 @@ def create_individual(username, payload_override={}):
 
     return individual
 
+
 def create_group(username, payload_override={}):
     updated_payload = merge_dicts({'code': generate_random_string()}, payload_override)
     group = Group(**updated_payload)
     group.save(username=username)
     return group
+
 
 def add_individual_to_group(username, individual, group, is_head=True):
     object_data = {
@@ -55,13 +59,12 @@ def add_individual_to_group(username, individual, group, is_head=True):
     group_individual.save(username=username)
     return group_individual
 
+
 def create_group_with_individual(username, group_override={}, individual_override={}):
     individual = create_individual(username, individual_override)
     group = create_group(username, group_override)
     group_individual = add_individual_to_group(username, individual, group)
     return individual, group, group_individual
-
-
 
 
 # Create a role with permissions to CRUD individuals and groups
@@ -74,7 +77,7 @@ def create_sp_role(created_by_user):
     }
     role = Role.objects.create(**sp_role_data)
 
-    for right_id in [159001,159002,159003,159004,159005,180001,180002,180003,180004]:
+    for right_id in [159001, 159002, 159003, 159004, 159005, 180001, 180002, 180003, 180004]:
         RoleRight.objects.create(
             **{
                 "role_id": role.id,
@@ -84,6 +87,7 @@ def create_sp_role(created_by_user):
             }
         )
     return role
+
 
 def complete_group_tasks(group_id):
     content_type_groupindividual = ContentType.objects.get_for_model(GroupIndividual)
@@ -103,6 +107,7 @@ def complete_group_tasks(group_id):
         entity_type=content_type_group,
         entity_id=group_id,
     ).update(status=Task.Status.COMPLETED)
+
 
 class IndividualGQLTestCase(openIMISGraphQLTestCase):
 
@@ -139,13 +144,12 @@ class IndividualGQLTestCase(openIMISGraphQLTestCase):
         cls.dist_b_user_token = BaseTestContext(user=cls.dist_b_user).get_jwt()
         eo_role = create_enrolment_officer_role()
         cls.med_enroll_officer = create_test_interactive_user(
-            username="medEONoRight", roles=[eo_role.id]) # 1 is the med enrollment officer role
+            username="medEONoRight", roles=[eo_role.id])  # 1 is the med enrollment officer role
         cls.med_enroll_officer_context = BaseTestContext(user=cls.med_enroll_officer)
         cls.med_enroll_officer_token = cls.med_enroll_officer_context.get_jwt()
 
     # overriding helper method from core to allow errors
     def get_mutation_result(self, mutation_uuid, token, internal=False):
-        content = None
         while True:
             # wait for the mutation to be done
             if internal:
@@ -163,7 +167,7 @@ class IndividualGQLTestCase(openIMISGraphQLTestCase):
                 {{
                     node
                     {{
-                        id,status,error,clientMutationId,clientMutationLabel,clientMutationDetails,requestDateTime,jsonExt
+                        id, status, error, clientMutationId, clientMutationLabel, clientMutationDetails, requestDateTime, jsonExt
                     }}
                 }}
                 }}
@@ -190,4 +194,3 @@ class IndividualGQLTestCase(openIMISGraphQLTestCase):
             MutationLog.SUCCESS,
             mutation_result['data']['mutationLogs']['edges'][0]['node']['error']
         )
-

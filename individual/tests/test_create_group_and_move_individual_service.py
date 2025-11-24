@@ -1,9 +1,9 @@
 from datetime import datetime
 from django.test import TestCase
 
-from individual.models import Individual, GroupIndividual, Group
-from individual.services import GroupIndividualService, CreateGroupAndMoveIndividualService
-from individual.tests.data import service_add_individual_payload, service_group_individual_payload
+from individual.models import Individual, Group, GroupIndividual
+from individual.services import CreateGroupAndMoveIndividualService
+from individual.tests.data import service_add_individual_payload
 
 from core.test_helpers import LogInHelper
 

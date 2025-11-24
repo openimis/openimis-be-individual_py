@@ -7,6 +7,7 @@ import django.db.models.deletion
 
 from django.conf import settings
 
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -18,9 +19,9 @@ class Migration(migrations.Migration):
             sql=(
                 """
                 IF (SELECT SERVERPROPERTY('EngineEdition')) = 5 BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.columns 
-                               WHERE table_name='individualdatasourceupload' 
-                               AND column_name='individual') 
+                    IF EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='individualdatasourceupload'
+                               AND column_name='individual')
                     BEGIN
                         ALTER TABLE individualdatasourceupload DROP COLUMN individual;
                     END
@@ -28,8 +29,8 @@ class Migration(migrations.Migration):
                 """ if settings.MSSQL else """
                 DO $$
                 BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.columns 
-                               WHERE table_name='individualdatasourceupload' 
+                    IF EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='individualdatasourceupload'
                                AND column_name='individual') THEN
                         ALTER TABLE individualdatasourceupload DROP COLUMN individual;
                     END IF;
@@ -42,9 +43,9 @@ class Migration(migrations.Migration):
             sql=(
                 """
                 IF (SELECT SERVERPROPERTY('EngineEdition')) = 5 BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.columns 
-                               WHERE table_name='historicalindividualdatasourceupload' 
-                               AND column_name='individual') 
+                    IF EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='historicalindividualdatasourceupload'
+                               AND column_name='individual')
                     BEGIN
                         ALTER TABLE historicalindividualdatasourceupload DROP COLUMN individual;
                     END
@@ -52,8 +53,8 @@ class Migration(migrations.Migration):
                 """ if settings.MSSQL else """
                 DO $$
                 BEGIN
-                    IF EXISTS (SELECT 1 FROM information_schema.columns 
-                               WHERE table_name='historicalindividualdatasourceupload' 
+                    IF EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='historicalindividualdatasourceupload'
                                AND column_name='individual') THEN
                         ALTER TABLE historicalindividualdatasourceupload DROP COLUMN individual;
                     END IF;

@@ -4,6 +4,7 @@ from individual.utils import load_dataframe
 import pandas as pd
 import json
 
+
 class UtilsTest(TestCase):
 
     def test_load_dataframe_basic(self):
@@ -29,7 +30,7 @@ class UtilsTest(TestCase):
         sources = []
         for id, row in source_df.iterrows():
             json_ext = json.loads(row.to_json())
-            sources.append(IndividualDataSource(id=id+1, json_ext=json_ext))
+            sources.append(IndividualDataSource(id=id + 1, json_ext=json_ext))
 
         df = load_dataframe(sources)
 

@@ -4,7 +4,7 @@ import string
 from typing import List
 
 from django.contrib.postgres.aggregates import ArrayAgg
-from django.db.models import F, Q
+from django.db.models import F
 
 from core.models import User
 from individual.apps import IndividualConfig
@@ -13,7 +13,7 @@ from individual.models import (
     IndividualDataSource,
     IndividualDataUploadRecords, Group, GroupIndividual, Individual, GroupDataSource
 )
-from individual.services import GroupIndividualService, GroupService
+from individual.services import GroupService
 from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
 from tasks_management.services import TaskService
@@ -213,7 +213,7 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
         if recipient_type in [2, '2', 2.0]:
             return GroupIndividual.RecipientType.SECONDARY
         return None
-    
+
     @staticmethod
     def _individual_role_parser(individual_role):
         return getattr(GroupIndividual.Role, individual_role.upper(), None)
@@ -389,10 +389,16 @@ def _resolve_task_any(_task: Task, _user):
         last = _task.history.first().prev_record
         if last and isinstance(last.business_status.get(user_id_str), dict):
             # Only new approvals/rejections, the format is {user_id: {[ACCEPT|REJECT]: [uuid1_, ... uuid_n]}
-            accept = list(set(_task.business_status[user_id_str].get('ACCEPT', []))
-                          - set(last.business_status[user_id_str].get('ACCEPT', [])))
-            reject = list(set(_task.business_status[user_id_str].get('REJECT', []))
-                          - set(last.business_status[user_id_str].get('REJECT', [])))
+            accept = list(set(
+                _task.business_status[user_id_str].get('ACCEPT', [])
+            ) - set(
+                last.business_status[user_id_str].get('ACCEPT', [])
+            ))
+            reject = list(set(
+                _task.business_status[user_id_str].get('REJECT', [])
+            ) - set(
+                last.business_status[user_id_str].get('REJECT', [])
+            ))
         else:
             accept = _task.business_status[user_id_str].get('ACCEPT', [])
             reject = _task.business_status[user_id_str].get('REJECT', [])
