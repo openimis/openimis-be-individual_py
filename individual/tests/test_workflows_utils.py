@@ -11,7 +11,7 @@ import uuid
 class TestBasePythonWorkflowExecutor(TestCase):
 
     def setUp(self):
-        self.user = create_test_interactive_user(username="admin")
+        self.user = create_test_interactive_user(username='Admin')
         self.upload_id = uuid.uuid4()
 
         # Patch IndividualConfig schema and load_dataframe function

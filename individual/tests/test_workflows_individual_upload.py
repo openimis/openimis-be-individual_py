@@ -45,7 +45,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         super().tearDownClass()
 
     def setUp(self):
-        self.user = create_test_interactive_user(username="admin")
+        self.user = create_test_interactive_user(username='Admin')
         self.user_uuid = str(self.user.id)
 
         self.upload = IndividualDataSourceUpload(
