@@ -680,14 +680,14 @@ class IndividualImportService:
         query = Q()
         for __, row in unique_tuples.iterrows():
             query |= Q(name=row['location_name'], code=row['location_code'])
-        locations = Location.objects.filter(type="V", *filter_validity()).filter(query)
+        locations = Location.objects.filter(type="V", *Location.filter_validity()).filter(query)
         return {(loc.name, loc.code): loc.parent.parent.id for loc in locations}
 
     @staticmethod
     def _query_duplicate_village_name_code():
         return (
             Location.objects
-            .filter(type="V", *filter_validity())
+            .filter(type="V", *Location.filter_validity())
             .values('name', 'code')
             .annotate(name_count=Count('id'))
             .filter(name_count__gt=1)

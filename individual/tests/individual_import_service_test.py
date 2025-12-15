@@ -41,7 +41,7 @@ class IndividualImportServiceTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        admin_role = Role.objects.filter(is_system=64, *filter_validity()).first()
+        admin_role = Role.objects.filter(is_system=64, *Role.filter_validity()).first()
         cls.admin_user = create_test_interactive_user(
             username="superuserme", roles=[admin_role.id]
         )

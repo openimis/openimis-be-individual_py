@@ -84,7 +84,7 @@ class Command(BaseCommand):
         location_qs = Location.objects
         if user:
             location_qs = Location.get_queryset(location_qs, user)
-        permitted_locations = list(location_qs.filter(type='V', *filter_validity()))
+        permitted_locations = list(location_qs.filter(type='V', *Location.filter_validity()))
 
         individuals = []  # List to store fake individuals
         num_individuals = options.get('num_individuals')

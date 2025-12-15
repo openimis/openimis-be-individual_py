@@ -172,7 +172,7 @@ class DeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation
         locations_id = list(
             Location.objects.filter(
                 individuals__id__in=data['ids'],
-                *filter_validity()
+                *Location.filter_validity()
             ).values_list('id', flat=True)
         )
         if len(locations_id) > 0 and not LocationManager().is_allowed(
@@ -219,7 +219,7 @@ class UndoDeleteIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMuta
         locations_id = list(
             Location.objects.filter(
                 individuals__id__in=data['ids'],
-                *filter_validity()
+                *Location.filter_validity()
             ).values_list('id', flat=True)
         )
         if len(locations_id) > 0 and not LocationManager().is_allowed(
@@ -334,7 +334,7 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
         locations_id = list(
             Location.objects.filter(
                 groups__id__in=data['ids'],
-                *filter_validity()
+                *Location.filter_validity()
             ).values_list('id', flat=True)
         )
         if len(locations_id) > 0 and not LocationManager().is_allowed(
@@ -469,7 +469,7 @@ class DeleteGroupIndividualMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
             Location.objects.filter(
                 Q(groups__groupindividuals__id__in=data['ids']) | Q(
                     individuals__groupindividuals__id__in=data['ids'])
-            ).filter(*filter_validity()).values_list('id', flat=True)
+            ).filter(*Location.filter_validity()).values_list('id', flat=True)
         )
         # must first check if locations_qs exists in case none of the groups or individuals has location
         if len(locations_qs) > 0 and not LocationManager().is_allowed(
