@@ -22,7 +22,6 @@ from individual.tests.test_helpers import (
 )
 from opensearch_reports.service import BaseSyncDocument
 from unittest.mock import MagicMock, patch
-from core.utils import filter_validity
 from core.models.user import Role
 from location.models import Location
 

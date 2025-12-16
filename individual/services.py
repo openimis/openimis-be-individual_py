@@ -7,7 +7,6 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import transaction
 
 from calculation.services import get_calculation_object
-from core import filter_validity
 from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService

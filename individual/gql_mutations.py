@@ -4,7 +4,6 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils.translation import gettext as _
 
-from core import filter_validity
 from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationMixin, BaseMutation, \
     BaseHistoryModelUpdateMutationMixin, BaseHistoryModelCreateMutationMixin
 from core.schema import OpenIMISMutation

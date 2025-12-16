@@ -9,7 +9,6 @@ from individual.apps import IndividualConfig
 from individual.models import GroupIndividual
 from individual.tests.test_helpers import generate_random_string
 from location.models import Location
-from core import filter_validity
 from core.models import User
 
 fake = Faker()
