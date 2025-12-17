@@ -5,7 +5,7 @@ import string
 import time
 from core.models import Role, RoleRight
 from core.models.base_mutation import MutationLog
-from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role
+from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role, create_admin_role
 from core.utils import TimeUtils
 from individual.models import Individual, Group, GroupIndividual
 from individual.tests.data import (
@@ -115,7 +115,7 @@ class IndividualGQLTestCase(openIMISGraphQLTestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        cls.admin_user = create_test_interactive_user(username="adminSeesEveryone")
+        cls.admin_user = create_test_interactive_user(username="adminSeesEveryone", roles=[create_admin_role().id])
         cls.admin_context = BaseTestContext(user=cls.admin_user)
         cls.admin_token = cls.admin_context.get_jwt()
 
