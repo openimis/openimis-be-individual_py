@@ -1,3 +1,4 @@
+import importlib
 import logging
 import json
 import uuid
@@ -14,7 +15,6 @@ from core.custom_filters import CustomFilterWizardStorage
 from core.models import User
 from core.services import BaseService
 from core.signals import register_service_signal
-from django.apps import apps
 from django.utils.translation import gettext as _
 from django.db.models import Q, OuterRef, Subquery, Count
 from individual.apps import IndividualConfig
@@ -593,9 +593,9 @@ class IndividualImportService:
         return {'success': True, 'data': validated_dataframe, 'summary_invalid_items': invalid_items}
 
     def synchronize_data_for_reporting(self, upload_id: uuid):
-        if 'opensearch_reports' in apps.app_configs:
-            from individual.documents import IndividualDocument
-
+        documents_module = importlib.import_module("individual.documents")
+        IndividualDocument = getattr(documents_module, "IndividualDocument", None)
+        if IndividualDocument:
             individuals = Individual.objects.filter(individualdatasource__upload=upload_id)
             if not individuals:
                 return
