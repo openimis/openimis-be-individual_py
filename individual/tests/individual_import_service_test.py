@@ -336,7 +336,7 @@ class IndividualImportServiceTest(TestCase):
         df = service._load_import_file(csv_file)
 
         self.assertIn('location_code', df.columns)
-        self.assertEqual(df['location_code'].dtype, object)  # object dtype means it's read as string
+        self.assertIn(df['location_code'].dtype.name, ['string', 'object'])  # string dtype means it's read as string
         self.assertEqual(df['location_code'].iloc[0], '202')
 
     @patch.object(BaseSyncDocument, 'update')

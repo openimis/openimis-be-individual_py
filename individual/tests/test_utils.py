@@ -42,7 +42,7 @@ class UtilsTest(TestCase):
         self.assertIn("name", df.columns)
         self.assertEqual(df.at[0, "name"], 'Alice')
         self.assertEqual(df.at[1, "name"], '')
-        self.assertIsNone(df.at[2, "name"])
+        self.assertTrue(pd.isna(df.at[2, "name"]))
 
     def test_load_dataframe_location_code_as_big_number(self):
         """Ensure 'location_code' remains a string even when given a large numeric value."""
