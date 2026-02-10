@@ -15,7 +15,6 @@ import uuid
 from unittest import skipIf
 
 
-
 class ProcessUpdateIndividualsWorkflowTest(TestCase):
 
     @classmethod
@@ -40,7 +39,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         super().tearDownClass()
 
     def setUp(self):
-        self.user = create_test_interactive_user(username="admin")
+        self.user = create_test_interactive_user(username='Admin')
         self.user_uuid = self.user.id
 
         individual1_dict = {

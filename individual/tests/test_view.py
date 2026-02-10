@@ -43,7 +43,7 @@ class TestView(APITestCase):
             response['Content-Disposition']
         )
 
-        expected_base_csv_header = f'first_name,last_name,dob,location_name,location_code,id'
+        expected_base_csv_header = 'first_name,last_name,dob,location_name,location_code,id'
         content = b"".join(response.streaming_content).decode('utf-8')
         self.assertTrue(
             expected_base_csv_header in content,
@@ -212,7 +212,6 @@ class TestView(APITestCase):
 
         mock_handler_instance.save_file.assert_called_once()
         mock_handler_instance.remove_file.assert_called_once()
-
 
     @patch('individual.views.WorkflowService')
     @patch('individual.views.DefaultStorageFileHandler')

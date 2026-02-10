@@ -81,7 +81,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         internal_id = content['data']['createGroup']['internalId']
         self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
-        
+
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -271,7 +271,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
             self.admin_user.username,
             payload_override={'location': self.village_a},
         )
-        group_a2 = create_group(
+        create_group(
             self.admin_user.username,
             payload_override={'location': self.village_a},
         )
@@ -389,7 +389,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
             business_event='GroupService.delete',
         )
         self.assertEqual(task_query.count(), 1)
-
 
     def test_add_individual_to_group_general_permission(self):
         group = create_group(self.admin_user.username)
@@ -769,7 +768,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_success(internal_id)
 
         # SP officer B can delete group without any district
-        group_no_loc = create_group(self.admin_user.username)
+        create_group(self.admin_user.username)
         response = self.query(
             query_str.replace(
                 str(group_individual_a.id),
@@ -792,7 +791,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_error(internal_id, _('unauthorized.location'))
 
         # SP officer B can delete group from district B
-        group_no_loc = create_group(self.admin_user.username)
+        create_group(self.admin_user.username)
         response = self.query(
             query_str.replace(
                 str(group_individual_a.id),

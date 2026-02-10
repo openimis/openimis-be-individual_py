@@ -65,8 +65,8 @@ BEGIN
     IF failing_entries_invalid_id IS NOT NULL THEN
         UPDATE individual_individualdatasourceupload
         SET error = coalesce(error, '{}'::jsonb) || jsonb_build_object('errors', jsonb_build_object(
-                            'error', 'Invalid entries', 
-                            'timestamp', NOW()::text, 
+                            'error', 'Invalid entries',
+                            'timestamp', NOW()::text,
                             'upload_id', current_upload_id::text,
                             'failing_entries_invalid_id', failing_entries_invalid_id
                         ))
@@ -75,7 +75,7 @@ BEGIN
        update individual_individualdatasourceupload set status='FAIL' where "UUID" = current_upload_id;
     -- If no invalid entries, then proceed with the data manipulation
     ELSE
-        begin 
+        begin
           with updated_individuals as ( UPDATE individual_individual
             SET first_name = COALESCE(f."Json_ext"->>'first_name', first_name),
             last_name = COALESCE(f."Json_ext"->>'last_name', last_name),
@@ -95,9 +95,9 @@ BEGIN
             UPDATE individual_individualdatasource
       SET individual_id = u."UUID"
       FROM updated_individuals u
-      WHERE upload_id=current_upload_id 
-        and individual_individualdatasource.individual_id is null 
-        and "isDeleted"=False 
+      WHERE upload_id=current_upload_id
+        and individual_individualdatasource.individual_id is null
+        and "isDeleted"=False
         and individual_individualdatasource."UUID" = u.individualdatasource_id;
 
 

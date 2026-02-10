@@ -45,7 +45,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         super().tearDownClass()
 
     def setUp(self):
-        self.user = create_test_interactive_user(username="admin")
+        self.user = create_test_interactive_user(username='Admin')
         self.user_uuid = str(self.user.id)
 
         self.upload = IndividualDataSourceUpload(
@@ -116,7 +116,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)
     def test_process_import_individuals_workflow_with_all_valid_entries(self):
         # Update invalid entry in IndividualDataSource to valid data
-        self.invalid_data_source.json_ext={
+        self.invalid_data_source.json_ext = {
             "first_name": "Jane Workflow",
             "last_name": "Doe",
             "dob": "1982-01-01",
@@ -169,11 +169,10 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         group = Group.objects.get(id=group_id)
         self.assertEqual(group.location.name, json_ext1['location_name'])
 
-
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', True)
     def test_process_import_individuals_workflow_with_all_valid_entries_with_maker_checker(self):
         # Update invalid entry in IndividualDataSource to valid data
-        self.invalid_data_source.json_ext={
+        self.invalid_data_source.json_ext = {
             "first_name": "Jane Workflow",
             "last_name": "Doe",
             "dob": "1982-01-01",

@@ -1,3 +1,4 @@
+# flake8: noqa
 from .individual_service_test import IndividualServiceTest
 from .individual_import_service_test import IndividualImportServiceTest
 from .group_service_test import GroupServiceTest

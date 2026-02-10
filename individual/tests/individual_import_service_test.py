@@ -8,7 +8,6 @@ from django.db.models.query import QuerySet
 from django.test import TestCase
 from individual.services import IndividualImportService
 from individual.models import (
-    Individual,
     IndividualDataSource,
     IndividualDataSourceUpload,
     IndividualDataUploadRecords,
@@ -23,7 +22,6 @@ from individual.tests.test_helpers import (
 )
 from opensearch_reports.service import BaseSyncDocument
 from unittest.mock import MagicMock, patch
-from core.utils import filter_validity
 from core.models.user import Role
 from location.models import Location
 
@@ -32,7 +30,7 @@ def count_csv_records(file_path):
     with open(file_path, mode='r', encoding='utf-8') as file:
         reader = csv.reader(file)
         valid_rows = list(
-            row for row in reader 
+            row for row in reader
             if any(cell.strip() for cell in row)  # Do not count blank lines
         )
         return len(valid_rows) - 1  # Exclude the header row
@@ -42,7 +40,7 @@ class IndividualImportServiceTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        admin_role = Role.objects.filter(is_system=64, *filter_validity()).first()
+        admin_role = Role.objects.filter(is_system=64, *Role.filter_validity()).first()
         cls.admin_user = create_test_interactive_user(
             username="superuserme", roles=[admin_role.id]
         )
@@ -79,7 +77,6 @@ class IndividualImportServiceTest(TestCase):
             source_type="individual import",
         )
         cls.empty_upload.save(user=cls.admin_user)
-
 
     def test_import_individuals(self):
         uploaded_csv_name = f"{generate_random_string(20)}.csv"
@@ -120,7 +117,6 @@ class IndividualImportServiceTest(TestCase):
             'user_uuid': str(self.admin_user.id),
             'upload_uuid': str(upload.uuid),
         })
-
 
     def _create_mock_workflow(self):
         mock_workflow = MagicMock()
@@ -202,7 +198,6 @@ class IndividualImportServiceTest(TestCase):
                 self.assertEqual(email_validation.get('field_name'), 'email')
                 self.assertEqual(email_validation.get('note'), "'email' Field value 'john@example.com' is duplicated")
 
-
     @patch('individual.services.load_dataframe')
     @patch('individual.services.fetch_summary_of_broken_items')
     def test_validate_import_individuals_row_level_security(self, mock_fetch_summary, mock_load_dataframe):
@@ -214,7 +209,7 @@ class IndividualImportServiceTest(TestCase):
         assign_user_districts(dist_a_user, ["R1D1", district_a_code])
 
         dataframe = pd.read_csv(self.csv_file_path, na_filter=False)
-        dataframe['id'] = dataframe.index+1
+        dataframe['id'] = dataframe.index + 1
         mock_load_dataframe.return_value = dataframe
 
         mock_invalid_items = {"invalid_items_count": 2}
@@ -283,7 +278,6 @@ class IndividualImportServiceTest(TestCase):
                 "Please check the spelling against the list of locations in the system."
             )
 
-
     @patch('individual.services.load_dataframe')
     @patch('individual.services.fetch_summary_of_broken_items')
     def test_validate_import_individuals_ambiguous_location_name(self, mock_fetch_summary, mock_load_dataframe):
@@ -296,7 +290,7 @@ class IndividualImportServiceTest(TestCase):
         })
 
         dataframe = pd.read_csv(self.csv_file_path, na_filter=False)
-        dataframe['id'] = dataframe.index+1
+        dataframe['id'] = dataframe.index + 1
         mock_load_dataframe.return_value = dataframe
 
         mock_invalid_items = {"invalid_items_count": 2}
@@ -342,7 +336,7 @@ class IndividualImportServiceTest(TestCase):
         df = service._load_import_file(csv_file)
 
         self.assertIn('location_code', df.columns)
-        self.assertEqual(df['location_code'].dtype, object)  # object dtype means it's read as string
+        self.assertIn(df['location_code'].dtype.name, ['string', 'object', 'str'])  # string dtype means it's read as string
         self.assertEqual(df['location_code'].iloc[0], '202')
 
     @patch.object(BaseSyncDocument, 'update')

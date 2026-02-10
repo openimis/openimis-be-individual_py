@@ -96,9 +96,9 @@ class SqlProcedurePythonWorkflow(BasePythonWorkflowExecutor):
 
     def _execute_sql_logic(self, sql_func: str, params: Iterable):
         with connection.cursor() as cursor:
-            current_upload_id = self.upload_uuid
-            userUUID = self.user_uuid
-            accepted = self.accepted
+            # current_upload_id = self.upload_uuid
+            # userUUID = self.user_uuid
+            # accepted = self.accepted
             # The SQL logic here needs to be carefully translated or executed directly
             # The provided SQL is complex and may require breaking down into multiple steps or ORM operations
             cursor.execute(
@@ -139,12 +139,12 @@ class MakerCheckerPythonWorkflowExecutor(SqlProcedurePythonWorkflow, metaclass=A
                 # All records are fine, execute SQL logic
                 self._execute_sql_logic(sql)
         except ProgrammingError as e:
-            import traceback
+            # import traceback
             # The exception on procedure execution is handled by the procedure itself.
             logger.log(logging.ERROR, F'Error during individuals upload workflow, details:\n{str(e)}')
             return
         except Exception as e:
-            import traceback
+            # import traceback
             logger.log(logging.ERROR, F'Unexpected during individuals upload workflow, details:\n{str(e)}')
             raise PythonWorkflowHandlerException(str(e))
 

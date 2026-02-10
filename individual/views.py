@@ -3,7 +3,6 @@ import json
 import mimetypes
 import os
 
-import numpy as np
 import pandas as pd
 from django.db.models import Q
 from django.core.files.storage import default_storage
@@ -19,8 +18,6 @@ from core.views import check_user_rights
 from individual.apps import IndividualConfig
 from individual.models import IndividualDataSource
 from individual.services import IndividualImportService
-
-from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from workflow.services import WorkflowService
 
@@ -45,12 +42,12 @@ def is_valid_file(import_file):
     if file_extension not in ALLOWED_EXTENSIONS:
         return False, _("Invalid file type. Allowed: .csv, .xls, .xlsx")
 
-    file_mime_type, _ = mimetypes.guess_type(import_file.name)
+    file_mime_type, __ = mimetypes.guess_type(import_file.name)
     if not file_mime_type:
         return False, _("Could not determine file type")
 
     if file_mime_type not in ALLOWED_MIME_TYPES:
-        return False, _(f"Invalid MIME type:") + f" {file_mime_type}"
+        return False, _("Invalid MIME type:") + f" {file_mime_type}"
 
     return True, None
 
@@ -63,6 +60,7 @@ def get_global_schema_fields():
     schema_properties = set(schema.get('properties', {}).keys())
     schema_properties.update(['recipient_info', 'individual_role', 'group_code'])
     return list(schema_properties)
+
 
 # API endpoint to download a CSV template for individual data import
 @api_view(["GET"])
@@ -92,6 +90,7 @@ def download_template_file(request):
         # Log unexpected errors and return a 500 response
         logger.error("Unexpected error while generating template file", exc_info=exc)
         return Response({'success': False, 'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # API endpoint to import individual data from a file
 @api_view(["POST"])
@@ -132,6 +131,7 @@ def import_individuals(request):
         logger.error("Unexpected error while uploading individuals", exc_info=e)
         return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 # API endpoint to download invalid items from an individual data upload
 @api_view(["GET"])
 @permission_classes([check_user_rights(IndividualConfig.gql_individual_search_perms)])
@@ -142,9 +142,13 @@ def download_invalid_items(request):
 
         # Query invalid items from the data source based on the upload ID
         invalid_items = IndividualDataSource.objects.filter(
-            Q(is_deleted=False) &
-            Q(upload_id=upload_id) &
-            ~Q(validations__validation_errors=[])
+            Q(
+                is_deleted=False
+            ) & Q(
+                upload_id=upload_id
+            ) & ~Q(
+                validations__validation_errors=[]
+            )
         )
 
         # Prepare data for invalid items as a list of dictionaries
@@ -179,6 +183,7 @@ def download_invalid_items(request):
         logger.error("Unexpected error", exc_info=exc)
         return Response({'success': False, 'error': str(exc)}, status=500)
 
+
 # API endpoint to download a previously uploaded individual data file
 @api_view(["GET"])
 @permission_classes([check_user_rights(IndividualConfig.gql_individual_search_perms)])
@@ -202,6 +207,7 @@ def download_individual_upload(request):
         logger.error("Unexpected error", exc_info=exc)
         return Response({'success': False, 'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 # Function to handle file uploads and save them to a specified path
 def _handle_file_upload(file):
     original_name = file.name
@@ -217,11 +223,13 @@ def _handle_file_upload(file):
     file_handler = DefaultStorageFileHandler(target_file_path)
     file_handler.save_file(file)
 
+
 # Function to remove a file from storage
 def _remove_file(file):
     target_file_path = IndividualConfig.get_individual_upload_file_path(file.name)
     file_handler = DefaultStorageFileHandler(target_file_path)
     file_handler.remove_file()
+
 
 # Helper function to resolve and validate import arguments from the request
 def _resolve_import_individuals_args(request):

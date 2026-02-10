@@ -1,5 +1,5 @@
 from django.test import TestCase
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from core.test_helpers import create_test_interactive_user
 from individual.workflows.utils import SqlProcedurePythonWorkflow, PythonWorkflowHandlerException
 from opensearch_reports.service import BaseSyncDocument
@@ -7,10 +7,11 @@ import pandas as pd
 import json
 import uuid
 
+
 class TestBasePythonWorkflowExecutor(TestCase):
 
     def setUp(self):
-        self.user = create_test_interactive_user(username="admin")
+        self.user = create_test_interactive_user(username='Admin')
         self.upload_id = uuid.uuid4()
 
         # Patch IndividualConfig schema and load_dataframe function
@@ -79,4 +80,3 @@ class TestBasePythonWorkflowExecutor(TestCase):
             self.executor.validate_dataframe_headers(is_update=True)
         except PythonWorkflowHandlerException:
             self.fail("validate_dataframe_headers() raised PythonWorkflowHandlerException unexpectedly!")
-

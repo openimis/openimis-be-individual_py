@@ -4,6 +4,7 @@ from individual.utils import load_dataframe
 import pandas as pd
 import json
 
+
 class UtilsTest(TestCase):
 
     def test_load_dataframe_basic(self):
@@ -29,7 +30,7 @@ class UtilsTest(TestCase):
         sources = []
         for id, row in source_df.iterrows():
             json_ext = json.loads(row.to_json())
-            sources.append(IndividualDataSource(id=id+1, json_ext=json_ext))
+            sources.append(IndividualDataSource(id=id + 1, json_ext=json_ext))
 
         df = load_dataframe(sources)
 
@@ -41,7 +42,7 @@ class UtilsTest(TestCase):
         self.assertIn("name", df.columns)
         self.assertEqual(df.at[0, "name"], 'Alice')
         self.assertEqual(df.at[1, "name"], '')
-        self.assertIsNone(df.at[2, "name"])
+        self.assertTrue(pd.isna(df.at[2, "name"]))
 
     def test_load_dataframe_location_code_as_big_number(self):
         """Ensure 'location_code' remains a string even when given a large numeric value."""

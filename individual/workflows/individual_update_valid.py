@@ -18,8 +18,8 @@ def process_update_valid_individuals_workflow(user_uuid, upload_uuid, accepted=N
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-upload_sql = """     
--- Setup 
+upload_sql = """
+-- Setup
 CREATE OR REPLACE FUNCTION filter_jsonb(data jsonb, schema jsonb)
 RETURNS jsonb AS $$
 DECLARE
@@ -46,7 +46,7 @@ DO $$ BEGIN
             WHEN duplicate_object THEN null;
         END $$;
 
--- Update procedure   
+-- Update procedure
 DO $$
 declare
     current_upload_id UUID := %s::UUID;
@@ -69,8 +69,8 @@ BEGIN
     IF failing_entries_invalid_id IS NOT NULL THEN
         UPDATE individual_individualdatasourceupload
         SET error = coalesce(error, '{}'::jsonb) || jsonb_build_object('errors', jsonb_build_object(
-                            'error', 'Invalid entries', 
-                            'timestamp', NOW()::text, 
+                            'error', 'Invalid entries',
+                            'timestamp', NOW()::text,
                             'upload_id', current_upload_id::text,
                             'failing_entries_invalid_id', failing_entries_invalid_id
                         ))
@@ -79,7 +79,7 @@ BEGIN
        update individual_individualdatasourceupload set status='FAIL' where "UUID" = current_upload_id;
     -- If no invalid entries, then proceed with the data manipulation
     ELSE
-        begin 
+        begin
             -- Update individual_individual
           with updated_individuals as ( UPDATE individual_individual
             SET first_name = COALESCE(ids."Json_ext"->>'first_name', first_name),
@@ -88,7 +88,7 @@ BEGIN
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
                 "Json_ext" = ids."Json_ext"
-            FROM individual_individualdatasource ids 
+            FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
                     AND loc."LocationCode" = ids."Json_ext"->>'location_code'
@@ -102,24 +102,24 @@ BEGIN
             UPDATE individual_individualdatasource
       SET individual_id = u."UUID"
       FROM updated_individuals u
-      WHERE upload_id=current_upload_id 
-        and individual_individualdatasource.individual_id is null 
-        and "isDeleted"=False 
+      WHERE upload_id=current_upload_id
+        and individual_individualdatasource.individual_id is null
+        and "isDeleted"=False
         and individual_individualdatasource."UUID" = u.individualdatasource_id
         and validations ->> 'validation_errors' = '[]';
 
-            -- Change status to SUCCESS if no invalid items, change to PARTIAL_SUCCESS otherwise 
+            -- Change status to SUCCESS if no invalid items, change to PARTIAL_SUCCESS otherwise
             UPDATE individual_individualdatasourceupload
-            SET 
+            SET
                 status = CASE
                     WHEN (
-                        SELECT count(*) 
+                        SELECT count(*)
                         FROM individual_individualdatasource
                         WHERE upload_id=current_upload_id
                             AND "isDeleted"=FALSE
                             AND validations ->> 'validation_errors' = '[]'
                     ) = (
-                        SELECT count(*) 
+                        SELECT count(*)
                         FROM individual_individualdatasource
                         WHERE upload_id=current_upload_id
                             AND "isDeleted"=FALSE
@@ -145,7 +145,7 @@ BEGIN
         """
 
 upload_sql_partial = """
--- Setup 
+-- Setup
 DO $$ BEGIN
             CREATE TYPE failing_entry_individual_upload AS (
             uuids TEXT[],
@@ -193,8 +193,8 @@ BEGIN
     IF failing_entries_invalid_id IS NOT NULL THEN
         UPDATE individual_individualdatasourceupload
         SET error = coalesce(error, '{}'::jsonb) || jsonb_build_object('errors', jsonb_build_object(
-                            'error', 'Invalid entries', 
-                            'timestamp', NOW()::text, 
+                            'error', 'Invalid entries',
+                            'timestamp', NOW()::text,
                             'upload_id', current_upload_id::text,
                             'failing_entries_invalid_id', failing_entries_invalid_id
                         ))
@@ -202,8 +202,8 @@ BEGIN
 
        UPDATE individual_individualdatasourceupload SET status='FAIL' WHERE "UUID" = current_upload_id;
     ELSE
-      BEGIN 
-          WITH updated_individuals AS ( 
+      BEGIN
+          WITH updated_individuals AS (
             UPDATE individual_individual
             SET first_name = COALESCE(ids."Json_ext"->>'first_name', first_name),
                 last_name = COALESCE(ids."Json_ext"->>'last_name', last_name),
@@ -217,22 +217,22 @@ BEGIN
                     AND loc."LocationCode" = ids."Json_ext"->>'location_code'
                     AND loc."LocationType"='V'
                     AND loc."ValidityTo" IS NULL
-            WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID 
+            WHERE individual_individual."UUID" = (ids."Json_ext" ->> 'ID')::UUID
             AND ids.upload_id = current_upload_id
             AND (ids."UUID" = ANY(accepted))
             AND validations ->> 'validation_errors' = '[]'
             RETURNING individual_individual."UUID", ids."UUID" as individualdatasource_id)
-           
+
           UPDATE individual_individualdatasource
           SET individual_id = u."UUID"
           FROM updated_individuals u
-          WHERE upload_id = current_upload_id 
-            AND individual_individualdatasource.individual_id IS NULL 
-            AND "isDeleted" = False 
+          WHERE upload_id = current_upload_id
+            AND individual_individualdatasource.individual_id IS NULL
+            AND "isDeleted" = False
             AND individual_individualdatasource."UUID" = u.individualdatasource_id
             AND (individual_individualdatasource."UUID" = ANY(accepted))
             AND validations ->> 'validation_errors' = '[]';
-            
+
           EXCEPTION
             WHEN OTHERS THEN
               UPDATE individual_individualdatasourceupload SET status = 'FAIL' WHERE "UUID" = current_upload_id;
@@ -245,6 +245,6 @@ BEGIN
               WHERE "UUID" = current_upload_id;
       END;
     END IF;
-    
+
 END $$
 """

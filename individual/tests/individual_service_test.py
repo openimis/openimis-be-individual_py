@@ -1,5 +1,4 @@
 import copy
-import json
 
 from django.test import TestCase
 
@@ -79,7 +78,7 @@ class IndividualServiceTest(TestCase):
         benefit_plan = create_benefit_plan(self.user.username, payload_override={
             'type': "INDIVIDUAL"
         })
-        
+
         self.individual_a, self.group_a, self.group_individual_a = create_group_with_individual(
             self.user.username
         )
@@ -111,7 +110,7 @@ class IndividualServiceTest(TestCase):
             status=status,
             user=self.user
         )
-        
+
         self.assertNotEqual(summary, None)
         self.assertEqual(summary['individual_query_with_filters'].count(), 2)
         self.assertEqual(summary['individuals_assigned_to_selected_programme'].count(), 0)

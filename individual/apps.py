@@ -204,12 +204,12 @@ class IndividualConfig(AppConfig):
 
                 # Resolve Maker-Checker Workflows Overwrite
                 if self.validation_import_valid_items_workflow == DEFAULT_CONFIG[
-                    'validation_import_valid_items_workflow']:
+                        'validation_import_valid_items_workflow']:
                     IndividualConfig.validation_import_valid_items_workflow \
                         = 'individual.Python Valid Upload Individuals'
 
                 if self.validation_upload_valid_items_workflow == DEFAULT_CONFIG[
-                    'validation_upload_valid_items_workflow']:
+                        'validation_upload_valid_items_workflow']:
                     IndividualConfig.validation_upload_valid_items_workflow \
                         = 'individual.Python Valid Update Individuals'
 
@@ -217,4 +217,4 @@ class IndividualConfig(AppConfig):
     def get_individual_upload_file_path(filename):
         if filename:
             return f"individual_upload/{filename}"
-        return f"individual_upload"
+        return "individual_upload"

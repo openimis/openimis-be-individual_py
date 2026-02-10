@@ -18,19 +18,19 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         super().setUpClass()
 
     def test_create_individual_general_permission(self):
-        query_str = f'''
-            mutation {{
+        query_str = '''
+            mutation {
               createIndividual(
-                input: {{
+                input: {
                   firstName: "Alice"
                   lastName: "Foo"
                   dob: "2020-02-20"
-                }}
-              ) {{
+                }
+              ) {
                 clientMutationId
                 internalId
-              }}
-            }}
+              }
+            }
         '''
 
         # Anonymous User has no permission
@@ -327,7 +327,6 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
             f'{self.village_a.code} {self.village_a.name}'
         )
 
-
     def test_delete_individual_general_permission(self):
         individual1 = create_individual(self.admin_user.username)
         individual2 = create_individual(self.admin_user.username)
@@ -408,13 +407,12 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         id = content['data']['undoDeleteIndividual']['internalId']
         self.assert_mutation_success(id)
 
-
     def test_delete_individual_row_security(self):
         individual_a1 = create_individual(
             self.admin_user.username,
             payload_override={'location': self.village_a},
         )
-        individual_a2 = create_individual(
+        create_individual(
             self.admin_user.username,
             payload_override={'location': self.village_a},
         )

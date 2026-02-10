@@ -1,5 +1,4 @@
 import copy
-import uuid
 
 from django.test import TestCase
 
@@ -11,6 +10,8 @@ from core.test_helpers import LogInHelper
 from location.test_helpers import create_test_village
 
 from datetime import datetime
+
+
 class GroupServiceTest(TestCase):
     user = None
     service = None
@@ -60,7 +61,7 @@ class GroupServiceTest(TestCase):
         payload = self.payload_with_individuals
         individuals_data = payload['individuals_data']
 
-        result = self.service.create(payload)
+        self.service.create(payload)
 
         # Verify that the group was created
         group = Group.objects.filter(code=payload['code']).first()
