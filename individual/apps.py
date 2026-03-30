@@ -24,7 +24,19 @@ DEFAULT_CONFIG = {
     "check_group_individual_update": True,
     "check_group_create": True,
     "check_group_delete": True,
-    "individual_schema": "{}",
+    "individual_schema": json.dumps({
+        "properties": {
+            "email": {"type": "string"},
+            "able_bodied": {"type": "boolean"},
+            "national_id": {"type": "string"},
+            "educated_level": {"type": "string"},
+            "chronic_illness": {"type": "boolean"},
+            "national_id_type": {"type": "string"},
+            "number_of_elderly": {"type": "integer"},
+            "number_of_children": {"type": "integer"},
+            "beneficiary_data_source": {"type": "string"}
+        }
+    }),
     "individual_accept_enrolment": "individual_service.create_accept_enrolment_task",
     "validation_import_valid_items_workflow": "individual-import-valid-items",
     "validation_calculation_uuid": "4362f958-5894-435b-9bda-df6cadf88352",
