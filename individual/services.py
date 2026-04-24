@@ -308,14 +308,14 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
                 # return group if it has errors
                 if not group['data']:
                     return group
-                group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
                 group_id = group['data']['id']
                 # Move the existing GroupIndividual to the newly-created group by
                 # reassigning its group_id in place. Going through GroupIndividualService.update()
                 # would trigger the create+delete branch (which expects individual_id in the
-                # payload and produces a new GI id), breaking this flow.
-                group_individual.group_id = group_id
-                group_individual.save(user=self.user)
+                # payload and produces a new GI id), breaking this flow. A direct
+                # QuerySet.update() is used to avoid cascading alignment saves that would
+                # run on the target group as a side effect of GroupIndividual.save().
+                GroupIndividual.objects.filter(id=group_individual_id).update(group_id=group_id)
                 group_and_individuals_message = {**group, 'detail': group_individual_id}
                 return group_and_individuals_message
         except Exception as exc:
