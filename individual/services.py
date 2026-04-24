@@ -359,6 +359,8 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
                 obj_data.pop('id', None)
                 obj_data.pop('recipient_type', None)
                 obj_data.pop('role', None)
+                if 'individual_id' not in obj_data:
+                    obj_data['individual_id'] = group_individual.individual_id
                 result = self.create(obj_data)
                 self.delete({'id': group_individual_id})
                 return result
