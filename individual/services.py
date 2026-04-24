@@ -310,10 +310,12 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
                     return group
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
                 group_id = group['data']['id']
-                service = GroupIndividualService(self.user)
-                service.update({
-                    'group_id': group_id, "id": group_individual_id, "role": group_individual.role
-                })
+                # Move the existing GroupIndividual to the newly-created group by
+                # reassigning its group_id in place. Going through GroupIndividualService.update()
+                # would trigger the create+delete branch (which expects individual_id in the
+                # payload and produces a new GI id), breaking this flow.
+                group_individual.group_id = group_id
+                group_individual.save(user=self.user)
                 group_and_individuals_message = {**group, 'detail': group_individual_id}
                 return group_and_individuals_message
         except Exception as exc:
@@ -348,10 +350,20 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
         try:
             with transaction.atomic():
                 group_individual_id = obj_data.get('id')
+                incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
                 if not group_individual:
                     raise ValueError(f"no GroupIndividual found with this id {group_individual_id}")
-                return super().update(obj_data)
+
+                if str(group_individual.group.id) == str(incoming_group_id):
+                    return super().update(obj_data)
+
+                obj_data.pop('id', None)
+                obj_data.pop('recipient_type', None)
+                obj_data.pop('role', None)
+                result = self.create(obj_data)
+                self.delete({'id': group_individual_id})
+                return result
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
