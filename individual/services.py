@@ -348,22 +348,10 @@ class GroupIndividualService(BaseService, UpdateCheckerLogicServiceMixin):
         try:
             with transaction.atomic():
                 group_individual_id = obj_data.get('id')
-                incoming_group_id = obj_data.get('group_id')
                 group_individual = GroupIndividual.objects.filter(id=group_individual_id, is_deleted=False).first()
                 if not group_individual:
                     raise ValueError(f"no GroupIndividual found with this id {group_individual_id}")
-
-                if str(group_individual.group.id) == str(incoming_group_id):
-                    return super().update(obj_data)
-
-                obj_data.pop('id', None)
-                obj_data.pop('recipient_type', None)
-                obj_data.pop('role', None)
-                if 'individual_id' not in obj_data:
-                    obj_data['individual_id'] = group_individual.individual_id
-                result = self.create(obj_data)
-                self.delete({'id': group_individual_id})
-                return result
+                return super().update(obj_data)
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
 
