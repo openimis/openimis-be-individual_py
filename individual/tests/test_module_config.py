@@ -8,8 +8,8 @@ class ModuleConfigTest(TestCase):
 
     def test_config_reloading(self):
         # First set the individual config to be empty
-        config = ModuleConfiguration.objects.filter(module='individual', layer='be')
-        if not config:
+        config = ModuleConfiguration.objects.filter(module='individual', layer='be').first()
+        if config is None:
             config = ModuleConfiguration(module='individual', layer='be', config='{}')
         else:
             config.config = '{}'
