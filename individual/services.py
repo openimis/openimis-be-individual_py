@@ -303,17 +303,23 @@ class CreateGroupAndMoveIndividualService(CreateCheckerLogicServiceMixin):
         try:
             with transaction.atomic():
                 self.validation_class.validate_create_group_and_move_individual(self.user, **obj_data)
-                group_individual_id = obj_data.pop('group_individual_id')
-                group = GroupService(self.user).create(obj_data)
+                # Work on a copy so we don't mutate the caller's dict. The existing test
+                # (and any other caller) reads payload['group_individual_id'] after this
+                # call returns and would otherwise see None.
+                local_data = {k: v for k, v in obj_data.items() if k != 'group_individual_id'}
+                group_individual_id = obj_data.get('group_individual_id')
+                group = GroupService(self.user).create(local_data)
                 # return group if it has errors
                 if not group['data']:
                     return group
-                group_individual = GroupIndividual.objects.filter(id=group_individual_id).first()
                 group_id = group['data']['id']
-                service = GroupIndividualService(self.user)
-                service.update({
-                    'group_id': group_id, "id": group_individual_id, "role": group_individual.role
-                })
+                # Move the existing GroupIndividual to the newly-created group by
+                # reassigning its group_id in place. Going through GroupIndividualService.update()
+                # would trigger the create+delete branch (which expects individual_id in the
+                # payload and produces a new GI id), breaking this flow. A direct
+                # QuerySet.update() avoids cascading alignment saves that would run on the
+                # target group as a side effect of GroupIndividual.save().
+                GroupIndividual.objects.filter(id=group_individual_id).update(group_id=group_id)
                 group_and_individuals_message = {**group, 'detail': group_individual_id}
                 return group_and_individuals_message
         except Exception as exc:
