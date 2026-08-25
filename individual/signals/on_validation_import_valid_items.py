@@ -296,6 +296,23 @@ def on_task_complete_action(business_event, **kwargs):
     upload_record = None
     try:
         upload_record = IndividualDataUploadRecords.objects.get(id=task['entity_id'])
+
+        # A task that followed an approval flow accumulated its per-record
+        # verdicts across every step. Drop what was rejected before running
+        # the workflow, so the import proceeds with the surviving rows - the
+        # same shape as the flat path, where a rejected row is soft-deleted
+        # and whatever remains is imported.
+        task_obj = Task.objects.filter(id=task['id']).first()
+        if task_obj and task_obj.flow_id:
+            from tasks_management.signals import flow_rejected_record_ids
+            rejected = flow_rejected_record_ids(task_obj)
+            if rejected:
+                logger.info(
+                    "individual.flow: dropping %s record(s) rejected during the "
+                    "approval flow of task %s", len(rejected), task_obj.id,
+                )
+                _delete_rejected(list(rejected), task_obj.source)
+
         if business_event == IndividualConfig.validation_import_valid_items:
             workflow = IndividualConfig.validation_import_valid_items_workflow
             IndividualItemsImportTaskCompletionEvent(
@@ -441,6 +458,14 @@ def on_task_resolve(**kwargs):
 
             # Task only relevant for this specific source
             if task.source != 'import_valid_items' and task.source != 'import_group_valid_items':
+                return
+
+            # A task following an approval flow is resolved by
+            # tasks_management's batch path: each vote is recorded per record
+            # against the current step, and the surviving set is applied once
+            # at completion. Resolving here as well would run the import on
+            # the first vote, bypassing every later step.
+            if task.flow_id:
                 return
 
             if not task.task_group:
