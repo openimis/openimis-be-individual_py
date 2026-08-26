@@ -17,11 +17,13 @@ from django.test import TestCase
 from core.test_helpers import create_test_interactive_user
 from individual.apps import IndividualConfig
 from individual.models import (
+    GroupDataSource,
     IndividualDataSource,
     IndividualDataSourceUpload,
     IndividualDataUploadRecords,
 )
 from individual.signals.on_validation_import_valid_items import (
+    BaseGroupColumnAggregationClass,
     IndividualItemsImportTaskCompletionEvent,
 )
 from tasks_management.apps import TasksManagementConfig
@@ -67,18 +69,31 @@ class FlowBatchCompletionTestCase(TestCase):
             sources.append(source)
         return upload_record, sources
 
-    def _flow_task(self, flow, step, upload_record):
+    def _flow_task(self, flow, step, upload_record, source='import_valid_items',
+                   business_event=None):
         task = Task(
-            source='import_valid_items',
+            source=source,
             entity=upload_record,
             status=Task.Status.ACCEPTED,
             executor_action_event=TasksManagementConfig.default_executor_event,
-            business_event=IndividualConfig.validation_import_valid_items,
+            business_event=business_event or IndividualConfig.validation_import_valid_items,
             business_status={}, data={},
             flow=flow, current_step=step, task_group=step.task_group,
         )
         task.save(username=self.admin.username)
         return task
+
+    def _group_upload_with_sources(self, record_count):
+        upload = IndividualDataSourceUpload(source_name='fbc_group_test', source_type='csv')
+        upload.save(username=self.admin.username)
+        upload_record = IndividualDataUploadRecords(data_upload=upload, workflow='fbc_group')
+        upload_record.save(username=self.admin.username)
+        sources = []
+        for i in range(record_count):
+            source = GroupDataSource(upload=upload, json_ext={'group_code': f'grp{i}'})
+            source.save(username=self.admin.username)
+            sources.append(source)
+        return upload_record, sources
 
     def _vote(self, task, user, verdict):
         return TaskService(user).resolve_task({
@@ -135,6 +150,47 @@ class FlowBatchCompletionTestCase(TestCase):
 
         self.assertEqual(len(captured), 1)
         accepted_ids = set(captured[0].accepted)
+        self.assertEqual(accepted_ids, {str(sources[2].id)})
+        self.assertNotIn(str(sources[0].id), accepted_ids)
+        self.assertNotIn(str(sources[1].id), accepted_ids)
+
+    def test_group_completion_receives_only_surviving_records(self):
+        """
+        Same cumulative-rejection guarantee for import_group_valid_items,
+        whose completion handler (group_data_sources_into_entities) has no
+        is_deleted filter of its own and previously relied on the caller
+        soft-deleting rejected rows - it now relies on the accepted list
+        instead.
+        """
+        flow, step1, step2 = self._two_step_flow('FBC_GROUP_FINAL')
+        upload_record, sources = self._group_upload_with_sources(3)
+        task = self._flow_task(
+            flow, step1, upload_record, source='import_group_valid_items',
+            business_event=IndividualConfig.validation_import_group_valid_items,
+        )
+
+        result = self._vote(task, self.exec_a, {
+            'ACCEPT': [str(sources[1].id), str(sources[2].id)],
+            'REJECT': [str(sources[0].id)],
+        })
+        self.assertTrue(result.get('success'), result)
+        task.refresh_from_db()
+        self.assertEqual(task.current_step_id, step2.id)
+
+        with patch.object(
+            BaseGroupColumnAggregationClass, 'group_data_sources_into_entities',
+        ) as mock_aggregate:
+            result = self._vote(task, self.exec_b, {
+                'ACCEPT': [str(sources[2].id)],
+                'REJECT': [str(sources[1].id)],
+            })
+            self.assertTrue(result.get('success'), result)
+            task.refresh_from_db()
+            self.assertEqual(task.status, Task.Status.COMPLETED)
+            mock_aggregate.assert_called_once()
+
+        _, call_args, _ = mock_aggregate.mock_calls[0]
+        accepted_ids = set(call_args[-1])
         self.assertEqual(accepted_ids, {str(sources[2].id)})
         self.assertNotIn(str(sources[0].id), accepted_ids)
         self.assertNotIn(str(sources[1].id), accepted_ids)
