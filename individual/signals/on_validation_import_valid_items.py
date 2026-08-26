@@ -296,22 +296,34 @@ def on_task_complete_action(business_event, **kwargs):
     upload_record = None
     try:
         upload_record = IndividualDataUploadRecords.objects.get(id=task['entity_id'])
+        completion_user = User.objects.get(id=data['user']['id'])
 
         # A task that followed an approval flow accumulated its per-record
-        # verdicts across every step. Drop what was rejected before running
-        # the workflow, so the import proceeds with the surviving rows - the
-        # same shape as the flat path, where a rejected row is soft-deleted
-        # and whatever remains is imported.
+        # verdicts across every step. accepted=None below means "no filter,
+        # process the whole upload" (both the SQL workflows and
+        # group_data_sources_into_entities already support this) - a flow
+        # task instead passes the surviving ids explicitly, which every one
+        # of those paths already knows how to honour. This is the same
+        # existing mechanism a manual re-run with a hand-picked id list would
+        # use, not a new filter bolted on afterwards.
+        accepted_ids = None
         task_obj = Task.objects.filter(id=task['id']).first()
         if task_obj and task_obj.flow_id:
             from tasks_management.signals import flow_rejected_record_ids
             rejected = flow_rejected_record_ids(task_obj)
-            if rejected:
-                logger.info(
-                    "individual.flow: dropping %s record(s) rejected during the "
-                    "approval flow of task %s", len(rejected), task_obj.id,
-                )
-                _delete_rejected(list(rejected), task_obj.source)
+            upload_id = upload_record.data_upload.id
+            if business_event == IndividualConfig.validation_import_group_valid_items:
+                universe = set(str(i) for i in GroupDataSource.objects.filter(
+                    upload_id=upload_id, is_deleted=False).values_list('id', flat=True))
+            else:
+                universe = set(str(i) for i in IndividualDataSource.objects.filter(
+                    upload_id=upload_id, is_deleted=False).values_list('id', flat=True))
+            accepted_ids = list(universe - rejected)
+            logger.info(
+                "individual.flow: task %s completion restricted to %s surviving "
+                "record(s) of %s (%s rejected during the approval flow)",
+                task_obj.id, len(accepted_ids), len(universe), len(rejected),
+            )
 
         if business_event == IndividualConfig.validation_import_valid_items:
             workflow = IndividualConfig.validation_import_valid_items_workflow
@@ -319,7 +331,8 @@ def on_task_complete_action(business_event, **kwargs):
                 workflow,
                 upload_record,
                 upload_record.data_upload.id,
-                User.objects.get(id=data['user']['id'])
+                completion_user,
+                accepted_ids,
             ).run_workflow()
         elif business_event == IndividualConfig.validation_upload_valid_items:
             workflow = IndividualConfig.validation_upload_valid_items_workflow
@@ -327,11 +340,12 @@ def on_task_complete_action(business_event, **kwargs):
                 workflow,
                 upload_record,
                 upload_record.data_upload.id,
-                User.objects.get(id=data['user']['id'])
+                completion_user,
+                accepted_ids,
             ).run_workflow()
         elif business_event == IndividualConfig.validation_import_group_valid_items:
             BaseGroupColumnAggregationClass.group_data_sources_into_entities(
-                upload_record.data_upload.id, User.objects.get(id=data['user']['id'])
+                upload_record.data_upload.id, completion_user, accepted_ids,
             )
         else:
             raise ValueError(f"Business event {business_event} doesn't have assigned workflow.")
