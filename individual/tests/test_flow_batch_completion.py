@@ -194,3 +194,29 @@ class FlowBatchCompletionTestCase(TestCase):
         self.assertEqual(accepted_ids, {str(sources[2].id)})
         self.assertNotIn(str(sources[0].id), accepted_ids)
         self.assertNotIn(str(sources[1].id), accepted_ids)
+
+    def test_group_completion_with_no_survivors_processes_nothing(self):
+        """
+        `if accepted:` treated an empty survivor list as "no filter", so a
+        flow that rejected every row imported the entire upload - the exact
+        inverse of the guarantee. None still means "no flow, process all".
+        """
+        flow, step1, _ = self._two_step_flow('FBC_GROUP_NONE')
+        upload_record, sources = self._group_upload_with_sources(2)
+        task = self._flow_task(
+            flow, step1, upload_record, source='import_group_valid_items',
+            business_event=IndividualConfig.validation_import_group_valid_items,
+        )
+
+        self._vote(task, self.exec_a, {'REJECT': [str(s.id) for s in sources]})
+        task.refresh_from_db()
+        self._vote(task, self.exec_b, {'REJECT': [str(sources[0].id)]})
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.COMPLETED)
+
+        # every row was rejected, so nothing may have been turned into a Group
+        self.assertFalse(
+            GroupDataSource.objects.filter(
+                upload_id=upload_record.data_upload.id, is_deleted=False,
+            ).exclude(group=None).exists()
+        )
