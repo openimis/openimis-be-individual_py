@@ -36,11 +36,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['createGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(query_str))
 
         # IMIS admin can do everything
         response = self.query(
@@ -77,10 +73,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot create group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['createGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
 
         response = self.query(
             query_str,
@@ -148,10 +140,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_success(internal_id)
 
         # Anonymous User has no permission
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(query_str))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -182,10 +171,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot update group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['updateGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -241,11 +226,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['deleteGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(query_str))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -293,10 +274,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot delete group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['deleteGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -408,11 +385,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['addIndividualToGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(query_str))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -546,11 +519,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['editIndividualInGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(query_str))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -694,11 +663,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # Anonymous User has no permission
-        response = self.query(query_str)
-
-        content = json.loads(response.content)
-        internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(query_str))
 
         # Health Enrollment Officier (role=1) has no permission
         response = self.query(
@@ -744,10 +709,6 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         '''
 
         # SP officer B cannot delete group for district A
-        response = self.query(query_str)
-        content = json.loads(response.content)
-        internal_id = content['data']['removeIndividualFromGroup']['internalId']
-        self.assert_mutation_error(internal_id, _('mutation.authentication_required'))
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}

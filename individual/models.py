@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 import core
 from core.models import HistoryModel
 from location.models import Location, LocationManager
+from core.models import ParentScope
 
 
 class Individual(HistoryModel):
@@ -80,6 +81,8 @@ class IndividualDataSourceUpload(HistoryModel):
 
 
 class IndividualDataSource(HistoryModel):
+    row_scope = ParentScope("individual")
+
     USE_CACHE = False
     individual = models.ForeignKey(Individual, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
@@ -140,6 +143,8 @@ def update_member_individuals_location(sender, instance, **kwargs):
 
 
 class GroupDataSource(HistoryModel):
+    row_scope = ParentScope("group")
+
     USE_CACHE = False
     group = models.ForeignKey(Group, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)

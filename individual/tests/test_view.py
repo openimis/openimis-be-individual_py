@@ -9,6 +9,7 @@ from django.utils import timezone
 from core.test_helpers import create_test_interactive_user
 from core.models import ModuleConfiguration
 from individual.apps import IndividualConfig
+from individual.tests.test_helpers import reload_individual_config
 
 
 class TestView(APITestCase):
@@ -52,17 +53,22 @@ class TestView(APITestCase):
 
     def test_download_template_file_on_individual_schema_update(self):
         # First set the individual config to be empty
-        config = ModuleConfiguration.objects.filter(module='individual', layer='be')
-        if not config:
+        config = ModuleConfiguration.objects.filter(module='individual', layer='be').first()
+        self.addCleanup(reload_individual_config, config.config if config else '{}')
+        if config is None:
             config = ModuleConfiguration(module='individual', layer='be', config='{}')
         else:
             config.config = '{}'
-        config.save()
+        # The module reload is queued with transaction.on_commit, which never
+        # runs inside a TestCase's rolled-back transaction.
+        with self.captureOnCommitCallbacks(execute=True):
+            config.save()
 
         # Then update individual config to with the fixture config
         with open(self.test_config_path, 'rb') as test_file:
             config.config = test_file.read()
-        config.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            config.save()
 
         response = self.client.get(self.download_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
