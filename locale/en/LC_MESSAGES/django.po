@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-06-12 15:47+0200\n"
+"POT-Creation-Date: 2026-09-17 16:48+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,38 +17,180 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: individual/gql_mutations.py:92 individual/gql_mutations.py:126
+#: individual/gql_mutations.py:169 individual/gql_mutations.py:216
+#: individual/gql_mutations.py:259 individual/gql_mutations.py:293
+#: individual/gql_mutations.py:331 individual/gql_mutations.py:378
+#: individual/gql_mutations.py:420 individual/gql_mutations.py:466
+#: individual/gql_mutations.py:509 individual/gql_mutations.py:537
+#: individual/gql_mutations.py:567 individual/gql_mutations.py:601
+#: individual/tests/graphql_mutation_group_test.py:57
+#: individual/tests/graphql_mutation_group_test.py:152
+#: individual/tests/graphql_mutation_group_test.py:238
+#: individual/tests/graphql_mutation_group_test.py:397
+#: individual/tests/graphql_mutation_group_test.py:531
+#: individual/tests/graphql_mutation_group_test.py:675
+#: individual/tests/graphql_mutation_individual_test.py:55
+#: individual/tests/graphql_mutation_individual_test.py:151
+#: individual/tests/graphql_mutation_individual_test.py:340
+#: individual/tests/graphql_mutation_individual_test.py:375
+msgid "unauthorized"
+msgstr ""
 
-#: individual/validation.py:23
-msgid "individual.validation.validate_update_group_individuals.extra_fields"
-msgstr "Invalid field(s) found: %(fields)"
+#: individual/gql_mutations.py:99 individual/gql_mutations.py:139
+#: individual/gql_mutations.py:181 individual/gql_mutations.py:228
+#: individual/gql_mutations.py:266 individual/gql_mutations.py:304
+#: individual/gql_mutations.py:343 individual/gql_mutations.py:390
+#: individual/gql_mutations.py:433 individual/gql_mutations.py:478
+#: individual/tests/graphql_mutation_group_test.py:85
+#: individual/tests/graphql_mutation_group_test.py:182
+#: individual/tests/graphql_mutation_group_test.py:285
+#: individual/tests/graphql_mutation_group_test.py:317
+#: individual/tests/graphql_mutation_group_test.py:450
+#: individual/tests/graphql_mutation_group_test.py:578
+#: individual/tests/graphql_mutation_group_test.py:720
+#: individual/tests/graphql_mutation_group_test.py:752
+#: individual/tests/graphql_mutation_individual_test.py:83
+#: individual/tests/graphql_mutation_individual_test.py:183
+#: individual/tests/graphql_mutation_individual_test.py:421
+#: individual/tests/graphql_mutation_individual_test.py:453
+#: individual/tests/graphql_mutation_individual_test.py:490
+#: individual/tests/graphql_mutation_individual_test.py:521
+msgid "unauthorized.location"
+msgstr ""
 
-#: individual/validation.py:28
-msgid "individual.validation.validate_update_group_individuals.missing_fields"
-msgstr "Missing field(s) found: %(fields)"
-
-msgid "individual.validation.validate_group_task_pending"
-msgstr "There is one task pending for the group %(group_id)."
-
-msgid "individual.validation.validate_create_group_and_individual.group_individual_does_not_exist"
-msgstr "GroupIndividual does not exist."
-
-msgid "individual.validation.validate_create_group_individuals.wrong_individual_ids"
-msgstr "Invalid Individual ids %(invalid_ids)"
-
-msgid "individual.validation.validate_undo_delete.individual_not_deleted"
-msgstr "Individual %(id) is not deleted."
-
-msgid "individual.validation.check_if_group_id"
-msgstr "Missing group_id."
-
+#: individual/gql_mutations.py:393 individual/gql_mutations.py:436
+#: individual/tests/graphql_mutation_group_test.py:491
+#: individual/tests/graphql_mutation_group_test.py:636
 msgid "mutation.individual_group_location_mismatch"
 msgstr "To add an individual to a group their locations must be the same."
 
+#: individual/models.py:68
+msgid "Pending"
+msgstr ""
+
+#: individual/models.py:69
+msgid "Triggered"
+msgstr ""
+
+#: individual/models.py:70
+msgid "In progress"
+msgstr ""
+
+#: individual/models.py:71
+msgid "Success"
+msgstr ""
+
+#: individual/models.py:72
+msgid "Partial Success"
+msgstr ""
+
+#: individual/models.py:73
+msgid "WAITING_FOR_VERIFICATION"
+msgstr ""
+
+#: individual/models.py:74
+msgid "Fail"
+msgstr ""
+
+#: individual/models.py:158
+msgid "HEAD"
+msgstr ""
+
+#: individual/models.py:159
+msgid "SPOUSE"
+msgstr ""
+
+#: individual/models.py:160
+msgid "SON"
+msgstr ""
+
+#: individual/models.py:161
+msgid "DAUGHTER"
+msgstr ""
+
+#: individual/models.py:162
+msgid "GRANDFATHER"
+msgstr ""
+
+#: individual/models.py:163
+msgid "GRANDMOTHER"
+msgstr ""
+
+#: individual/models.py:164
+msgid "MOTHER"
+msgstr ""
+
+#: individual/models.py:165
+msgid "FATHER"
+msgstr ""
+
+#: individual/models.py:166
+msgid "GRANDSON"
+msgstr ""
+
+#: individual/models.py:167
+msgid "GRANDDAUGHTER"
+msgstr ""
+
+#: individual/models.py:168
+msgid "SISTER"
+msgstr ""
+
+#: individual/models.py:169
+msgid "BROTHER"
+msgstr ""
+
+#: individual/models.py:170
+msgid "OTHER RELATIVE"
+msgstr ""
+
+#: individual/models.py:171
+msgid "NOT RELATED"
+msgstr ""
+
+#: individual/models.py:174
+msgid "PRIMARY"
+msgstr ""
+
+#: individual/models.py:175
+msgid "SECONDARY"
+msgstr ""
+
+#: individual/tests/group_individual_service_test.py:45
+#: individual/validation.py:78
+msgid "individual.validation.check_if_group_id"
+msgstr "Missing group_id."
+
+#: individual/validation.py:21
+msgid "individual.validation.validate_undo_delete.individual_not_deleted"
+msgstr "Individual %(id) is not deleted."
+
+#: individual/validation.py:46
+msgid "individual.validation.validate_create_group_and_individual.group_individual_does_not_exist"
+msgstr "GroupIndividual does not exist."
+
+#: individual/validation.py:100
+msgid "individual.validation.validate_group_task_pending"
+msgstr "There is one task pending for the group %(group_id)."
+
+#: individual/views.py:43
 msgid "Invalid file type. Allowed: .csv, .xls, .xlsx"
 msgstr "Invalid file type. Allowed: .csv, .xls, .xlsx"
 
+#: individual/views.py:47
 msgid "Could not determine file type"
 msgstr "Could not determine file type"
 
+#: individual/views.py:50
 msgid "Invalid MIME type:"
 msgstr "Invalid MIME type:"
+
+#~ msgid "individual.validation.validate_update_group_individuals.extra_fields"
+#~ msgstr "Invalid field(s) found: %(fields)"
+
+#~ msgid "individual.validation.validate_update_group_individuals.missing_fields"
+#~ msgstr "Missing field(s) found: %(fields)"
+
+#~ msgid "individual.validation.validate_create_group_individuals.wrong_individual_ids"
+#~ msgstr "Invalid Individual ids %(invalid_ids)"
