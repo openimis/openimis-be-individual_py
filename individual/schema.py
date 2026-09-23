@@ -461,6 +461,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         )
 
     def resolve_global_schema(self, info):
+        # The schema describes the register's fields: same right as reading it. The
+        # class already defined _check_permissions without calling it here.
+        Query._check_permissions(
+            info.context.user, IndividualConfig.gql_individual_search_perms
+        )
         individual_schema = IndividualConfig.individual_schema
         if individual_schema:
             individual_schema_dict = json.loads(individual_schema)

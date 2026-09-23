@@ -33,6 +33,15 @@ class Individual(HistoryModel):
         managed = True
 
     @classmethod
+    def get_rights(cls, action):
+        # Read at call time and not at import: the `_perms` keys only hold their
+        # value after `ready()`, and a snapshot taken at import would capture the
+        # placeholder - hence an empty list, which `has_perms` grants to everybody.
+        from individual.apps import configured_perms
+
+        return configured_perms("individual", action)
+
+    @classmethod
     def get_queryset(cls, queryset, user):
         if queryset is None:
             queryset = cls.objects.all()
@@ -111,6 +120,14 @@ class Group(HistoryModel):
     )
 
     @classmethod
+    def get_rights(cls, action):
+        # An entity distinct from `individual`: the household has its own block of
+        # rights (180xxx). Read at call time, for the same reason as on Individual.
+        from individual.apps import configured_perms
+
+        return configured_perms("group", action)
+
+    @classmethod
     def get_queryset(cls, queryset, user):
         if queryset is None:
             queryset = Group.objects.all()
@@ -152,6 +169,15 @@ class GroupDataSource(HistoryModel):
 
 
 class GroupIndividual(HistoryModel):
+    # A person's membership of a household is not an object one holds rights on
+    # separately: composing it means modifying the household. Of the two foreign keys,
+    # `group` is the owner and not `individual` - every existing call site attests to
+    # it: the Create/Update/Delete GroupIndividual mutations check
+    # gql_group_{create,update,delete}_perms, and the groupIndividual /
+    # groupIndividualHistory resolvers check gql_group_search_perms. A person outlives
+    # their household; a membership link does not.
+    scope_parent = "group"
+
     USE_CACHE = False
 
     class Role(models.TextChoices):
