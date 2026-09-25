@@ -432,6 +432,21 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_success(self._run_mutation('assignIndividualLabels', input_str, self.admin_token))
         self.assertEqual(Individual.objects.get(id=individual.id).labels, ['TEST_LABEL_A'])
 
+    def test_create_individual_with_labels(self):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        input_str = 'firstName: "Label" lastName: "Created" dob: "2020-02-20" labels: ["TEST_LABEL_A", "TEST_LABEL_A"]'
+
+        self.assert_mutation_success(self._run_mutation('createIndividual', input_str, self.admin_token))
+
+        self.assertEqual(Individual.objects.get(last_name='Created').labels, ['TEST_LABEL_A'])
+
+    def test_create_individual_with_unknown_or_malformed_label(self):
+        for code in ['TEST_LABEL_NOPE', 'test_label_a', ' TEST_LABEL_A']:
+            input_str = f'firstName: "Label" lastName: "Rejected" dob: "2020-02-20" labels: ["{code}"]'
+            self.assert_mutation_error(
+                self._run_mutation('createIndividual', input_str, self.admin_token), code.strip())
+        self.assertFalse(Individual.objects.filter(last_name='Rejected').exists())
+
     @patch.object(BaseSyncDocument, 'update')
     def test_assign_individual_labels_row_security(self, mock_document_update):
         create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
