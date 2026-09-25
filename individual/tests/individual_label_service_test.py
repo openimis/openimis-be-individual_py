@@ -1,0 +1,72 @@
+from django.test import TestCase
+
+from core.test_helpers import LogInHelper
+from individual.models import Individual, IndividualLabel
+from individual.services import IndividualLabelService
+from individual.tests.test_helpers import create_individual, create_individual_label
+
+
+class IndividualLabelServiceTest(TestCase):
+    user = None
+    service = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = LogInHelper().get_or_create_user_api()
+        cls.service = IndividualLabelService(cls.user)
+
+    def test_create_label(self):
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'Test A'})
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        self.assertEqual(IndividualLabel.objects.filter(code='TEST_LABEL_A', is_deleted=False).count(), 1)
+
+    def test_create_label_with_schema(self):
+        schema = {"properties": {"licence_no": {"type": "string"}}}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'Test A', 'json_schema': schema})
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        self.assertEqual(IndividualLabel.objects.get(code='TEST_LABEL_A').json_schema, schema)
+
+    def test_create_label_rejects_bad_code(self):
+        for code in ['test_label', 'TEST LABEL', '1ST', 'A', 'A' * 65, '']:
+            result = self.service.create({'code': code, 'name': 'x'})
+            self.assertFalse(result.get('success', True), code)
+
+    def test_create_label_rejects_duplicate_code(self):
+        self.service.create({'code': 'TEST_LABEL_A', 'name': 'Test A'})
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'again'})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('TEST_LABEL_A', result.get('detail', ''))
+
+    def test_create_label_rejects_invalid_schema(self):
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': {'type': 'nope'}})
+        self.assertFalse(result.get('success', True))
+
+    def test_update_label_code_is_immutable(self):
+        label = create_individual_label(self.user.username, 'TEST_LABEL_A')
+        result = self.service.update({'id': label.id, 'code': 'TEST_LABEL_B'})
+        self.assertFalse(result.get('success', True))
+        result = self.service.update({'id': label.id, 'name': 'Renamed'})
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        label.refresh_from_db()
+        self.assertEqual((label.code, label.name), ('TEST_LABEL_A', 'Renamed'))
+
+    def test_delete_label_in_use_refused(self):
+        label = create_individual_label(self.user.username, 'TEST_LABEL_A')
+        create_individual(self.user.username, payload_override={'labels': ['TEST_LABEL_A']})
+        result = self.service.delete({'id': label.id})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('TEST_LABEL_A', result.get('detail', ''))
+
+        Individual.objects.filter(labels__contains=['TEST_LABEL_A']).update(labels=[])
+        result = self.service.delete({'id': label.id})
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        label.refresh_from_db()
+        self.assertTrue(label.is_deleted)
+
+    def test_delete_label_refused_while_soft_deleted_individual_carries_it(self):
+        label = create_individual_label(self.user.username, 'TEST_LABEL_A')
+        individual = create_individual(self.user.username, payload_override={'labels': ['TEST_LABEL_A']})
+        individual.delete(username=self.user.username)
+        result = self.service.delete({'id': label.id})
+        self.assertFalse(result.get('success', True))

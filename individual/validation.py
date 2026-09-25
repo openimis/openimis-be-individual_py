@@ -1,9 +1,12 @@
+import re
+
 from django.utils.translation import gettext as _
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 
-from individual.models import Individual, IndividualDataSource, GroupIndividual, Group
+from individual.models import Individual, IndividualDataSource, IndividualLabel, GroupIndividual, Group
+from core.utils import validate_json_schema
 from core.validation import BaseModelValidation, ObjectExistsValidationMixin
 from tasks_management.models import Task
 
@@ -23,6 +26,68 @@ class IndividualValidation(BaseModelValidation, ObjectExistsValidationMixin):
             }]
 
         return errors
+
+
+LABEL_CODE_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]{1,63}$')
+
+
+def _message(key, detail=None):
+    return {"message": f"{_(key)}: {detail}" if detail else _(key)}
+
+
+def unknown_label_codes(codes):
+    known = set(IndividualLabel.objects.filter(code__in=codes, is_deleted=False).values_list('code', flat=True))
+    return [code for code in codes if code not in known]
+
+
+def validate_label_codes_exist(codes):
+    unknown = unknown_label_codes(codes)
+    if unknown:
+        raise ValidationError([_message("individual.validation.labels.unknown", ", ".join(map(str, unknown)))])
+
+
+class IndividualLabelValidation(BaseModelValidation):
+    OBJECT_TYPE = IndividualLabel
+
+    @classmethod
+    def validate_create(cls, user, **data):
+        code = data.get('code') or ''
+        errors = []
+        if not LABEL_CODE_PATTERN.match(code):
+            errors.append(_message("individual.validation.label.invalid_code", code))
+        elif IndividualLabel.objects.filter(code=code).exists():
+            errors.append(_message("individual.validation.label.duplicate_code", code))
+        errors += cls._schema_errors(data)
+        if errors:
+            raise ValidationError(errors)
+
+    @classmethod
+    def validate_update(cls, user, **data):
+        label = IndividualLabel.objects.filter(id=data.get('id')).first()
+        if not label:
+            raise ValidationError([_message("individual.validation.label.not_found", data.get('id'))])
+        errors = []
+        if 'code' in data and data['code'] != label.code:
+            errors.append(_message("individual.validation.label.code_immutable", label.code))
+        errors += cls._schema_errors(data)
+        if errors:
+            raise ValidationError(errors)
+
+    @classmethod
+    def validate_delete(cls, user, **data):
+        label = IndividualLabel.objects.filter(id=data.get('id')).first()
+        if not label:
+            raise ValidationError([_message("individual.validation.label.not_found", data.get('id'))])
+        # Soft-deleted individuals count too: undoing their deletion must not bring back an unknown code.
+        if Individual.objects.filter(labels__contains=[label.code]).exists():
+            raise ValidationError([_message("individual.validation.label.in_use", label.code)])
+
+    @staticmethod
+    def _schema_errors(data):
+        schema = data.get('json_schema')
+        if schema is None:
+            return []
+        return validate_json_schema(schema)
 
 
 class IndividualDataSourceValidation(BaseModelValidation):

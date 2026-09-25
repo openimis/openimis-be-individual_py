@@ -18,6 +18,7 @@ from individual.apps import IndividualConfig
 from individual.models import (
     Individual,
     IndividualDataSource,
+    IndividualLabel,
     GroupIndividual,
     Group,
     IndividualDataUploadRecords,
@@ -31,6 +32,7 @@ from individual.utils import (
 from individual.validation import (
     IndividualValidation,
     IndividualDataSourceValidation,
+    IndividualLabelValidation,
     GroupIndividualValidation,
     GroupValidation, CrateGroupAndMoveIndividualValidation
 )
@@ -137,6 +139,25 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
 
     def __init__(self, user, validation_class=IndividualValidation):
         super().__init__(user, validation_class)
+
+
+class IndividualLabelService(BaseService):
+    OBJECT_TYPE = IndividualLabel
+
+    def __init__(self, user, validation_class=IndividualLabelValidation):
+        super().__init__(user, validation_class)
+
+    @register_service_signal('individual_label_service.create')
+    def create(self, obj_data):
+        return super().create(obj_data)
+
+    @register_service_signal('individual_label_service.update')
+    def update(self, obj_data):
+        return super().update(obj_data)
+
+    @register_service_signal('individual_label_service.delete')
+    def delete(self, obj_data):
+        return super().delete(obj_data)
 
 
 class IndividualDataSourceService(BaseService):

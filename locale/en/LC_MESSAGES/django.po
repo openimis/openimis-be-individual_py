@@ -186,6 +186,27 @@ msgstr "Could not determine file type"
 msgid "Invalid MIME type:"
 msgstr "Invalid MIME type:"
 
+msgid "individual.validation.labels.unknown"
+msgstr "Unknown label codes"
+
+msgid "individual.validation.labels.add_remove_overlap"
+msgstr "Label codes both added and removed"
+
+msgid "individual.validation.label.invalid_code"
+msgstr "Label code must be uppercase letters, digits and underscores, starting with a letter, 2 to 64 characters"
+
+msgid "individual.validation.label.duplicate_code"
+msgstr "Label code already exists"
+
+msgid "individual.validation.label.not_found"
+msgstr "Label not found"
+
+msgid "individual.validation.label.code_immutable"
+msgstr "Label code cannot be changed"
+
+msgid "individual.validation.label.in_use"
+msgstr "Label is still assigned to individuals"
+
 #~ msgid "individual.validation.validate_update_group_individuals.extra_fields"
 #~ msgstr "Invalid field(s) found: %(fields)"
 
