@@ -4,13 +4,15 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 
 ## ORM mapping:
 * individual_individual, individual_historicalindividual > Individual
+* individual_individuallabel, individual_historicalindividuallabel > IndividualLabel
 * individual_individualdatasource, individual_historicalindividualdatasource > IndividualDataSource
 * individual_individualdatasourceupload, individual_historicalindividualdatasourceupload > IndividualDataSourceUpload
 * individual_group, individual_historicalgroup > Group
 * individual_groupindividual, individual_historicalgroupindividual > GroupIndividual
 
 ## GraphQl Queries
-* individual
+* individual (`labels: [String]` returns individuals carrying any of the given label codes)
+* individualLabel
 * individualDataSource
 * individualDataSourceUpload
 * group
@@ -23,6 +25,10 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * createIndividual
 * updateIndividual
 * deleteIndividual
+* createIndividualLabel
+* updateIndividualLabel
+* deleteIndividualLabel
+* assignIndividualLabels
 * createGroup
 * updateGroup
 * deleteGroup
@@ -33,6 +39,11 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 
 ## Services
 - Individual
+  - create
+  - update
+  - delete
+  - update_labels
+- IndividualLabel
   - create
   - update
   - delete
@@ -56,6 +67,9 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * gql_individual_create_perms: required rights to call createIndividual GraphQL Mutation (default: ["159002"])
 * gql_individual_update_perms: required rights to call updateIndividual GraphQL Mutation (default: ["159003"])
 * gql_individual_delete_perms: required rights to call deleteIndividual GraphQL Mutation (default: ["159004"])
+* gql_individual_label_create_perms: required rights to call createIndividualLabel GraphQL Mutation (default: ["159006"])
+* gql_individual_label_update_perms: required rights to call updateIndividualLabel GraphQL Mutation (default: ["159007"])
+* gql_individual_label_delete_perms: required rights to call deleteIndividualLabel GraphQL Mutation (default: ["159008"])
 * gql_group_search_perms: required rights to call group GraphQL Mutation (default: ["180001"])
 * gql_group_create_perms: required rights to call createGroup and addIndividualToGroup and createGroupIndividuals GraphQL Mutation (default: ["180002"])
 * gql_group_update_perms: required rights to call updateGroup and editIndividualInGroup GraphQL Mutation (default: ["180003"])
@@ -75,6 +89,23 @@ Specifically, the `enable_python_workflows` parameter to `true` within module co
 Workflows: 
  * individual upload
 
+
+## Labels
+
+An individual carries zero or more label codes saying what kind of person it is (for example `INSUREE`,
+`PRACTITIONER`, `CLAIM_ADMIN`, `BENEFICIARY`, which are created by the migrations when a user exists).
+
+* Labels are defined in `IndividualLabel`: a `code` (uppercase letters, digits and `_`, unique), a `name`
+  and an optional JSON schema that individuals with this label are expected to follow.
+  The schema is informational: it is returned by GraphQL and used by the advanced filters when the
+  `label` additional parameter is passed, but `json_ext` is not validated against it.
+* The codes are stored on the individual itself (`Individual.labels`, a PostgreSQL array with a GIN index),
+  so filtering by label needs no join. For the same reason a code cannot be changed, and a label cannot be
+  deleted while any individual, including a deleted one, still carries it.
+* Labels are set on `createIndividual` / `updateIndividual` (the list replaces the current one, `[]` clears it),
+  in bulk with `assignIndividualLabels(ids, add, remove)`, which does not go through maker-checker,
+  and from a `labels` column in upload files (codes separated by `;`). In update files an empty cell clears
+  the labels and a missing column leaves them unchanged. Unknown codes are rejected on every path.
 
 ## Additional Field Definition
 
