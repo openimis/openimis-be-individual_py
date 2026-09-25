@@ -105,7 +105,10 @@ An individual carries zero or more label codes saying what kind of person it is 
 * Labels are set on `createIndividual` / `updateIndividual` (the list replaces the current one, `[]` clears it),
   in bulk with `assignIndividualLabels(ids, add, remove)`, which does not go through maker-checker,
   and from a `labels` column in upload files (codes separated by `;`). In update files an empty cell clears
-  the labels and a missing column leaves them unchanged. Unknown codes are rejected on every path.
+  the labels and a missing column leaves them unchanged. Unknown codes are rejected when the request or the
+  upload is validated; a label deleted between an upload's validation and its approval is dropped from the rows.
+* A label cannot be deleted while an individual carries it or a pending update task would add it.
+  `NA` and `NULL` are reserved: spreadsheet readers treat those cells as empty.
 
 ## Additional Field Definition
 
