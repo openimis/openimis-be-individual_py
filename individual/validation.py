@@ -1,11 +1,13 @@
 import re
 
+import pandas as pd
 from django.utils.translation import gettext as _
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 
 from individual.models import Individual, IndividualDataSource, IndividualLabel, GroupIndividual, Group
+from core.custom_filters import CustomFilterWizardInterface
 from core.utils import validate_json_schema
 from core.validation import BaseModelValidation, ObjectExistsValidationMixin
 from tasks_management.models import Task
@@ -36,7 +38,9 @@ class IndividualValidation(BaseModelValidation, ObjectExistsValidationMixin):
         return errors
 
 
-LABEL_CODE_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]{1,63}$')
+LABEL_CODE_PATTERN = re.compile(r'[A-Z][A-Z0-9_]{1,63}')
+# pandas reads these cells as missing values, so an upload could never carry them.
+RESERVED_LABEL_CODES = {'NA', 'NULL'}
 
 
 def _message(key, detail=None):
@@ -45,7 +49,7 @@ def _message(key, detail=None):
 
 def split_label_codes(value):
     """Label codes from a CSV cell: ';'-separated, exact match, empty or missing means none."""
-    if value is None or (isinstance(value, float) and value != value):
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
         return []
     return [code for code in str(value).split(';') if code != '']
 
@@ -77,6 +81,24 @@ def validate_bulk_label_change(add, remove):
     validate_label_codes_exist([*add, *remove])
 
 
+def label_schema_errors(schema):
+    """JSON Schema draft 7, restricted to what the advanced-filter wizard can turn into filters."""
+    if not isinstance(schema, dict):
+        return [_message("individual.validation.label.schema_not_object")]
+    errors = validate_json_schema(schema)
+    properties = schema.get('properties', {})
+    if not isinstance(properties, dict):
+        return errors + [_message("individual.validation.label.schema_not_object", 'properties')]
+    supported = CustomFilterWizardInterface.FILTERS_BASED_ON_FIELD_TYPE
+    unsupported = [
+        name for name, definition in properties.items()
+        if not isinstance(definition, dict) or definition.get('type') not in supported
+    ]
+    if unsupported:
+        errors.append(_message("individual.validation.label.schema_unsupported_type", ", ".join(unsupported)))
+    return errors
+
+
 class IndividualLabelValidation(BaseModelValidation):
     OBJECT_TYPE = IndividualLabel
 
@@ -84,7 +106,7 @@ class IndividualLabelValidation(BaseModelValidation):
     def validate_create(cls, user, **data):
         code = data.get('code') or ''
         errors = []
-        if not LABEL_CODE_PATTERN.match(code):
+        if not LABEL_CODE_PATTERN.fullmatch(code) or code in RESERVED_LABEL_CODES:
             errors.append(_message("individual.validation.label.invalid_code", code))
         elif IndividualLabel.objects.filter(code=code).exists():
             errors.append(_message("individual.validation.label.duplicate_code", code))
@@ -94,7 +116,7 @@ class IndividualLabelValidation(BaseModelValidation):
 
     @classmethod
     def validate_update(cls, user, **data):
-        label = IndividualLabel.objects.filter(id=data.get('id')).first()
+        label = IndividualLabel.objects.filter(id=data.get('id'), is_deleted=False).first()
         if not label:
             raise ValidationError([_message("individual.validation.label.not_found", data.get('id'))])
         errors = []
@@ -118,7 +140,7 @@ class IndividualLabelValidation(BaseModelValidation):
         schema = data.get('json_schema')
         if schema is None:
             return []
-        return validate_json_schema(schema)
+        return label_schema_errors(schema)
 
 
 class IndividualDataSourceValidation(BaseModelValidation):

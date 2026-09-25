@@ -28,7 +28,7 @@ class IndividualLabelServiceTest(TestCase):
         self.assertEqual(IndividualLabel.objects.get(code='TEST_LABEL_A').json_schema, schema)
 
     def test_create_label_rejects_bad_code(self):
-        for code in ['test_label', 'TEST LABEL', '1ST', 'A', 'A' * 65, '']:
+        for code in ['test_label', 'TEST LABEL', '1ST', 'A', 'A' * 65, '', 'TEST_LABEL\n', 'NA', 'NULL']:
             result = self.service.create({'code': code, 'name': 'x'})
             self.assertFalse(result.get('success', True), code)
 
@@ -42,6 +42,19 @@ class IndividualLabelServiceTest(TestCase):
         result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': {'type': 'nope'}})
         self.assertFalse(result.get('success', True))
 
+    def test_create_label_rejects_schema_the_filter_wizard_cannot_use(self):
+        for schema in [
+            '{"properties": {}}',
+            ['a'],
+            {"properties": []},
+            {"properties": {"licence_no": {}}},
+            {"properties": {"licence_no": {"type": ["string", "null"]}}},
+            {"properties": {"address": {"type": "object"}}},
+        ]:
+            result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+            self.assertFalse(result.get('success', True), schema)
+        self.assertFalse(IndividualLabel.objects.filter(code='TEST_LABEL_A').exists())
+
     def test_update_label_code_is_immutable(self):
         label = create_individual_label(self.user.username, 'TEST_LABEL_A')
         result = self.service.update({'id': label.id, 'code': 'TEST_LABEL_B'})
@@ -50,6 +63,11 @@ class IndividualLabelServiceTest(TestCase):
         self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
         label.refresh_from_db()
         self.assertEqual((label.code, label.name), ('TEST_LABEL_A', 'Renamed'))
+
+    def test_update_deleted_label_refused(self):
+        label = create_individual_label(self.user.username, 'TEST_LABEL_A')
+        label.delete(username=self.user.username)
+        self.assertFalse(self.service.update({'id': label.id, 'name': 'Renamed'}).get('success', True))
 
     def test_delete_label_in_use_refused(self):
         label = create_individual_label(self.user.username, 'TEST_LABEL_A')
