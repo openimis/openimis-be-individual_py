@@ -432,6 +432,23 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         self.assert_mutation_success(self._run_mutation('assignIndividualLabels', input_str, self.admin_token))
         self.assertEqual(Individual.objects.get(id=individual.id).labels, ['TEST_LABEL_A'])
 
+    @patch.object(BaseSyncDocument, 'update')
+    def test_assign_individual_labels_row_security(self, mock_document_update):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        in_area = create_individual(self.admin_user.username, payload_override={'location': self.village_a})
+        out_of_area = create_individual(self.admin_user.username, payload_override={'location': self.village_b})
+
+        self.assert_mutation_error(
+            self._run_mutation(
+                'assignIndividualLabels', f'ids: ["{in_area.id}", "{out_of_area.id}"] add: ["TEST_LABEL_A"]',
+                self.dist_a_user_token),
+            _('unauthorized.location'))
+        self.assertEqual(Individual.objects.get(id=in_area.id).labels, [])
+
+        self.assert_mutation_success(self._run_mutation(
+            'assignIndividualLabels', f'ids: ["{in_area.id}"] add: ["TEST_LABEL_A"]', self.dist_a_user_token))
+        self.assertEqual(Individual.objects.get(id=in_area.id).labels, ['TEST_LABEL_A'])
+
     def test_delete_individual_general_permission(self):
         individual1 = create_individual(self.admin_user.username)
         individual2 = create_individual(self.admin_user.username)

@@ -178,6 +178,18 @@ class AssignIndividualLabelsMutation(BaseMutation):
         if not user.has_perms(IndividualConfig.gql_individual_update_perms):
             raise PermissionDenied(_("unauthorized"))
 
+        locations_id = list(
+            Location.objects.filter(
+                individuals__id__in=data.get('ids') or [],
+                *Location.filter_validity()
+            ).values_list('id', flat=True).distinct()
+        )
+        if len(locations_id) > 0 and not LocationManager().is_allowed(
+                user,
+                locations_id
+        ):
+            raise PermissionDenied(_("unauthorized.location"))
+
     @classmethod
     def _mutate(cls, user, **data):
         data.pop('client_mutation_id', None)
