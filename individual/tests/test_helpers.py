@@ -8,7 +8,7 @@ from core.module_config_registry import reload_module_configuration
 from core.models.base_mutation import MutationLog
 from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role, create_admin_role
 from core.utils import TimeUtils
-from individual.models import Individual, Group, GroupIndividual
+from individual.models import Individual, IndividualLabel, Group, GroupIndividual
 from individual.tests.data import (
     service_add_individual_payload
 )
@@ -54,6 +54,12 @@ def create_individual(username, payload_override={}):
     individual.save(username=username)
 
     return individual
+
+
+def create_individual_label(username, code, payload_override={}):
+    label = IndividualLabel(**{'code': code, 'name': code.title(), **payload_override})
+    label.save(username=username)
+    return label
 
 
 def create_group(username, payload_override={}):

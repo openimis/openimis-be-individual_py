@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -10,6 +12,16 @@ from location.models import Location, LocationManager
 from core.models import ParentScope
 
 
+class IndividualLabel(HistoryModel):
+    USE_CACHE = False
+    code = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=255)
+    json_schema = models.JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return self.code
+
+
 class Individual(HistoryModel):
     USE_CACHE = False
     first_name = models.CharField(max_length=255, null=False)
@@ -17,6 +29,8 @@ class Individual(HistoryModel):
     dob = core.fields.DateField(null=False)
     # TODO WHY the HistoryModel json_ext was not enough
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
+    # Label codes are copied onto the row rather than joined, so a label filter is a GIN index scan.
+    labels = ArrayField(models.CharField(max_length=64), default=list, blank=True)
 
     location = models.ForeignKey(
         Location,
@@ -31,6 +45,7 @@ class Individual(HistoryModel):
 
     class Meta:
         managed = True
+        indexes = [GinIndex(fields=['labels'], name='individual_labels_gin')]
 
     @classmethod
     def get_rights(cls, action):
