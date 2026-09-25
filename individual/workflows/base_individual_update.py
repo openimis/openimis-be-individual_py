@@ -82,7 +82,18 @@ BEGIN
             dob = COALESCE(to_date(f."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
             location_id = loc."LocationId",
             "DateUpdated" = NOW(),
-            "Json_ext" = f."Json_ext"
+            "Json_ext" = f."Json_ext",
+            labels = CASE WHEN f."Json_ext" ? 'labels'
+                THEN COALESCE(
+                    ARRAY(
+                        SELECT code FROM unnest(string_to_array(NULLIF(f."Json_ext"->>'labels', ''), ';'))
+                            WITH ORDINALITY AS csv(code, position)
+                        WHERE code <> ''
+                            AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
+                        GROUP BY code ORDER BY min(position)
+                    )::varchar[],
+                    '{}'::varchar[])
+                ELSE labels END
             FROM individual_individualdatasource f
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = f."Json_ext"->>'location_name'

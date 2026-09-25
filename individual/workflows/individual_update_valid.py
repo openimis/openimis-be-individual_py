@@ -87,7 +87,18 @@ BEGIN
                 dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
-                "Json_ext" = ids."Json_ext"
+                "Json_ext" = ids."Json_ext",
+                labels = CASE WHEN ids."Json_ext" ? 'labels'
+                    THEN COALESCE(
+                        ARRAY(
+                            SELECT code FROM unnest(string_to_array(NULLIF(ids."Json_ext"->>'labels', ''), ';'))
+                                WITH ORDINALITY AS csv(code, position)
+                            WHERE code <> ''
+                                AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
+                            GROUP BY code ORDER BY min(position)
+                        )::varchar[],
+                        '{}'::varchar[])
+                    ELSE labels END
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
@@ -210,7 +221,18 @@ BEGIN
                 dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
-                "Json_ext" = ids."Json_ext"
+                "Json_ext" = ids."Json_ext",
+                labels = CASE WHEN ids."Json_ext" ? 'labels'
+                    THEN COALESCE(
+                        ARRAY(
+                            SELECT code FROM unnest(string_to_array(NULLIF(ids."Json_ext"->>'labels', ''), ';'))
+                                WITH ORDINALITY AS csv(code, position)
+                            WHERE code <> ''
+                                AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
+                            GROUP BY code ORDER BY min(position)
+                        )::varchar[],
+                        '{}'::varchar[])
+                    ELSE labels END
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'

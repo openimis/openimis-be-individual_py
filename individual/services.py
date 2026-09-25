@@ -31,6 +31,7 @@ from individual.utils import (
     fetch_summary_of_broken_items
 )
 from individual.validation import (
+    split_label_codes,
     validate_bulk_label_change,
     IndividualValidation,
     IndividualDataSourceValidation,
@@ -715,6 +716,7 @@ class IndividualImportService:
         loc_name_code_district_ids_from_db,
         user_allowed_loc_ids,
         duplicate_village_name_code_tuples,
+        known_label_codes=None,
     ):
         validated_dataframe = []
 
@@ -741,9 +743,23 @@ class IndividualImportService:
                     )
                 )
 
+            if 'labels' in chunk.columns:
+                field_validation['validations']['labels'] = IndividualImportService._validate_labels(
+                    row.labels, known_label_codes or set()
+                )
+
             validated_dataframe.append(field_validation)
 
         return validated_dataframe
+
+    @staticmethod
+    def _validate_labels(value, known_label_codes):
+        codes = split_label_codes(value)
+        unknown = [code for code in codes if code not in known_label_codes]
+        result = {"success": not unknown, "field_name": "labels"}
+        if unknown:
+            result["note"] = f"Unknown label codes: {', '.join(unknown)}"
+        return result
 
     def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
         schema_dict = json.loads(IndividualConfig.individual_schema)
@@ -768,6 +784,12 @@ class IndividualImportService:
             user_allowed_loc_ids = None
             duplicate_village_name_code_tuples = None
 
+        known_label_codes = None
+        if 'labels' in dataframe.columns:
+            known_label_codes = set(
+                IndividualLabel.objects.filter(is_deleted=False).values_list('code', flat=True)
+            )
+
         # TODO: Use ProcessPoolExecutor after resolving django dependency loading issue
         validated_dataframe = IndividualImportService.process_chunk(
             dataframe,
@@ -776,6 +798,7 @@ class IndividualImportService:
             loc_name_code_district_ids_from_db,
             user_allowed_loc_ids,
             duplicate_village_name_code_tuples,
+            known_label_codes,
         )
 
         self.save_validation_error_in_data_source_bulk(validated_dataframe)

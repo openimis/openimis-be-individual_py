@@ -65,14 +65,23 @@ BEGIN
         WITH new_entry AS (
             INSERT INTO individual_individual(
                 "UUID", "isDeleted", version, "UserCreatedUUID", "UserUpdatedUUID",
-                "Json_ext", first_name, last_name, dob, location_id
+                "Json_ext", first_name, last_name, dob, location_id, labels
             )
             SELECT gen_random_uuid(), false, 1, userUUID, userUUID,
                    "Json_ext",
                    "Json_ext"->>'first_name',
                    "Json_ext" ->> 'last_name',
                    to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
-                   loc."LocationId"
+                   loc."LocationId",
+                   COALESCE(
+                       ARRAY(
+                           SELECT code FROM unnest(string_to_array(NULLIF(ds."Json_ext"->>'labels', ''), ';'))
+                               WITH ORDINALITY AS csv(code, position)
+                           WHERE code <> ''
+                               AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
+                           GROUP BY code ORDER BY min(position)
+                       )::varchar[],
+                       '{}'::varchar[])
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
@@ -188,14 +197,23 @@ BEGIN
         WITH new_entry AS (
             INSERT INTO individual_individual(
                 "UUID", "isDeleted", version, "UserCreatedUUID", "UserUpdatedUUID",
-                "Json_ext", first_name, last_name, dob, location_id
+                "Json_ext", first_name, last_name, dob, location_id, labels
             )
             SELECT gen_random_uuid(), false, 1, userUUID, userUUID,
                    "Json_ext",
                    "Json_ext"->>'first_name',
                    "Json_ext" ->> 'last_name',
                    to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
-                   loc."LocationId"
+                   loc."LocationId",
+                   COALESCE(
+                       ARRAY(
+                           SELECT code FROM unnest(string_to_array(NULLIF(ds."Json_ext"->>'labels', ''), ';'))
+                               WITH ORDINALITY AS csv(code, position)
+                           WHERE code <> ''
+                               AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
+                           GROUP BY code ORDER BY min(position)
+                       )::varchar[],
+                       '{}'::varchar[])
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'

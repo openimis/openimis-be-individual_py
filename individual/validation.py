@@ -43,6 +43,13 @@ def _message(key, detail=None):
     return {"message": f"{_(key)}: {detail}" if detail else _(key)}
 
 
+def split_label_codes(value):
+    """Label codes from a CSV cell: ';'-separated, exact match, empty or missing means none."""
+    if value is None or (isinstance(value, float) and value != value):
+        return []
+    return [code for code in str(value).split(';') if code != '']
+
+
 def unknown_label_codes(codes):
     known = set(IndividualLabel.objects.filter(code__in=codes, is_deleted=False).values_list('code', flat=True))
     return [code for code in codes if code not in known]

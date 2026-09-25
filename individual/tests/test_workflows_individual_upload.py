@@ -11,7 +11,7 @@ from individual.models import (
     GroupIndividual,
 )
 from individual.workflows.base_individual_upload import process_import_individuals_workflow
-from individual.tests.test_helpers import create_test_village
+from individual.tests.test_helpers import create_test_village, create_individual_label
 from opensearch_reports.service import BaseSyncDocument
 from unittest.mock import patch
 from unittest import skipIf
@@ -168,6 +168,73 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         )
         group = Group.objects.get(id=group_id)
         self.assertEqual(group.location.name, json_ext1['location_name'])
+
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)
+    def test_process_import_individuals_workflow_sets_labels(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        create_individual_label(self.user.username, 'TEST_LABEL_B')
+        self.valid_data_source.json_ext['labels'] = 'TEST_LABEL_A;;TEST_LABEL_B;TEST_LABEL_A'
+        self.valid_data_source.save(user=self.user)
+        self.invalid_data_source.json_ext = {
+            "first_name": "Jane Workflow",
+            "last_name": "Doe",
+            "dob": "1982-01-01",
+            "location_name": None,
+            "location_code": None,
+        }
+        self.invalid_data_source.save(user=self.user)
+
+        process_import_individuals_workflow(self.user_uuid, self.upload_uuid)
+
+        upload = IndividualDataSourceUpload.objects.get(id=self.upload_uuid)
+        self.assertEqual(upload.status, "SUCCESS", upload.error)
+        sources = IndividualDataSource.objects.filter(upload_id=self.upload_uuid)
+        with_labels = Individual.objects.get(id=sources.get(id=self.valid_data_source.id).individual_id)
+        without_labels = Individual.objects.get(id=sources.get(id=self.invalid_data_source.id).individual_id)
+        self.assertEqual(with_labels.labels, ['TEST_LABEL_A', 'TEST_LABEL_B'])
+        self.assertEqual(without_labels.labels, [])
+
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)
+    @patch('individual.services.IndividualImportService._validate_labels',
+           lambda value, known: {"success": True, "field_name": "labels"})
+    def test_process_import_individuals_workflow_drops_label_deleted_after_validation(self):
+        # Validation is patched to pass, as it did before the label was deleted and the upload approved.
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        deleted = create_individual_label(self.user.username, 'TEST_LABEL_B')
+        deleted.delete(username=self.user.username)
+        self.valid_data_source.json_ext['labels'] = 'TEST_LABEL_A;TEST_LABEL_B'
+        self.valid_data_source.save(user=self.user)
+        self.invalid_data_source.delete(username=self.user.username)
+
+        process_import_individuals_workflow(self.user_uuid, self.upload_uuid)
+
+        source = IndividualDataSource.objects.get(id=self.valid_data_source.id)
+        self.assertIsNotNone(source.individual_id)
+        self.assertEqual(Individual.objects.get(id=source.individual_id).labels, ['TEST_LABEL_A'])
+
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)
+    def test_process_import_individuals_workflow_unknown_label_row_not_imported(self):
+        self.valid_data_source.json_ext['labels'] = 'TEST_LABEL_NOPE'
+        self.valid_data_source.save(user=self.user)
+        self.invalid_data_source.json_ext = {
+            "first_name": "Jane Workflow",
+            "last_name": "Doe",
+            "dob": "1982-01-01",
+            "location_name": None,
+            "location_code": None,
+        }
+        self.invalid_data_source.save(user=self.user)
+
+        process_import_individuals_workflow(self.user_uuid, self.upload_uuid)
+
+        upload = IndividualDataSourceUpload.objects.get(id=self.upload_uuid)
+        self.assertEqual(upload.status, "PARTIAL_SUCCESS", upload.error)
+        sources = IndividualDataSource.objects.filter(upload_id=self.upload_uuid)
+        self.assertIsNone(sources.get(id=self.valid_data_source.id).individual_id)
+        self.assertIsNotNone(sources.get(id=self.invalid_data_source.id).individual_id)
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', True)
     def test_process_import_individuals_workflow_with_all_valid_entries_with_maker_checker(self):
