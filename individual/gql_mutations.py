@@ -93,16 +93,6 @@ class UpdateIndividualLabelInputType(OpenIMISMutation.Input):
     json_schema = graphene.types.json.JSONString(required=False)
 
 
-def _pop_client_mutation_fields(data):
-    data.pop('client_mutation_id', None)
-    data.pop('client_mutation_label', None)
-
-
-def _check_perms(user, perms):
-    if not user.has_perms(perms):
-        raise PermissionDenied(_("unauthorized"))
-
-
 class CreateIndividualLabelMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
     _mutation_class = "CreateIndividualLabelMutation"
     _mutation_module = "individual"
@@ -111,11 +101,13 @@ class CreateIndividualLabelMutation(BaseHistoryModelCreateMutationMixin, BaseMut
     @classmethod
     def _validate_mutation(cls, user, **data):
         super()._validate_mutation(user, **data)
-        _check_perms(user, IndividualConfig.gql_individual_label_create_perms)
+        if not user.has_perms(IndividualConfig.gql_individual_label_create_perms):
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
-        _pop_client_mutation_fields(data)
+        data.pop('client_mutation_id', None)
+        data.pop('client_mutation_label', None)
         result = IndividualLabelService(user).create(data)
         return result if not result['success'] else None
 
@@ -131,11 +123,13 @@ class UpdateIndividualLabelMutation(BaseHistoryModelUpdateMutationMixin, BaseMut
     @classmethod
     def _validate_mutation(cls, user, **data):
         super()._validate_mutation(user, **data)
-        _check_perms(user, IndividualConfig.gql_individual_label_update_perms)
+        if not user.has_perms(IndividualConfig.gql_individual_label_update_perms):
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
-        _pop_client_mutation_fields(data)
+        data.pop('client_mutation_id', None)
+        data.pop('client_mutation_label', None)
         result = IndividualLabelService(user).update(data)
         return result if not result['success'] else None
 
@@ -151,11 +145,13 @@ class DeleteIndividualLabelMutation(BaseHistoryModelDeleteMutationMixin, BaseMut
     @classmethod
     def _validate_mutation(cls, user, **data):
         super()._validate_mutation(user, **data)
-        _check_perms(user, IndividualConfig.gql_individual_label_delete_perms)
+        if not user.has_perms(IndividualConfig.gql_individual_label_delete_perms):
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
-        _pop_client_mutation_fields(data)
+        data.pop('client_mutation_id', None)
+        data.pop('client_mutation_label', None)
         service = IndividualLabelService(user)
         with transaction.atomic():
             for identifier in data.get('ids') or []:
@@ -179,11 +175,13 @@ class AssignIndividualLabelsMutation(BaseMutation):
     def _validate_mutation(cls, user, **data):
         if type(user) is AnonymousUser or not user.id:
             raise PermissionDenied(_("mutation.authentication_required"))
-        _check_perms(user, IndividualConfig.gql_individual_update_perms)
+        if not user.has_perms(IndividualConfig.gql_individual_update_perms):
+            raise PermissionDenied(_("unauthorized"))
 
     @classmethod
     def _mutate(cls, user, **data):
-        _pop_client_mutation_fields(data)
+        data.pop('client_mutation_id', None)
+        data.pop('client_mutation_label', None)
         result = IndividualService(user).update_labels(
             data.get('ids') or [], add=data.get('add') or [], remove=data.get('remove') or []
         )
