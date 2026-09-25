@@ -22,8 +22,8 @@ from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, 
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
     IndividualSummaryEnrollmentGQLType, IndividualDataUploadQGLType, \
     GroupIndividualHistoryGQLType, GlobalSchemaType, \
-    GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
-from individual.models import Individual, IndividualDataSource, Group, \
+    GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType, IndividualLabelGQLType
+from individual.models import Individual, IndividualDataSource, IndividualLabel, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
 from location.apps import LocationConfig
 
@@ -69,6 +69,12 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         filterNotAttachedToGroup=graphene.Boolean(),
         parent_location=graphene.String(),
         parent_location_level=graphene.Int(),
+        labels=graphene.List(of_type=graphene.String),
+    )
+
+    individual_label = OrderedDjangoFilterConnectionField(
+        IndividualLabelGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
     )
 
     individual_history = OrderedDjangoFilterConnectionField(
@@ -176,6 +182,10 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if group_id:
             filters.append(Q(groupindividuals__group__id=group_id))
 
+        labels = kwargs.get("labels")
+        if labels:
+            filters.append(Q(labels__overlap=labels))
+
         benefit_plan_to_enroll = kwargs.get("benefitPlanToEnroll")
         if benefit_plan_to_enroll:
             filters.append(
@@ -218,6 +228,14 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 query,
             )
 
+        return gql_optimizer.query(query, info)
+
+    def resolve_individual_label(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+        query = IndividualLabel.objects.all()
+        if 'is_deleted' not in kwargs:
+            query = query.filter(is_deleted=False)
         return gql_optimizer.query(query, info)
 
     def resolve_individual_enrollment_summary(self, info, **kwargs):
