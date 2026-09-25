@@ -85,6 +85,14 @@ DO $$
             and individual_id is null
             and "isDeleted"=False
             and individual_individualdatasource."Json_ext" = new_entry."Json_ext";  -- match on Json_ext
+            -- The codes live in the labels column; drop the copied cell now that the rows are linked.
+            UPDATE individual_individual
+            SET "Json_ext" = "Json_ext" - 'labels'
+            WHERE "Json_ext" ? 'labels'
+                AND "UUID" IN (
+                    SELECT individual_id FROM individual_individualdatasource
+                    WHERE upload_id = current_upload_id AND individual_id IS NOT NULL
+                );
             update individual_individualdatasourceupload set status='SUCCESS', error='{}' where "UUID" = current_upload_id;
             EXCEPTION
             WHEN OTHERS then

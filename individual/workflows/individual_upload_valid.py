@@ -95,6 +95,15 @@ BEGIN
           AND individual_individualdatasource."Json_ext" = ne."Json_ext"
           AND validations ->> 'validation_errors' = '[]';
 
+        -- The codes live in the labels column; drop the copied cell now that the rows are linked.
+        UPDATE individual_individual
+        SET "Json_ext" = "Json_ext" - 'labels'
+        WHERE "Json_ext" ? 'labels'
+            AND "UUID" IN (
+                SELECT individual_id FROM individual_individualdatasource
+                WHERE upload_id = current_upload_id AND individual_id IS NOT NULL
+            );
+
         -- Calculate counts of valid and total entries
         SELECT count(*) INTO total_valid_entries
         FROM individual_individualdatasource
@@ -220,6 +229,15 @@ BEGIN
           AND individual_individualdatasource."Json_ext" = ne."Json_ext"
           AND validations ->> 'validation_errors' = '[]'
           AND (accepted IS NULL OR individual_individualdatasource."UUID" = ANY(accepted));
+
+        -- The codes live in the labels column; drop the copied cell now that the rows are linked.
+        UPDATE individual_individual
+        SET "Json_ext" = "Json_ext" - 'labels'
+        WHERE "Json_ext" ? 'labels'
+            AND "UUID" IN (
+                SELECT individual_id FROM individual_individualdatasource
+                WHERE upload_id = current_upload_id AND individual_id IS NOT NULL
+            );
     END IF;
 EXCEPTION WHEN OTHERS THEN
     UPDATE individual_individualdatasourceupload SET status = 'FAIL', error = jsonb_build_object(

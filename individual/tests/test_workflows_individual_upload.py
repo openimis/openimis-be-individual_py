@@ -194,6 +194,7 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         without_labels = Individual.objects.get(id=sources.get(id=self.invalid_data_source.id).individual_id)
         self.assertEqual(with_labels.labels, ['TEST_LABEL_A', 'TEST_LABEL_B'])
         self.assertEqual(without_labels.labels, [])
+        self.assertNotIn('labels', with_labels.json_ext)
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)
@@ -213,6 +214,29 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         source = IndividualDataSource.objects.get(id=self.valid_data_source.id)
         self.assertIsNotNone(source.individual_id)
         self.assertEqual(Individual.objects.get(id=source.individual_id).labels, ['TEST_LABEL_A'])
+
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)
+    def test_process_import_individuals_workflow_links_rows_that_differ_only_in_labels(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        create_individual_label(self.user.username, 'TEST_LABEL_B')
+        twin = {"first_name": "Twin", "last_name": "Doe", "dob": "1980-01-01",
+                "location_name": None, "location_code": None}
+        self.valid_data_source.json_ext = {**twin, "labels": "TEST_LABEL_A"}
+        self.valid_data_source.save(user=self.user)
+        self.invalid_data_source.json_ext = {**twin, "labels": "TEST_LABEL_B"}
+        self.invalid_data_source.save(user=self.user)
+
+        process_import_individuals_workflow(self.user_uuid, self.upload_uuid)
+
+        sources = IndividualDataSource.objects.filter(upload_id=self.upload_uuid)
+        first = Individual.objects.get(id=sources.get(id=self.valid_data_source.id).individual_id)
+        second = Individual.objects.get(id=sources.get(id=self.invalid_data_source.id).individual_id)
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(first.labels, ['TEST_LABEL_A'])
+        self.assertEqual(second.labels, ['TEST_LABEL_B'])
+        self.assertNotIn('labels', first.json_ext)
+        self.assertNotIn('labels', second.json_ext)
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_group_upload', False)

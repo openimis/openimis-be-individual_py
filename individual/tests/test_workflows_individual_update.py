@@ -199,6 +199,8 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         upload = IndividualDataSourceUpload.objects.get(id=self.upload_uuid)
         self.assertEqual(upload.status, "SUCCESS", upload.error)
         self.assertEqual(Individual.objects.get(id=self.individual1.id).labels, ['TEST_LABEL_B'])
+        self.assertNotIn('labels', Individual.objects.get(id=self.individual1.id).json_ext)
+        self.assertNotIn('labels', Individual.objects.get(id=individual3.id).json_ext)
         self.assertEqual(Individual.objects.get(id=self.individual2.id).labels, ['TEST_LABEL_A'])
         self.assertEqual(Individual.objects.get(id=individual3.id).labels, [])
 

@@ -87,7 +87,7 @@ BEGIN
                 dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
-                "Json_ext" = ids."Json_ext",
+                "Json_ext" = ids."Json_ext" - 'labels',
                 labels = CASE WHEN ids."Json_ext" ? 'labels' THEN CSV_LABELS(ids) ELSE labels END
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
@@ -211,7 +211,7 @@ BEGIN
                 dob = COALESCE(to_date(ids."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
-                "Json_ext" = ids."Json_ext",
+                "Json_ext" = ids."Json_ext" - 'labels',
                 labels = CASE WHEN ids."Json_ext" ? 'labels' THEN CSV_LABELS(ids) ELSE labels END
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
