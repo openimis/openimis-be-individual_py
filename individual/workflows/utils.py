@@ -3,6 +3,7 @@ Functionalities shared between different python workflows.
 """
 import json
 import logging
+import re
 from abc import ABCMeta, abstractmethod
 from typing import Iterable
 
@@ -183,3 +184,22 @@ class DataUpdateWorkflow(MakerCheckerPythonWorkflowExecutor):
 
     def _create_task_function(self):
         self.import_service.create_task_with_update_valid_items(self.upload_uuid)
+
+
+def with_csv_labels(sql: str) -> str:
+    """
+    Replaces each CSV_LABELS(<alias>) in upload SQL with the label codes of that data source's `labels` cell:
+    ';'-separated, empty tokens and duplicates dropped, first-seen order kept, and only codes still in the
+    registry, so a label deleted between validation and approval is not written.
+    """
+    return re.sub(r"CSV_LABELS\((\w+)\)", lambda m: _CSV_LABELS.format(alias=m.group(1)), sql)
+
+
+_CSV_LABELS = """ARRAY(
+        SELECT csv.code
+        FROM unnest(string_to_array({alias}."Json_ext"->>'labels', ';')) WITH ORDINALITY AS csv(code, position)
+        WHERE csv.code <> ''
+            AND csv.code IN (SELECT label.code FROM individual_individuallabel label WHERE NOT label."isDeleted")
+        GROUP BY csv.code
+        ORDER BY min(csv.position)
+    )::varchar[]"""

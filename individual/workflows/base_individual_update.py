@@ -1,7 +1,7 @@
 import logging
 
 from core.models import User
-from individual.workflows.utils import DataUpdateWorkflow
+from individual.workflows.utils import DataUpdateWorkflow, with_csv_labels
 from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ def process_update_individuals_workflow(user_uuid, upload_uuid):
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-update_sql = """
+update_sql = with_csv_labels("""
 CREATE OR REPLACE FUNCTION filter_jsonb(data jsonb, schema jsonb)
 RETURNS jsonb AS $$
 DECLARE
@@ -83,17 +83,7 @@ BEGIN
             location_id = loc."LocationId",
             "DateUpdated" = NOW(),
             "Json_ext" = f."Json_ext",
-            labels = CASE WHEN f."Json_ext" ? 'labels'
-                THEN COALESCE(
-                    ARRAY(
-                        SELECT code FROM unnest(string_to_array(NULLIF(f."Json_ext"->>'labels', ''), ';'))
-                            WITH ORDINALITY AS csv(code, position)
-                        WHERE code <> ''
-                            AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
-                        GROUP BY code ORDER BY min(position)
-                    )::varchar[],
-                    '{}'::varchar[])
-                ELSE labels END
+            labels = CASE WHEN f."Json_ext" ? 'labels' THEN CSV_LABELS(f) ELSE labels END
             FROM individual_individualdatasource f
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = f."Json_ext"->>'location_name'
@@ -127,4 +117,4 @@ BEGIN
                 END;
         END IF;
         end $$
-        """
+        """)

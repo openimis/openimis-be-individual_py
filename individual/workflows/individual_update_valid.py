@@ -1,7 +1,7 @@
 import logging
 
 from core.models import User
-from individual.workflows.utils import SqlProcedurePythonWorkflow
+from individual.workflows.utils import SqlProcedurePythonWorkflow, with_csv_labels
 from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def process_update_valid_individuals_workflow(user_uuid, upload_uuid, accepted=N
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-upload_sql = """
+upload_sql = with_csv_labels("""
 -- Setup
 CREATE OR REPLACE FUNCTION filter_jsonb(data jsonb, schema jsonb)
 RETURNS jsonb AS $$
@@ -88,17 +88,7 @@ BEGIN
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
                 "Json_ext" = ids."Json_ext",
-                labels = CASE WHEN ids."Json_ext" ? 'labels'
-                    THEN COALESCE(
-                        ARRAY(
-                            SELECT code FROM unnest(string_to_array(NULLIF(ids."Json_ext"->>'labels', ''), ';'))
-                                WITH ORDINALITY AS csv(code, position)
-                            WHERE code <> ''
-                                AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
-                            GROUP BY code ORDER BY min(position)
-                        )::varchar[],
-                        '{}'::varchar[])
-                    ELSE labels END
+                labels = CASE WHEN ids."Json_ext" ? 'labels' THEN CSV_LABELS(ids) ELSE labels END
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
@@ -153,9 +143,9 @@ BEGIN
                 END;
         END IF;
         end $$
-        """
+        """)
 
-upload_sql_partial = """
+upload_sql_partial = with_csv_labels("""
 -- Setup
 DO $$ BEGIN
             CREATE TYPE failing_entry_individual_upload AS (
@@ -222,17 +212,7 @@ BEGIN
                 location_id = loc."LocationId",
                 "DateUpdated" = NOW(),
                 "Json_ext" = ids."Json_ext",
-                labels = CASE WHEN ids."Json_ext" ? 'labels'
-                    THEN COALESCE(
-                        ARRAY(
-                            SELECT code FROM unnest(string_to_array(NULLIF(ids."Json_ext"->>'labels', ''), ';'))
-                                WITH ORDINALITY AS csv(code, position)
-                            WHERE code <> ''
-                                AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
-                            GROUP BY code ORDER BY min(position)
-                        )::varchar[],
-                        '{}'::varchar[])
-                    ELSE labels END
+                labels = CASE WHEN ids."Json_ext" ? 'labels' THEN CSV_LABELS(ids) ELSE labels END
             FROM individual_individualdatasource ids
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ids."Json_ext"->>'location_name'
@@ -269,4 +249,4 @@ BEGIN
     END IF;
 
 END $$
-"""
+""")

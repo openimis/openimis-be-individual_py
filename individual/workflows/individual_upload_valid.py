@@ -1,7 +1,7 @@
 import logging
 
 from core.models import User
-from individual.workflows.utils import SqlProcedurePythonWorkflow
+from individual.workflows.utils import SqlProcedurePythonWorkflow, with_csv_labels
 from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def process_import_valid_individuals_workflow(user_uuid, upload_uuid, accepted=N
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-upload_sql = """
+upload_sql = with_csv_labels("""
 DO $$
 DECLARE
     current_upload_id UUID := %s::UUID;
@@ -73,15 +73,7 @@ BEGIN
                    "Json_ext" ->> 'last_name',
                    to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
                    loc."LocationId",
-                   COALESCE(
-                       ARRAY(
-                           SELECT code FROM unnest(string_to_array(NULLIF(ds."Json_ext"->>'labels', ''), ';'))
-                               WITH ORDINALITY AS csv(code, position)
-                           WHERE code <> ''
-                               AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
-                           GROUP BY code ORDER BY min(position)
-                       )::varchar[],
-                       '{}'::varchar[])
+                   CSV_LABELS(ds)
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
@@ -142,9 +134,9 @@ EXCEPTION WHEN OTHERS THEN
     )
     WHERE "UUID" = current_upload_id;
 END $$;
-"""
+""")
 
-upload_sql_partial = """
+upload_sql_partial = with_csv_labels("""
 DO $$
 DECLARE
     current_upload_id UUID := %s::UUID;
@@ -205,15 +197,7 @@ BEGIN
                    "Json_ext" ->> 'last_name',
                    to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
                    loc."LocationId",
-                   COALESCE(
-                       ARRAY(
-                           SELECT code FROM unnest(string_to_array(NULLIF(ds."Json_ext"->>'labels', ''), ';'))
-                               WITH ORDINALITY AS csv(code, position)
-                           WHERE code <> ''
-                               AND code IN (SELECT code FROM individual_individuallabel WHERE NOT "isDeleted")
-                           GROUP BY code ORDER BY min(position)
-                       )::varchar[],
-                       '{}'::varchar[])
+                   CSV_LABELS(ds)
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
@@ -245,4 +229,4 @@ EXCEPTION WHEN OTHERS THEN
     )
     WHERE "UUID" = current_upload_id;
 END $$;
-"""
+""")
