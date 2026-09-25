@@ -12,6 +12,7 @@ from individual.tests.data import (
 from core.test_helpers import LogInHelper
 from individual.tests.test_helpers import (
     create_individual,
+    create_individual_label,
     create_group_with_individual,
 )
 from social_protection.tests.test_helpers import create_benefit_plan
@@ -46,6 +47,36 @@ class IndividualServiceTest(TestCase):
         uuid = result.get('data', {}).get('uuid')
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
+
+    def test_add_individual_with_labels_dedupes(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        payload = {**service_add_individual_payload_no_ext, 'labels': ['TEST_LABEL_A', 'TEST_LABEL_A']}
+        result = self.service.create(payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid')
+        self.assertEqual(self.query_all.get(uuid=uuid).labels, ['TEST_LABEL_A'])
+
+    def test_add_individual_unknown_label_rejected(self):
+        result = self.service.create({**service_add_individual_payload_no_ext, 'labels': ['TEST_LABEL_NOPE']})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('TEST_LABEL_NOPE', result.get('detail', ''))
+
+    def test_update_individual_labels_replaces_keeps_and_clears(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        create_individual_label(self.user.username, 'TEST_LABEL_B')
+        result = self.service.create({**service_add_individual_payload_no_ext, 'labels': ['TEST_LABEL_A']})
+        uuid = result.get('data', {}).get('uuid')
+
+        def update(**extra):
+            payload = {**copy.deepcopy(service_update_individual_payload), 'id': uuid, **extra}
+            result = self.service.update(payload)
+            self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+            return self.query_all.get(uuid=uuid).labels
+
+        self.assertEqual(update(labels=['TEST_LABEL_B']), ['TEST_LABEL_B'])
+        self.assertEqual(update(), ['TEST_LABEL_B'])
+        self.assertEqual(update(labels=None), ['TEST_LABEL_B'])
+        self.assertEqual(update(labels=[]), [])
 
     def test_update_individual(self):
         result = self.service.create(service_add_individual_payload)

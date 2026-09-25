@@ -15,6 +15,14 @@ class IndividualValidation(BaseModelValidation, ObjectExistsValidationMixin):
     OBJECT_TYPE = Individual
 
     @classmethod
+    def validate_create(cls, user, **data):
+        validate_individual_labels(data)
+
+    @classmethod
+    def validate_update(cls, user, **data):
+        validate_individual_labels(data)
+
+    @classmethod
     def validate_undo_delete(cls, data):
         errors = []
         individual_id = data.get('id')
@@ -44,6 +52,13 @@ def validate_label_codes_exist(codes):
     unknown = unknown_label_codes(codes)
     if unknown:
         raise ValidationError([_message("individual.validation.labels.unknown", ", ".join(map(str, unknown)))])
+
+
+def validate_individual_labels(data):
+    labels = data.get('labels')
+    if labels is None:
+        return
+    validate_label_codes_exist(labels)
 
 
 class IndividualLabelValidation(BaseModelValidation):

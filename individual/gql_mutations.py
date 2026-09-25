@@ -20,6 +20,7 @@ class CreateIndividualInputType(OpenIMISMutation.Input):
     dob = graphene.Date(required=True)
     json_ext = graphene.types.json.JSONString(required=False)
     location_id = graphene.Int(required=False)
+    labels = graphene.List(graphene.String, required=False)
 
 
 class UpdateIndividualInputType(CreateIndividualInputType):

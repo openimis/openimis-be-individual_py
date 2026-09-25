@@ -3,6 +3,7 @@ from individual.apps import IndividualConfig
 from individual.models import Individual
 from individual.tests.test_helpers import (
     create_individual,
+    create_individual_label,
     IndividualGQLTestCase,
 )
 from tasks_management.models import Task
@@ -310,6 +311,65 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
             task.data['incoming_data']['json_ext']['location_str'],
             f'{self.village_a.code} {self.village_a.name}'
         )
+
+    def _update_labels_mutation(self, individual, labels):
+        return f'''
+            mutation {{
+              updateIndividual(
+                input: {{
+                  id: "{individual.id}"
+                  firstName: "{individual.first_name}"
+                  lastName: "{individual.last_name}"
+                  dob: "{individual.dob}"
+                  labels: {json.dumps(labels)}
+                }}
+              ) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+
+    @patch.object(IndividualConfig, 'check_individual_update', False)
+    def test_update_individual_labels(self):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        individual = create_individual(self.admin_user.username)
+
+        response = self.query(
+            self._update_labels_mutation(individual, ['TEST_LABEL_A']),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        self.assert_mutation_success(content['data']['updateIndividual']['internalId'])
+        self.assertEqual(Individual.objects.get(id=individual.id).labels, ['TEST_LABEL_A'])
+
+        response = self.query(
+            self._update_labels_mutation(individual, ['TEST_LABEL_NOPE']),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        self.assert_mutation_error(content['data']['updateIndividual']['internalId'], 'TEST_LABEL_NOPE')
+        self.assertEqual(Individual.objects.get(id=individual.id).labels, ['TEST_LABEL_A'])
+
+    @patch.object(IndividualConfig, 'check_individual_update', True)
+    def test_update_individual_labels_with_checker_logic(self):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        individual = create_individual(self.admin_user.username)
+
+        response = self.query(
+            self._update_labels_mutation(individual, ['TEST_LABEL_A', 'TEST_LABEL_A']),
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        self.assert_mutation_success(content['data']['updateIndividual']['internalId'])
+        self.assertEqual(Individual.objects.get(id=individual.id).labels, [])
+
+        task = Task.objects.get(
+            entity_type=ContentType.objects.get_for_model(Individual),
+            entity_id=individual.id,
+            business_event='IndividualService.update',
+        )
+        self.assertEqual(task.data['incoming_data']['labels'], ['TEST_LABEL_A'])
 
     def test_delete_individual_general_permission(self):
         individual1 = create_individual(self.admin_user.username)

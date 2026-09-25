@@ -54,6 +54,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
 
     def create_update_task(self, obj_data):
         self._update_json_ext(obj_data)
+        self._normalize_labels(obj_data)
         return super().create_update_task(obj_data)
 
     @register_service_signal('individual_service.update')
@@ -117,6 +118,19 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     @register_service_signal('individual_service.create_accept_enrolment_task')
     def create_accept_enrolment_task(self, individual_queryset, benefit_plan_id):
         pass
+
+    def _base_payload_adjust(self, obj_data):
+        self._normalize_labels(obj_data)
+        return obj_data
+
+    @staticmethod
+    def _normalize_labels(obj_data):
+        if not obj_data or 'labels' not in obj_data:
+            return
+        if obj_data['labels'] is None:
+            del obj_data['labels']
+        else:
+            obj_data['labels'] = list(dict.fromkeys(obj_data['labels']))
 
     def _update_json_ext(self, obj_data):
         if not obj_data or 'json_ext' not in obj_data or 'location_id' not in obj_data:
