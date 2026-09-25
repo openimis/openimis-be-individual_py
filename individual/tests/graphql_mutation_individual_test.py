@@ -1,6 +1,7 @@
 import json
 from individual.apps import IndividualConfig
-from individual.models import Individual
+from individual.models import Individual, IndividualLabel
+from opensearch_reports.service import BaseSyncDocument
 from individual.tests.test_helpers import (
     create_individual,
     create_individual_label,
@@ -370,6 +371,66 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
             business_event='IndividualService.update',
         )
         self.assertEqual(task.data['incoming_data']['labels'], ['TEST_LABEL_A'])
+
+    def _run_mutation(self, name, input_str, token=None):
+        query_str = f'''
+            mutation {{
+              {name}(input: {{ {input_str} }}) {{
+                clientMutationId
+                internalId
+              }}
+            }}
+        '''
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"} if token else {}
+        content = json.loads(self.query(query_str, headers=headers).content)
+        return content['data'][name]['internalId']
+
+    def test_create_individual_label_permission(self):
+        input_str = 'code: "TEST_LABEL_A" name: "Test A" jsonSchema: "{\\"properties\\": {}}"'
+
+        self.assert_mutation_error(
+            self._run_mutation('createIndividualLabel', input_str), _('mutation.authentication_required'))
+        self.assert_mutation_error(
+            self._run_mutation('createIndividualLabel', input_str, self.med_enroll_officer_token), _('unauthorized'))
+        self.assertFalse(IndividualLabel.objects.filter(code='TEST_LABEL_A').exists())
+
+        self.assert_mutation_success(self._run_mutation('createIndividualLabel', input_str, self.admin_token))
+        label = IndividualLabel.objects.get(code='TEST_LABEL_A')
+        self.assertEqual(label.json_schema, {"properties": {}})
+
+    def test_update_individual_label(self):
+        label = create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        self.assert_mutation_success(self._run_mutation(
+            'updateIndividualLabel', f'id: "{label.id}" name: "Renamed"', self.admin_token))
+        label.refresh_from_db()
+        self.assertEqual(label.name, 'Renamed')
+
+    def test_delete_individual_label_in_use_rolls_back(self):
+        free = create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        used = create_individual_label(self.admin_user.username, 'TEST_LABEL_B')
+        create_individual(self.admin_user.username, payload_override={'labels': ['TEST_LABEL_B']})
+
+        uuid = self._run_mutation(
+            'deleteIndividualLabel', f'ids: ["{free.id}", "{used.id}"]', self.admin_token)
+
+        self.assert_mutation_error(uuid, 'TEST_LABEL_B')
+        free.refresh_from_db()
+        self.assertFalse(free.is_deleted)
+
+    @patch.object(BaseSyncDocument, 'update')
+    def test_assign_individual_labels(self, mock_document_update):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        individual = create_individual(self.admin_user.username)
+        input_str = f'ids: ["{individual.id}"] add: ["TEST_LABEL_A"]'
+
+        self.assert_mutation_error(
+            self._run_mutation('assignIndividualLabels', input_str), _('mutation.authentication_required'))
+        self.assert_mutation_error(
+            self._run_mutation('assignIndividualLabels', input_str, self.med_enroll_officer_token), _('unauthorized'))
+        self.assertEqual(Individual.objects.get(id=individual.id).labels, [])
+
+        self.assert_mutation_success(self._run_mutation('assignIndividualLabels', input_str, self.admin_token))
+        self.assertEqual(Individual.objects.get(id=individual.id).labels, ['TEST_LABEL_A'])
 
     def test_delete_individual_general_permission(self):
         individual1 = create_individual(self.admin_user.username)

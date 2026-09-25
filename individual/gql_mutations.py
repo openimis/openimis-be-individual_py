@@ -1,4 +1,5 @@
 import graphene
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db import transaction
 from django.db.models import Q
@@ -8,8 +9,8 @@ from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationM
     BaseHistoryModelUpdateMutationMixin, BaseHistoryModelCreateMutationMixin
 from core.schema import OpenIMISMutation
 from individual.apps import IndividualConfig
-from individual.models import Individual, Group, GroupIndividual
-from individual.services import IndividualService, GroupService, GroupIndividualService, \
+from individual.models import Individual, IndividualLabel, Group, GroupIndividual
+from individual.services import IndividualService, IndividualLabelService, GroupService, GroupIndividualService, \
     CreateGroupAndMoveIndividualService
 from location.models import Location, LocationManager
 
@@ -78,6 +79,120 @@ class ConfirmIndividualEnrollmentInputType(OpenIMISMutation.Input):
     custom_filters = graphene.List(required=False, of_type=graphene.String)
     benefit_plan_id = graphene.String(required=True, max_lenght=255)
     status = graphene.String(required=True, max_lenght=255)
+
+
+class CreateIndividualLabelInputType(OpenIMISMutation.Input):
+    code = graphene.String(required=True, max_length=64)
+    name = graphene.String(required=True, max_length=255)
+    json_schema = graphene.types.json.JSONString(required=False)
+
+
+class UpdateIndividualLabelInputType(OpenIMISMutation.Input):
+    id = graphene.UUID(required=True)
+    name = graphene.String(required=False, max_length=255)
+    json_schema = graphene.types.json.JSONString(required=False)
+
+
+def _pop_client_mutation_fields(data):
+    data.pop('client_mutation_id', None)
+    data.pop('client_mutation_label', None)
+
+
+def _check_perms(user, perms):
+    if not user.has_perms(perms):
+        raise PermissionDenied(_("unauthorized"))
+
+
+class CreateIndividualLabelMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):
+    _mutation_class = "CreateIndividualLabelMutation"
+    _mutation_module = "individual"
+    _model = IndividualLabel
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        super()._validate_mutation(user, **data)
+        _check_perms(user, IndividualConfig.gql_individual_label_create_perms)
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        _pop_client_mutation_fields(data)
+        result = IndividualLabelService(user).create(data)
+        return result if not result['success'] else None
+
+    class Input(CreateIndividualLabelInputType):
+        pass
+
+
+class UpdateIndividualLabelMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
+    _mutation_class = "UpdateIndividualLabelMutation"
+    _mutation_module = "individual"
+    _model = IndividualLabel
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        super()._validate_mutation(user, **data)
+        _check_perms(user, IndividualConfig.gql_individual_label_update_perms)
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        _pop_client_mutation_fields(data)
+        result = IndividualLabelService(user).update(data)
+        return result if not result['success'] else None
+
+    class Input(UpdateIndividualLabelInputType):
+        pass
+
+
+class DeleteIndividualLabelMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
+    _mutation_class = "DeleteIndividualLabelMutation"
+    _mutation_module = "individual"
+    _model = IndividualLabel
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        super()._validate_mutation(user, **data)
+        _check_perms(user, IndividualConfig.gql_individual_label_delete_perms)
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        _pop_client_mutation_fields(data)
+        service = IndividualLabelService(user)
+        with transaction.atomic():
+            for identifier in data.get('ids') or []:
+                result = service.delete({'id': identifier})
+                if not result['success']:
+                    transaction.set_rollback(True)
+                    return result
+        return None
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.UUID, required=True)
+
+
+class AssignIndividualLabelsMutation(BaseMutation):
+    """Adds and removes label codes on many individuals at once; not routed through maker-checker."""
+    _mutation_class = "AssignIndividualLabelsMutation"
+    _mutation_module = "individual"
+    _model = Individual
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        if type(user) is AnonymousUser or not user.id:
+            raise PermissionDenied(_("mutation.authentication_required"))
+        _check_perms(user, IndividualConfig.gql_individual_update_perms)
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        _pop_client_mutation_fields(data)
+        result = IndividualService(user).update_labels(
+            data.get('ids') or [], add=data.get('add') or [], remove=data.get('remove') or []
+        )
+        return result if not result['success'] else None
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.UUID, required=True)
+        add = graphene.List(graphene.String, required=False)
+        remove = graphene.List(graphene.String, required=False)
 
 
 class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):

@@ -16,7 +16,8 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     CreateGroupMutation, UpdateGroupMutation, DeleteGroupMutation, CreateGroupIndividualMutation, \
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation, \
-    UndoDeleteIndividualMutation, ConfirmGroupEnrollmentMutation
+    UndoDeleteIndividualMutation, ConfirmGroupEnrollmentMutation, CreateIndividualLabelMutation, \
+    UpdateIndividualLabelMutation, DeleteIndividualLabelMutation, AssignIndividualLabelsMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, \
     GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
@@ -509,6 +510,11 @@ class Mutation(graphene.ObjectType):
     update_individual = UpdateIndividualMutation.Field()
     delete_individual = DeleteIndividualMutation.Field()
     undo_delete_individual = UndoDeleteIndividualMutation.Field()
+
+    create_individual_label = CreateIndividualLabelMutation.Field()
+    update_individual_label = UpdateIndividualLabelMutation.Field()
+    delete_individual_label = DeleteIndividualLabelMutation.Field()
+    assign_individual_labels = AssignIndividualLabelsMutation.Field()
 
     create_group = CreateGroupMutation.Field()
     update_group = UpdateGroupMutation.Field()
