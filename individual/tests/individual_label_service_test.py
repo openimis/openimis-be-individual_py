@@ -1,8 +1,10 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from core.test_helpers import LogInHelper
 from individual.models import Individual, IndividualLabel
-from individual.services import IndividualLabelService
+from individual.services import IndividualLabelService, IndividualService
 from individual.tests.test_helpers import create_individual, create_individual_label
 
 
@@ -68,6 +70,21 @@ class IndividualLabelServiceTest(TestCase):
         label = create_individual_label(self.user.username, 'TEST_LABEL_A')
         label.delete(username=self.user.username)
         self.assertFalse(self.service.update({'id': label.id, 'name': 'Renamed'}).get('success', True))
+
+    @patch('individual.apps.IndividualConfig.check_individual_update', True)
+    def test_delete_label_refused_while_pending_task_adds_it(self):
+        label = create_individual_label(self.user.username, 'TEST_LABEL_A')
+        individual = create_individual(self.user.username)
+        task = IndividualService(self.user).create_update_task({
+            'id': individual.id, 'first_name': individual.first_name, 'last_name': individual.last_name,
+            'dob': individual.dob, 'labels': ['TEST_LABEL_A'],
+        })
+        self.assertTrue(task.get('success', False), task.get('detail', "No details provided"))
+
+        result = self.service.delete({'id': label.id})
+
+        self.assertFalse(result.get('success', True))
+        self.assertIn('TEST_LABEL_A', result.get('detail', ''))
 
     def test_delete_label_in_use_refused(self):
         label = create_individual_label(self.user.username, 'TEST_LABEL_A')

@@ -78,10 +78,10 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
         """
         try:
             add, remove = list(dict.fromkeys(add or [])), list(dict.fromkeys(remove or []))
-            validate_bulk_label_change(add, remove)
-            if not individual_ids or not (add or remove):
-                return output_result_success({'updated': 0})
             with transaction.atomic():
+                validate_bulk_label_change(add, remove)
+                if not individual_ids or not (add or remove):
+                    return output_result_success({'updated': 0})
                 visible = Individual.get_queryset(
                     Individual.objects.filter(id__in=individual_ids, is_deleted=False), self.user
                 )

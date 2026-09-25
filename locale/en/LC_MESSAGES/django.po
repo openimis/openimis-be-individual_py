@@ -213,6 +213,9 @@ msgstr "Label schema must be a JSON object"
 msgid "individual.validation.label.schema_unsupported_type"
 msgstr "Label schema properties need a type of string, integer, decimal, date or boolean"
 
+msgid "individual.validation.label.in_pending_task"
+msgstr "Label is used by a pending individual update task"
+
 #~ msgid "individual.validation.validate_update_group_individuals.extra_fields"
 #~ msgstr "Invalid field(s) found: %(fields)"
 

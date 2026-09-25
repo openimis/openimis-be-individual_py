@@ -54,13 +54,14 @@ def split_label_codes(value):
     return [code for code in str(value).split(';') if code != '']
 
 
-def unknown_label_codes(codes):
-    known = set(IndividualLabel.objects.filter(code__in=codes, is_deleted=False).values_list('code', flat=True))
-    return [code for code in codes if code not in known]
-
-
 def validate_label_codes_exist(codes):
-    unknown = unknown_label_codes(codes)
+    """Must run inside a transaction: the rows stay locked so a concurrent delete cannot slip in."""
+    known = set(
+        IndividualLabel.objects.select_for_update()
+        .filter(code__in=codes, is_deleted=False)
+        .values_list('code', flat=True)
+    )
+    unknown = [code for code in codes if code not in known]
     if unknown:
         raise ValidationError([_message("individual.validation.labels.unknown", ", ".join(map(str, unknown)))])
 
@@ -128,12 +129,21 @@ class IndividualLabelValidation(BaseModelValidation):
 
     @classmethod
     def validate_delete(cls, user, **data):
-        label = IndividualLabel.objects.filter(id=data.get('id')).first()
+        # Locked first, so an assignment that is checking this label waits and then sees it deleted.
+        label = IndividualLabel.objects.select_for_update().filter(id=data.get('id')).first()
         if not label:
             raise ValidationError([_message("individual.validation.label.not_found", data.get('id'))])
         # Soft-deleted individuals count too: undoing their deletion must not bring back an unknown code.
         if Individual.objects.filter(labels__contains=[label.code]).exists():
             raise ValidationError([_message("individual.validation.label.in_use", label.code)])
+        # Approving such a task would re-validate the labels, fail, and drop the whole edit.
+        pending_task = Task.objects.filter(
+            Q(status=Task.Status.RECEIVED) | Q(status=Task.Status.ACCEPTED),
+            entity_type=ContentType.objects.get_for_model(Individual),
+            data__incoming_data__labels__contains=[label.code],
+        )
+        if pending_task.exists():
+            raise ValidationError([_message("individual.validation.label.in_pending_task", label.code)])
 
     @staticmethod
     def _schema_errors(data):
