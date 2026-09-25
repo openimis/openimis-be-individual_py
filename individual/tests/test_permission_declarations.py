@@ -31,7 +31,7 @@ from individual.apps import (
     django_perms,
     perms,
 )
-from individual.models import Group, GroupIndividual, Individual
+from individual.models import Group, GroupIndividual, Individual, IndividualLabel
 
 # The identifiers as deployed. Changing one is incompatible with the existing roles:
 # this test has to be updated *and* the new right granted.
@@ -41,6 +41,9 @@ EXPECTED_RIGHTS = {
     "gql_individual_update_perms": ["159003"],
     "gql_individual_delete_perms": ["159004"],
     "gql_individual_undo_delete_perms": ["159005"],
+    "gql_individual_label_create_perms": ["159006"],
+    "gql_individual_label_update_perms": ["159007"],
+    "gql_individual_label_delete_perms": ["159008"],
     "gql_group_search_perms": ["180001"],
     "gql_group_create_perms": ["180002"],
     "gql_group_update_perms": ["180003"],
@@ -54,6 +57,9 @@ EXPECTED_MAP_ENTRIES = {
     "individual.individual_update": "159003",
     "individual.individual_delete": "159004",
     "individual.individual_undo_delete": "159005",
+    "individual.individual_label_create": "159006",
+    "individual.individual_label_update": "159007",
+    "individual.individual_label_delete": "159008",
     "individual.group_search": "180001",
     "individual.group_create": "180002",
     "individual.group_update": "180003",
@@ -109,8 +115,8 @@ class IndividualPermissionDeclarationTestCase(TestCase):
             with self.subTest(key=key):
                 self.assertEqual(getattr(IndividualConfig, key), perms(entity, action))
 
-    def test_the_two_entities_are_declared_separately(self):
-        self.assertEqual(set(DJANGO_PERMS), {"individual", "group"})
+    def test_the_entities_are_declared_separately(self):
+        self.assertEqual(set(DJANGO_PERMS), {"individual", "label", "group"})
 
     def test_individual_and_group_never_share_a_right(self):
         """
@@ -174,6 +180,13 @@ class IndividualPermissionDeclarationTestCase(TestCase):
                     Group.get_rights(action), configured_perms("group", action)
                 )
                 self.assertTrue(Group.get_rights(action))
+
+    def test_label_writes_have_their_own_rights_and_reads_follow_individual(self):
+        for action in ("create", "update", "delete"):
+            with self.subTest(action=action):
+                self.assertEqual(IndividualLabel.get_rights(action), configured_perms("label", action))
+                self.assertTrue(IndividualLabel.get_rights(action))
+        self.assertEqual(IndividualLabel.get_rights("query"), configured_perms("individual", "query"))
 
     def test_model_returns_none_for_an_undeclared_action(self):
         """None means "no rule": the caller must fail closed."""

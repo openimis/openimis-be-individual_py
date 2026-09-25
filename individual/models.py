@@ -21,6 +21,15 @@ class IndividualLabel(HistoryModel):
     def __str__(self):
         return self.code
 
+    @classmethod
+    def get_rights(cls, action):
+        # Reading labels is reading individual data; the registry only has its own write rights.
+        from individual.apps import configured_perms
+
+        if action == "query":
+            return configured_perms("individual", "query")
+        return configured_perms("label", action)
+
 
 class Individual(HistoryModel):
     USE_CACHE = False

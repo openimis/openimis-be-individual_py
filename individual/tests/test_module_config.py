@@ -34,3 +34,8 @@ class ModuleConfigTest(TestCase):
 
         self.assertFalse(IndividualConfig.enable_maker_checker_for_individual_upload)
         self.assertFalse(IndividualConfig.enable_maker_checker_for_individual_update)
+
+    def test_label_rights_defaults(self):
+        self.assertEqual(IndividualConfig.gql_individual_label_create_perms, ["159006"])
+        self.assertEqual(IndividualConfig.gql_individual_label_update_perms, ["159007"])
+        self.assertEqual(IndividualConfig.gql_individual_label_delete_perms, ["159008"])
