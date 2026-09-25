@@ -61,6 +61,15 @@ def validate_individual_labels(data):
     validate_label_codes_exist(labels)
 
 
+def validate_bulk_label_change(add, remove):
+    overlap = sorted(set(add) & set(remove), key=str)
+    if overlap:
+        raise ValidationError([
+            _message("individual.validation.labels.add_remove_overlap", ", ".join(map(str, overlap)))
+        ])
+    validate_label_codes_exist([*add, *remove])
+
+
 class IndividualLabelValidation(BaseModelValidation):
     OBJECT_TYPE = IndividualLabel
 
