@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 import core
 from core.models import HistoryModel
 from location.models import Location, LocationManager
+from core.models import ParentScope
 
 
 class Individual(HistoryModel):
@@ -30,6 +31,15 @@ class Individual(HistoryModel):
 
     class Meta:
         managed = True
+
+    @classmethod
+    def get_rights(cls, action):
+        # Read at call time and not at import: the `_perms` keys only hold their
+        # value after `ready()`, and a snapshot taken at import would capture the
+        # placeholder - hence an empty list, which `has_perms` grants to everybody.
+        from individual.apps import configured_perms
+
+        return configured_perms("individual", action)
 
     @classmethod
     def get_queryset(cls, queryset, user):
@@ -80,6 +90,8 @@ class IndividualDataSourceUpload(HistoryModel):
 
 
 class IndividualDataSource(HistoryModel):
+    row_scope = ParentScope("individual")
+
     USE_CACHE = False
     individual = models.ForeignKey(Individual, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
@@ -106,6 +118,14 @@ class Group(HistoryModel):
         null=True,
         related_name='groups'
     )
+
+    @classmethod
+    def get_rights(cls, action):
+        # An entity distinct from `individual`: the household has its own block of
+        # rights (180xxx). Read at call time, for the same reason as on Individual.
+        from individual.apps import configured_perms
+
+        return configured_perms("group", action)
 
     @classmethod
     def get_queryset(cls, queryset, user):
@@ -140,6 +160,8 @@ def update_member_individuals_location(sender, instance, **kwargs):
 
 
 class GroupDataSource(HistoryModel):
+    row_scope = ParentScope("group")
+
     USE_CACHE = False
     group = models.ForeignKey(Group, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
@@ -147,6 +169,15 @@ class GroupDataSource(HistoryModel):
 
 
 class GroupIndividual(HistoryModel):
+    # A person's membership of a household is not an object one holds rights on
+    # separately: composing it means modifying the household. Of the two foreign keys,
+    # `group` is the owner and not `individual` - every existing call site attests to
+    # it: the Create/Update/Delete GroupIndividual mutations check
+    # gql_group_{create,update,delete}_perms, and the groupIndividual /
+    # groupIndividualHistory resolvers check gql_group_search_perms. A person outlives
+    # their household; a membership link does not.
+    scope_parent = "group"
+
     USE_CACHE = False
 
     class Role(models.TextChoices):
