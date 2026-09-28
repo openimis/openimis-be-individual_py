@@ -67,13 +67,18 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * gql_individual_create_perms: required rights to call createIndividual GraphQL Mutation (default: ["159002"])
 * gql_individual_update_perms: required rights to call updateIndividual GraphQL Mutation (default: ["159003"])
 * gql_individual_delete_perms: required rights to call deleteIndividual GraphQL Mutation (default: ["159004"])
-* gql_individual_label_create_perms: required rights to call createIndividualLabel GraphQL Mutation (default: ["159006"])
-* gql_individual_label_update_perms: required rights to call updateIndividualLabel GraphQL Mutation (default: ["159007"])
-* gql_individual_label_delete_perms: required rights to call deleteIndividualLabel GraphQL Mutation (default: ["159008"])
 * gql_group_search_perms: required rights to call group GraphQL Mutation (default: ["180001"])
 * gql_group_create_perms: required rights to call createGroup and addIndividualToGroup and createGroupIndividuals GraphQL Mutation (default: ["180002"])
 * gql_group_update_perms: required rights to call updateGroup and editIndividualInGroup GraphQL Mutation (default: ["180003"])
 * gql_group_delete_perms: required rights to call deleteGroup and removeIndividualFromGroup GraphQL Mutation (default: ["180004"])
+
+## Label rights
+Declared in the module's rights table (`individual/apps.py`) and not configurable through `core.ModuleConfiguration`:
+* 159006 (`individual.add_individuallabel`): createIndividualLabel
+* 159007 (`individual.change_individuallabel`): updateIndividualLabel
+* 159008 (`individual.delete_individuallabel`): deleteIndividualLabel
+
+Reading labels needs the individual search right (159001); `assignIndividualLabels` needs the individual update right (159003).
 
 
 ## openIMIS Modules Dependencies
