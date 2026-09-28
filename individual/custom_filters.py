@@ -2,6 +2,7 @@ import logging
 import re
 
 from collections import namedtuple
+from datetime import date
 from django.apps import apps
 from django.db.models.query import QuerySet
 from typing import List
@@ -77,7 +78,7 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
             return int(value)
         elif value_type == 'string':
             return str(value[1:-1])
-        elif value_type == 'numeric':
+        elif value_type in ('numeric', 'decimal'):
             return float(value)
         elif value_type == 'boolean':
             cleaned_value = self.__remove_unexpected_chars(value)
@@ -86,10 +87,8 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
             elif cleaned_value.lower() == 'false':
                 return False
         elif value_type == 'date':
-            # Perform date parsing logic here
-            # Assuming you have a specific date format, you can use datetime.strptime
-            # Example: return datetime.strptime(value, '%Y-%m-%d').date()
-            pass
+            # `json_ext` keeps dates as ISO strings, which compare in date order.
+            return date.fromisoformat(value.strip('"\'')).isoformat()
 
         # Return None if the value type is not recognized
         return None

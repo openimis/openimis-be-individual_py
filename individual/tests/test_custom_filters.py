@@ -8,8 +8,10 @@ from django.test import TestCase
 from core.models import ModuleConfiguration
 from core.test_helpers import LogInHelper
 from individual.custom_filters import IndividualCustomFilterWizard
+from individual.models import Individual
 from individual.tests.test_helpers import (
     IndividualGQLTestCase,
+    create_individual,
     create_individual_label,
     reload_individual_config,
 )
@@ -117,3 +119,29 @@ class IndividualCustomFilterLabelSchemaTest(TestCase):
         self.assertEqual(self._fields({}), ['email'])
         self.assertEqual(self._fields({'label': 'TEST_LABEL_A'}), ['email'])
         self.assertEqual(self._fields({'label': 'TEST_LABEL_NOPE'}), ['email'])
+
+
+class IndividualCustomFilterValueTypesTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = LogInHelper().get_or_create_user_api()
+
+    def _filter(self, *custom_filters):
+        return set(IndividualCustomFilterWizard().apply_filter_to_queryset(
+            list(custom_filters), Individual.objects.filter(id__in=self.ids)).values_list('id', flat=True))
+
+    def setUp(self):
+        super().setUp()
+        self.low = create_individual(self.user.username, {'json_ext': {'income': 10.5, 'registered_on': '2020-01-15'}})
+        self.high = create_individual(self.user.username, {'json_ext': {'income': 99.9, 'registered_on': '2024-06-01'}})
+        self.ids = [self.low.id, self.high.id]
+
+    def test_decimal_values_are_compared_as_numbers(self):
+        self.assertEqual(self._filter('income__gt__decimal=50'), {self.high.id})
+        self.assertEqual(self._filter('income__exact__decimal=10.5'), {self.low.id})
+
+    def test_date_values_are_compared_in_date_order(self):
+        self.assertEqual(self._filter('registered_on__lt__date=2021-01-01'), {self.low.id})
+        self.assertEqual(self._filter('registered_on__gte__date="2020-01-15"'), {self.low.id, self.high.id})
