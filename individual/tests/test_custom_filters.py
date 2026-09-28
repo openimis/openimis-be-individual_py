@@ -69,7 +69,7 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
         self.assertEqual(possible_filters, [])
 
         # Then update individual config to with the fixture config
-        with open(self.test_config_path, 'rb') as test_file:
+        with open(self.test_config_path) as test_file:
             config.config = test_file.read()
         with self.captureOnCommitCallbacks(execute=True):
             config.save()

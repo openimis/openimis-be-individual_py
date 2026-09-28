@@ -161,6 +161,7 @@ class IndividualConfig(AppConfig):
     python_individual_import_workflow_group = None
     python_individual_import_workflow_name = None
     individual_schema = None
+    _loaded_individual_schema = None
     individual_accept_enrolment = None
     validation_calculation_uuid = None
     validation_import_valid_items_workflow = None
@@ -204,7 +205,9 @@ class IndividualConfig(AppConfig):
         self.__validate_individual_schema(cfg)
 
     def _reload_module_config(self, instance):
-        cfg = self._merge_with_defaults(instance)
+        self._apply_config(self._merge_with_defaults(instance))
+
+    def _apply_config(self, cfg):
         self.__load_config(cfg)
 
         # Reinitialize custom filters to apply the new schema
@@ -217,6 +220,27 @@ class IndividualConfig(AppConfig):
         logger.info(f"Reloaded app configs (except masking configs) for {self.name} module")
 
     @classmethod
+    def current_individual_schema(cls):
+        """
+        The system-wide schema, as a dict. Saving the configuration reloads only the process
+        that saved it; reading the stored value here lets every other worker follow without a
+        restart. It is compared with what this process last loaded, not with the attribute,
+        so only a save made elsewhere triggers a reload.
+        """
+        from django.apps import apps
+        from core.models import ModuleConfiguration
+
+        stored = stored_configuration().values_list('config', flat=True).first()
+        try:
+            stored_schema = json.loads(stored).get('individual_schema') if stored else None
+        except ValueError:
+            stored_schema = cls._loaded_individual_schema
+        if (stored_schema or DEFAULT_CONFIG['individual_schema']) != cls._loaded_individual_schema:
+            apps.get_app_config(MODULE_NAME)._apply_config(
+                ModuleConfiguration.get_or_default(MODULE_NAME, DEFAULT_CONFIG))
+        return json.loads(cls.individual_schema or '{}')
+
+    @classmethod
     def __load_config(cls, cfg):
         """
         Load all config fields that match current AppConfig class fields, all custom fields have to be loaded separately
@@ -224,6 +248,7 @@ class IndividualConfig(AppConfig):
         for field in cfg:
             if hasattr(IndividualConfig, field):
                 setattr(IndividualConfig, field, cfg[field])
+        cls._loaded_individual_schema = cfg.get('individual_schema')
 
     @classmethod
     def __validate_individual_schema(cls, cfg):

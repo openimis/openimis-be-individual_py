@@ -1,4 +1,3 @@
-import json
 import graphene
 import graphene_django_optimizer as gql_optimizer
 import pandas as pd
@@ -486,11 +485,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         Query._check_permissions(
             info.context.user, IndividualConfig.gql_individual_search_perms
         )
-        individual_schema = IndividualConfig.individual_schema
-        if individual_schema:
-            individual_schema_dict = json.loads(individual_schema)
-            return GlobalSchemaType(schema=individual_schema_dict)
-        return GlobalSchemaType(schema={})
+        return GlobalSchemaType(schema=IndividualConfig.current_individual_schema())
 
     @staticmethod
     def _check_permissions(user, perms):

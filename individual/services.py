@@ -791,7 +791,7 @@ class IndividualImportService:
         return result
 
     def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
-        schema_dict = json.loads(IndividualConfig.individual_schema)
+        schema_dict = IndividualConfig.current_individual_schema()
         properties = schema_dict.get("properties", {})
 
         unique_fields = [field for field, props in properties.items() if "uniqueness" in props]

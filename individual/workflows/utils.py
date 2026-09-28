@@ -1,7 +1,6 @@
 """
 Functionalities shared between different python workflows.
 """
-import json
 import logging
 import re
 from abc import ABCMeta, abstractmethod
@@ -31,7 +30,7 @@ class BasePythonWorkflowExecutor(metaclass=ABCMeta):
     def _load_df(self):
         df = load_dataframe(IndividualDataSource.objects.filter(upload_id=self.upload_uuid))
         self.df = self.clean_data(df)
-        self.schema = json.loads(IndividualConfig.individual_schema)
+        self.schema = IndividualConfig.current_individual_schema()
 
     @staticmethod
     def clean_data(df):

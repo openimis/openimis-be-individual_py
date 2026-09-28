@@ -77,3 +77,13 @@ class IndividualSchemaMutationTest(IndividualGQLTestCase):
         stored = json.loads(ModuleConfiguration.objects.get(module='individual', layer='be').config)
         self.assertEqual(stored['individual_accept_enrolment'], 'custom.accept')
         self.assertEqual(json.loads(stored['individual_schema']), self.new_schema)
+
+    def test_global_schema_follows_a_save_made_by_another_process(self):
+        self.assert_mutation_success(self._run(self.new_schema, self.admin_token))
+        config = ModuleConfiguration.objects.get(module='individual', layer='be')
+        stored = json.loads(config.config)
+        other = {"properties": {"poor": {"type": "boolean"}}}
+        stored['individual_schema'] = json.dumps(other)
+        ModuleConfiguration.objects.filter(id=config.id).update(config=json.dumps(stored))
+
+        self.assertEqual(self._global_schema(), other)

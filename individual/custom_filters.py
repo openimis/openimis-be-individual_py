@@ -1,4 +1,3 @@
-import json
 import logging
 import re
 
@@ -23,7 +22,7 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
         return self.OBJECT_CLASS.__name__
 
     def load_definition(self, tuple_type: type, **kwargs) -> List[namedtuple]:
-        individual_schema = IndividualConfig.individual_schema
+        individual_schema = IndividualConfig.current_individual_schema()
         additional_params = kwargs.get('additional_params', None)
         benefit_plan_id = additional_params.get("benefitPlan", None)
         if benefit_plan_id and 'social_protection' in apps.app_configs:
@@ -38,8 +37,7 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
             if label_schema:
                 return self.__process_schema_and_build_tuple(label_schema, tuple_type)
         if individual_schema:
-            individual_schema_dict = json.loads(individual_schema)
-            return self.__process_schema_and_build_tuple(individual_schema_dict, tuple_type)
+            return self.__process_schema_and_build_tuple(individual_schema, tuple_type)
         return []
 
     def apply_filter_to_queryset(self, custom_filters: List[namedtuple], query: QuerySet, relation=None) -> QuerySet:

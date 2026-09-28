@@ -178,7 +178,7 @@ def schema_subset_errors(schema, system_properties=None):
     if not isinstance(properties, dict):
         return []
     if system_properties is None:
-        system_properties = json.loads(IndividualConfig.individual_schema or '{}').get('properties', {})
+        system_properties = IndividualConfig.current_individual_schema().get('properties', {})
     checks = [
         ("individual.validation.schema.not_in_system_schema",
          [name for name in properties if name not in system_properties]),
