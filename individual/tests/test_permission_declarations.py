@@ -3,12 +3,13 @@ Guard rails on individual's rights declaration.
 
 Same structure as `claim` and `core`: `DJANGO_PERMS` by entity then by action, and
 `_PERM_CFG` deriving the config keys from it. What is particular to individual is that
-it carries **two** entities, in two distinct blocks of identifiers of the openIMIS
-catalogue: `individual` (159xxx, the register of people) and `group` (180xxx, the
-households). The test locks that separation down - it is what the flat shape hid.
+it carries **three** entities in two distinct blocks of identifiers of the openIMIS
+catalogue: `individual` (159xxx, the register of people), its `label` registry (the next
+free identifiers of that block) and `group` (180xxx, the households). The test locks
+that separation down - it is what the flat shape hid.
 
 What is locked down here:
-  * the identifiers 159001-159005 and 180001-180004, as deployed and as
+  * the identifiers 159001-159008 and 180001-180004, as deployed and as
     `permissions_map.json` carries them - changing one withdraws access from the roles
     that hold it;
   * a config key with no class attribute is never loaded by `__load_config` and
