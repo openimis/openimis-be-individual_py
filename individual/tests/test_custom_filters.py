@@ -1,7 +1,6 @@
 import os
 import json
 from collections import namedtuple
-from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -14,6 +13,7 @@ from individual.tests.test_helpers import (
     create_individual,
     create_individual_label,
     reload_individual_config,
+    set_individual_schema,
 )
 
 
@@ -93,8 +93,6 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
             self.assertTrue(f in possible_filters, f'expected to find {f} in {possible_filters}')
 
 
-@patch('individual.apps.IndividualConfig.individual_schema',
-       json.dumps({"properties": {"email": {"type": "string"}}}))
 class IndividualCustomFilterLabelSchemaTest(TestCase):
     definition = namedtuple('definition', ['field', 'filter', 'type'])
 
@@ -102,6 +100,10 @@ class IndividualCustomFilterLabelSchemaTest(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = LogInHelper().get_or_create_user_api()
+
+    def setUp(self):
+        super().setUp()
+        set_individual_schema(self, {"properties": {"email": {"type": "string"}}})
 
     def _fields(self, additional_params):
         definitions = IndividualCustomFilterWizard().load_definition(
