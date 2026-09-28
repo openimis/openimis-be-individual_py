@@ -29,6 +29,7 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * updateIndividualLabel
 * deleteIndividualLabel
 * assignIndividualLabels
+* updateIndividualSchema
 * createGroup
 * updateGroup
 * deleteGroup
@@ -72,11 +73,12 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * gql_group_update_perms: required rights to call updateGroup and editIndividualInGroup GraphQL Mutation (default: ["180003"])
 * gql_group_delete_perms: required rights to call deleteGroup and removeIndividualFromGroup GraphQL Mutation (default: ["180004"])
 
-## Label rights
+## Label and schema rights
 Declared in the module's rights table (`individual/apps.py`) and not configurable through `core.ModuleConfiguration`:
 * 159006 (`individual.add_individuallabel`): createIndividualLabel
 * 159007 (`individual.change_individuallabel`): updateIndividualLabel
 * 159008 (`individual.delete_individuallabel`): deleteIndividualLabel
+* 159009 (`individual.change_individual_schema`): updateIndividualSchema
 
 Reading labels needs the individual search right (159001); `assignIndividualLabels` needs the individual update right (159003).
 
@@ -101,7 +103,9 @@ An individual carries zero or more label codes saying what kind of person it is 
 `PRACTITIONER`, `CLAIM_ADMIN`, `BENEFICIARY`, which are created by the migrations when a user exists).
 
 * Labels are defined in `IndividualLabel`: a `code` (uppercase letters, digits and `_`, unique), a `name`
-  and an optional JSON schema that individuals with this label are expected to follow.
+  and an optional JSON schema that individuals with this label are expected to follow. Its properties must be
+  fields of the individual schema (see *Additional Field Definition*), with the same type, and it follows the
+  same field rules.
   The schema is informational: it is returned by GraphQL and used by the advanced filters when the
   `label` additional parameter is passed, but `json_ext` is not validated against it.
 * The codes are stored on the individual itself (`Individual.labels`, a PostgreSQL array with a GIN index),
@@ -118,7 +122,32 @@ An individual carries zero or more label codes saying what kind of person it is 
 ## Additional Field Definition
 
 Individual model comes with a minimal set of fields: `first_name`, `last_name`, `dob`.
-To add additional fields, define them in the backend admin interface by adding a Module configuration for `individual`:
+The additional fields are described by the `individual_schema` of the module configuration. It is the one
+catalogue of those fields: label schemas, and the beneficiary data schemas of the social protection module, are
+built from its fields and must use each with the same type.
+
+The `updateIndividualSchema(schema)` mutation (right 159009) validates and saves it. The same field rules apply to
+label and benefit plan schemas:
+
+* each property needs a `type` among `string`, `integer`, `decimal`, `date` and `boolean` (the types the
+  advanced filters handle); `decimal` and `date` are accepted although they are not JSON Schema types, the rest
+  of the schema is checked as JSON Schema draft 7;
+* property names must not be empty, contain `__` or `=`, or end with `_` (they become filter lookups);
+* optional `description` (text), `uniqueness` (only `true`: the upload validation treats the key's presence as
+  unique, so omit it instead of writing `false`) and `validationCalculation` (`{"name": ...}`);
+* a field used by a label or a benefit plan, deleted ones included, cannot be removed or change type.
+
+A module whose model stores a schema built from these fields registers it with
+`individual.schema_usage.register_schema_owner(model, code_field, schema_field)` from its `ready()`; labels and
+benefit plans are registered this way. `python manage.py check_individual_schema_usage` lists the stored schemas
+that use fields the individual schema lacks, or with another type (for instance benefit plans created before this
+rule, which keep working until their schema is edited), and exits with an error when it finds any.
+
+The saved schema takes effect in every server process without a restart: readers compare the stored
+configuration with what their process last loaded and reload it when another process changed it.
+
+The configuration can also be edited in the backend admin interface, which does not apply these rules, by adding
+a Module configuration for `individual`:
 
 1. In the web app, visit URL path `/api/admin/core/moduleconfiguration` in browser
 2. Click on ADD MODULE CONFIGURATION
