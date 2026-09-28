@@ -212,8 +212,11 @@ class IndividualConfig(AppConfig):
             logging.error('No individual_schema in individual module config.')
             return
 
-        from core.utils import validate_json_schema
-        errors = validate_json_schema(cfg['individual_schema'])
+        from individual.validation import schema_errors
+        try:
+            errors = schema_errors(json.loads(cfg['individual_schema']))
+        except (TypeError, ValueError) as error:
+            errors = [{'message': str(error)}]
 
         if errors:
             error_messages = [error['message'] for error in errors]

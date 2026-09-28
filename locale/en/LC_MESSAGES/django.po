@@ -207,11 +207,23 @@ msgstr "Label code cannot be changed"
 msgid "individual.validation.label.in_use"
 msgstr "Label is still assigned to individuals"
 
-msgid "individual.validation.label.schema_not_object"
-msgstr "Label schema must be a JSON object"
+msgid "individual.validation.schema.not_object"
+msgstr "Schema must be a JSON object"
 
-msgid "individual.validation.label.schema_unsupported_type"
-msgstr "Label schema properties need a type of string, integer, decimal, date or boolean"
+msgid "individual.validation.schema.invalid_name"
+msgstr "Field names must not be empty, contain '__' or '=', or end with '_'"
+
+msgid "individual.validation.schema.unsupported_type"
+msgstr "Fields need a type of string, integer, decimal, date or boolean"
+
+msgid "individual.validation.schema.invalid_description"
+msgstr "Field descriptions must be text"
+
+msgid "individual.validation.schema.invalid_uniqueness"
+msgstr "Uniqueness can only be true; omit it for a field that is not unique"
+
+msgid "individual.validation.schema.invalid_calculation"
+msgstr "A validation calculation needs a name"
 
 msgid "individual.validation.label.in_pending_task"
 msgstr "Label is used by a pending individual update task"

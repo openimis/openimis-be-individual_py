@@ -1,3 +1,4 @@
+import json
 import re
 
 import pandas as pd
@@ -82,22 +83,92 @@ def validate_bulk_label_change(add, remove):
     validate_label_codes_exist([*add, *remove])
 
 
-def label_schema_errors(schema):
-    """JSON Schema draft 7, restricted to what the advanced-filter wizard can turn into filters."""
+# `decimal` and `date` are filter-wizard types, not JSON Schema ones: checked as their
+# closest JSON Schema type, so the rest of the schema is still validated as draft 7.
+_JSON_SCHEMA_TYPE_OF_FILTER_TYPE = {'decimal': 'number', 'date': 'string'}
+
+
+def schema_dict(value):
+    """A stored schema as a dict - some rows hold it as a JSON string - or None."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) else None
+
+
+def filter_schema_json_errors(schema):
+    """`core.utils.validate_json_schema`, accepting the filter-wizard types on properties."""
+    properties = schema.get('properties')
+    if isinstance(properties, dict):
+        schema = {**schema, 'properties': {
+            name: _as_json_schema_property(definition) for name, definition in properties.items()
+        }}
+    return validate_json_schema(schema)
+
+
+def _as_json_schema_property(definition):
+    field_type = definition.get('type') if isinstance(definition, dict) else None
+    if isinstance(field_type, str) and field_type in _JSON_SCHEMA_TYPE_OF_FILTER_TYPE:
+        return {**definition, 'type': _JSON_SCHEMA_TYPE_OF_FILTER_TYPE[field_type]}
+    return definition
+
+
+def _type_of(definition):
+    return definition.get('type') if isinstance(definition, dict) else None
+
+
+def _names(names):
+    return ", ".join(map(str, names))
+
+
+def _is_invalid_field_name(name):
+    # A name becomes `json_ext__<name>__<lookup>` and travels in `<field>__<lookup>__<type>=<value>`
+    # filter strings: `__`, a trailing `_` or `=` would split it in the wrong place.
+    return not name or '__' in name or name.endswith('_') or '=' in name
+
+
+def schema_errors(schema):
+    """
+    Rules shared by the individual, label and benefit plan schemas: JSON Schema draft 7,
+    types the advanced filters handle, and the property options the upload validation reads.
+    """
     if not isinstance(schema, dict):
-        return [_message("individual.validation.label.schema_not_object")]
-    errors = validate_json_schema(schema)
+        return [_message("individual.validation.schema.not_object")]
+    errors = filter_schema_json_errors(schema)
     properties = schema.get('properties', {})
     if not isinstance(properties, dict):
-        return errors + [_message("individual.validation.label.schema_not_object", 'properties')]
+        return errors + [_message("individual.validation.schema.not_object", 'properties')]
+
     supported = CustomFilterWizardInterface.FILTERS_BASED_ON_FIELD_TYPE
-    unsupported = [
-        name for name, definition in properties.items()
-        if not isinstance(definition, dict) or definition.get('type') not in supported
+    definitions = {name: definition for name, definition in properties.items() if isinstance(definition, dict)}
+    checks = [
+        ("individual.validation.schema.invalid_name", [name for name in properties if _is_invalid_field_name(name)]),
+        ("individual.validation.schema.unsupported_type", [
+            name for name, definition in properties.items()
+            if not isinstance(_type_of(definition), str) or _type_of(definition) not in supported
+        ]),
+        ("individual.validation.schema.invalid_description", [
+            name for name, definition in definitions.items()
+            if 'description' in definition and not isinstance(definition['description'], str)
+        ]),
+        # The upload validation tests the key's presence, so `false` would still mean unique.
+        ("individual.validation.schema.invalid_uniqueness", [
+            name for name, definition in definitions.items()
+            if 'uniqueness' in definition and definition['uniqueness'] is not True
+        ]),
+        ("individual.validation.schema.invalid_calculation", [
+            name for name, definition in definitions.items()
+            if 'validationCalculation' in definition
+            and not _is_named_calculation(definition['validationCalculation'])
+        ]),
     ]
-    if unsupported:
-        errors.append(_message("individual.validation.label.schema_unsupported_type", ", ".join(unsupported)))
-    return errors
+    return errors + [_message(key, _names(names)) for key, names in checks if names]
+
+
+def _is_named_calculation(calculation):
+    return isinstance(calculation, dict) and isinstance(calculation.get('name'), str) and bool(calculation['name'])
 
 
 class IndividualLabelValidation(BaseModelValidation):
@@ -150,7 +221,7 @@ class IndividualLabelValidation(BaseModelValidation):
         schema = data.get('json_schema')
         if schema is None:
             return []
-        return label_schema_errors(schema)
+        return schema_errors(schema)
 
 
 class IndividualDataSourceValidation(BaseModelValidation):

@@ -40,6 +40,20 @@ class IndividualLabelServiceTest(TestCase):
         self.assertFalse(result.get('success', True))
         self.assertIn('TEST_LABEL_A', result.get('detail', ''))
 
+    def test_create_label_accepts_every_filter_type(self):
+        schema = {"properties": {
+            "licence_no": {"type": "string"}, "years": {"type": "integer"}, "fee": {"type": "decimal"},
+            "licensed_on": {"type": "date"}, "active": {"type": "boolean"},
+        }}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+        self.assertTrue(result.get('success'), result)
+
+    def test_create_label_applies_the_field_option_rules(self):
+        schema = {"properties": {"licence_no": {"type": "string", "uniqueness": False}}}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('licence_no', result.get('detail', ''))
+
     def test_create_label_rejects_invalid_schema(self):
         result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': {'type': 'nope'}})
         self.assertFalse(result.get('success', True))
