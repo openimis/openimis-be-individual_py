@@ -141,6 +141,7 @@ class IndividualCustomFilterValueTypesTest(TestCase):
     def test_decimal_values_are_compared_as_numbers(self):
         self.assertEqual(self._filter('income__gt__decimal=50'), {self.high.id})
         self.assertEqual(self._filter('income__exact__decimal=10.5'), {self.low.id})
+        self.assertEqual(self._filter('income__gt__decimal="50"'), {self.high.id})
 
     def test_date_values_are_compared_in_date_order(self):
         self.assertEqual(self._filter('registered_on__lt__date=2021-01-01'), {self.low.id})
