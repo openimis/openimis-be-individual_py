@@ -33,6 +33,19 @@ def reload_individual_config(raw_config):
     )
 
 
+def set_individual_schema(test_case, schema):
+    """Store `schema` as the system-wide individual schema until `test_case` ends."""
+    config = ModuleConfiguration.objects.filter(module='individual', layer='be').first()
+    test_case.addCleanup(reload_individual_config, config.config if config else '{}')
+    stored = json.loads(config.config) if config else {}
+    stored['individual_schema'] = json.dumps(schema)
+    if config is None:
+        config = ModuleConfiguration(module='individual', layer='be', version='1')
+    config.config = json.dumps(stored)
+    with test_case.captureOnCommitCallbacks(execute=True):
+        config.save()
+
+
 def generate_random_string(length=6):
     letters = string.ascii_uppercase
     return ''.join(random.choice(letters) for i in range(length))

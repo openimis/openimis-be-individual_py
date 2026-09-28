@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 
+from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, IndividualLabel, GroupIndividual, Group
 from core.custom_filters import CustomFilterWizardInterface
 from core.utils import validate_json_schema
@@ -171,6 +172,24 @@ def _is_named_calculation(calculation):
     return isinstance(calculation, dict) and isinstance(calculation.get('name'), str) and bool(calculation['name'])
 
 
+def schema_subset_errors(schema, system_properties=None):
+    """Every property of `schema` must be a field of the system-wide schema, with the same type."""
+    properties = (schema_dict(schema) or {}).get('properties')
+    if not isinstance(properties, dict):
+        return []
+    if system_properties is None:
+        system_properties = json.loads(IndividualConfig.individual_schema or '{}').get('properties', {})
+    checks = [
+        ("individual.validation.schema.not_in_system_schema",
+         [name for name in properties if name not in system_properties]),
+        ("individual.validation.schema.type_differs", [
+            name for name, definition in properties.items()
+            if name in system_properties and _type_of(definition) != _type_of(system_properties[name])
+        ]),
+    ]
+    return [_message(key, _names(names)) for key, names in checks if names]
+
+
 class IndividualLabelValidation(BaseModelValidation):
     OBJECT_TYPE = IndividualLabel
 
@@ -221,7 +240,7 @@ class IndividualLabelValidation(BaseModelValidation):
         schema = data.get('json_schema')
         if schema is None:
             return []
-        return schema_errors(schema)
+        return schema_errors(schema) or schema_subset_errors(schema)
 
 
 class IndividualDataSourceValidation(BaseModelValidation):

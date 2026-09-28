@@ -225,6 +225,12 @@ msgstr "Uniqueness can only be true; omit it for a field that is not unique"
 msgid "individual.validation.schema.invalid_calculation"
 msgstr "A validation calculation needs a name"
 
+msgid "individual.validation.schema.not_in_system_schema"
+msgstr "Fields missing from the individual schema"
+
+msgid "individual.validation.schema.type_differs"
+msgstr "Fields whose type differs from the individual schema"
+
 msgid "individual.validation.label.in_pending_task"
 msgstr "Label is used by a pending individual update task"
 
