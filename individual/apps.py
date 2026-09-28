@@ -1,8 +1,10 @@
 import copy
 import json
 import logging
+from datetime import datetime
 
 from django.apps import AppConfig
+from django.db.models import Q
 
 from core.custom_filters import CustomFilterRegistryPoint
 from core.data_masking import MaskingClassRegistryPoint
@@ -38,6 +40,11 @@ DJANGO_PERMS = {
         "update": ("individual.change_individuallabel", 159007),
         "delete": ("individual.delete_individuallabel", 159008),
     },
+    # The system-wide individual schema, stored in the module configuration: no model
+    # carries it, the django name exists only to map the right.
+    "schema": {
+        "update": ("individual.change_individual_schema", 159009),
+    },
     "group": {
         "query": ("individual.view_group", 180001),
         "create": ("individual.add_group", 180002),
@@ -55,6 +62,7 @@ _PERM_CFG = {
     "gql_individual_label_create_perms": ("label", "create"),
     "gql_individual_label_update_perms": ("label", "update"),
     "gql_individual_label_delete_perms": ("label", "delete"),
+    "gql_individual_schema_update_perms": ("schema", "update"),
     "gql_group_search_perms": ("group", "query"),
     "gql_group_create_perms": ("group", "create"),
     "gql_group_update_perms": ("group", "update"),
@@ -112,6 +120,16 @@ DEFAULT_CONFIG = {
 }
 
 
+def stored_configuration():
+    """The module's stored configuration rows that are in force, as `get_or_default` selects them."""
+    from core.models import ModuleConfiguration
+
+    return ModuleConfiguration.objects.filter(
+        Q(is_disabled_until=None) | Q(is_disabled_until__lt=datetime.now()),
+        module=MODULE_NAME, layer='be',
+    )
+
+
 class IndividualConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = MODULE_NAME
@@ -128,6 +146,8 @@ class IndividualConfig(AppConfig):
     gql_individual_label_create_perms = RIGHTS.perms("label", "create")
     gql_individual_label_update_perms = RIGHTS.perms("label", "update")
     gql_individual_label_delete_perms = RIGHTS.perms("label", "delete")
+
+    gql_individual_schema_update_perms = RIGHTS.perms("schema", "update")
 
     gql_group_search_perms = RIGHTS.perms("group", "query")
     gql_group_create_perms = RIGHTS.perms("group", "create")
