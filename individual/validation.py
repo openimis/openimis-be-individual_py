@@ -190,6 +190,25 @@ def schema_subset_errors(schema, system_properties=None):
     return [_message(key, _names(names)) for key, names in checks if names]
 
 
+def schema_change_errors(current_properties, new_properties):
+    """A field a label or a benefit plan uses cannot be removed or change type."""
+    from individual.schema_usage import schema_usages
+
+    changed = [
+        name for name, definition in current_properties.items()
+        if name not in new_properties or _type_of(new_properties[name]) != _type_of(definition)
+    ]
+    owners = {}
+    for owner, name in schema_usages(changed):
+        owners.setdefault(name, []).append(owner)
+    if not owners:
+        return []
+    return [_message(
+        "individual.validation.schema.field_in_use",
+        ", ".join(f"{name} ({', '.join(owners[name])})" for name in sorted(owners)),
+    )]
+
+
 class IndividualLabelValidation(BaseModelValidation):
     OBJECT_TYPE = IndividualLabel
 

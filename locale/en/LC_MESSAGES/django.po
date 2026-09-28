@@ -231,6 +231,9 @@ msgstr "Fields missing from the individual schema"
 msgid "individual.validation.schema.type_differs"
 msgstr "Fields whose type differs from the individual schema"
 
+msgid "individual.validation.schema.field_in_use"
+msgstr "Fields still used by labels or benefit plans cannot be removed or change type"
+
 msgid "individual.validation.label.in_pending_task"
 msgstr "Label is used by a pending individual update task"
 

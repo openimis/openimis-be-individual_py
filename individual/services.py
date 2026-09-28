@@ -32,6 +32,7 @@ from individual.utils import (
     fetch_summary_of_broken_items
 )
 from individual.validation import (
+    schema_change_errors,
     schema_errors,
     split_label_codes,
     validate_bulk_label_change,
@@ -266,6 +267,12 @@ class IndividualSchemaService:
                 raise ValidationError(errors)
             with transaction.atomic():
                 config = stored_configuration().select_for_update().first()
+                errors = schema_change_errors(
+                    IndividualConfig.current_individual_schema().get('properties', {}),
+                    schema.get('properties', {}),
+                )
+                if errors:
+                    raise ValidationError(errors)
                 if config is None:
                     config = ModuleConfiguration(module=MODULE_NAME, layer='be', version='1', config='{}')
                 stored = json.loads(config.config)

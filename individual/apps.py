@@ -194,6 +194,10 @@ class IndividualConfig(AppConfig):
         register_validator(self.name, self._validate_module_config)
         register_reloader(self.name, self._reload_module_config)
 
+        from individual.models import IndividualLabel
+        from individual.schema_usage import register_schema_owner
+        register_schema_owner(IndividualLabel, 'code', 'json_schema')
+
     def _merge_with_defaults(self, instance):
         # `instance._cfg` has already stripped the `_perms` keys from the stored
         # config, and DEFAULT_CONFIG holds none any more: the merge therefore cannot
