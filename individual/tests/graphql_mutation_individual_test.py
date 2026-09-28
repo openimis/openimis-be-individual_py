@@ -372,8 +372,9 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         )
         self.assertEqual(task.data['incoming_data']['labels'], ['TEST_LABEL_A'])
 
-    def _run_mutation(self, name, input_str, token=None):
-        query_str = f'''
+    @staticmethod
+    def _mutation_query(name, input_str):
+        return f'''
             mutation {{
               {name}(input: {{ {input_str} }}) {{
                 clientMutationId
@@ -381,15 +382,16 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
               }}
             }}
         '''
-        headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"} if token else {}
-        content = json.loads(self.query(query_str, headers=headers).content)
+
+    def _run_mutation(self, name, input_str, token):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+        content = json.loads(self.query(self._mutation_query(name, input_str), headers=headers).content)
         return content['data'][name]['internalId']
 
     def test_create_individual_label_permission(self):
         input_str = 'code: "TEST_LABEL_A" name: "Test A" jsonSchema: "{\\"properties\\": {}}"'
 
-        self.assert_mutation_error(
-            self._run_mutation('createIndividualLabel', input_str), _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(self._mutation_query('createIndividualLabel', input_str)))
         self.assert_mutation_error(
             self._run_mutation('createIndividualLabel', input_str, self.med_enroll_officer_token), _('unauthorized'))
         self.assertFalse(IndividualLabel.objects.filter(code='TEST_LABEL_A').exists())
@@ -423,8 +425,7 @@ class IndividualGQLMutationTest(IndividualGQLTestCase):
         individual = create_individual(self.admin_user.username)
         input_str = f'ids: ["{individual.id}"] add: ["TEST_LABEL_A"]'
 
-        self.assert_mutation_error(
-            self._run_mutation('assignIndividualLabels', input_str), _('mutation.authentication_required'))
+        self.assert_unauthenticated(self.query(self._mutation_query('assignIndividualLabels', input_str)))
         self.assert_mutation_error(
             self._run_mutation('assignIndividualLabels', input_str, self.med_enroll_officer_token), _('unauthorized'))
         self.assertEqual(Individual.objects.get(id=individual.id).labels, [])
