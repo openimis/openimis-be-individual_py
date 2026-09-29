@@ -1,7 +1,7 @@
 import logging
 
 from core.models import User
-from individual.workflows.utils import DataUpdateWorkflow
+from individual.workflows.utils import DataUpdateWorkflow, with_csv_labels
 from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ def process_update_individuals_workflow(user_uuid, upload_uuid):
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-update_sql = """
+update_sql = with_csv_labels("""
 CREATE OR REPLACE FUNCTION filter_jsonb(data jsonb, schema jsonb)
 RETURNS jsonb AS $$
 DECLARE
@@ -82,7 +82,8 @@ BEGIN
             dob = COALESCE(to_date(f."Json_ext"->>'dob', 'YYYY-MM-DD'), dob),
             location_id = loc."LocationId",
             "DateUpdated" = NOW(),
-            "Json_ext" = f."Json_ext"
+            "Json_ext" = f."Json_ext" - 'labels',
+            labels = CASE WHEN f."Json_ext" ? 'labels' THEN CSV_LABELS(f) ELSE labels END
             FROM individual_individualdatasource f
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = f."Json_ext"->>'location_name'
@@ -116,4 +117,4 @@ BEGIN
                 END;
         END IF;
         end $$
-        """
+        """)

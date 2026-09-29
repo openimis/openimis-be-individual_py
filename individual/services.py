@@ -1,10 +1,11 @@
 import logging
 import json
 import uuid
+from datetime import datetime
 import pandas as pd
 from pandas import DataFrame
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.db import transaction
+from django.db import connection, transaction
 
 from calculation.services import get_calculation_object
 from core.custom_filters import CustomFilterWizardStorage
@@ -18,6 +19,7 @@ from individual.apps import IndividualConfig
 from individual.models import (
     Individual,
     IndividualDataSource,
+    IndividualLabel,
     GroupIndividual,
     Group,
     IndividualDataUploadRecords,
@@ -29,8 +31,11 @@ from individual.utils import (
     fetch_summary_of_broken_items
 )
 from individual.validation import (
+    split_label_codes,
+    validate_bulk_label_change,
     IndividualValidation,
     IndividualDataSourceValidation,
+    IndividualLabelValidation,
     GroupIndividualValidation,
     GroupValidation, CrateGroupAndMoveIndividualValidation
 )
@@ -52,6 +57,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
 
     def create_update_task(self, obj_data):
         self._update_json_ext(obj_data)
+        self._normalize_labels(obj_data)
         return super().create_update_task(obj_data)
 
     @register_service_signal('individual_service.update')
@@ -62,6 +68,78 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     @register_service_signal('individual_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
+
+    @register_service_signal('individual_service.update_labels')
+    @check_authentication
+    def update_labels(self, individual_ids, add=(), remove=()):
+        """
+        Adds and removes label codes on many individuals at once, outside maker-checker.
+        Individuals the user cannot see are skipped; the result reports how many were updated.
+        """
+        try:
+            add, remove = list(dict.fromkeys(add or [])), list(dict.fromkeys(remove or []))
+            with transaction.atomic():
+                validate_bulk_label_change(add, remove)
+                if not individual_ids or not (add or remove):
+                    return output_result_success({'updated': 0})
+                visible = Individual.get_queryset(
+                    Individual.objects.filter(id__in=individual_ids, is_deleted=False), self.user
+                )
+                updated_ids = self._update_labels_in_db(visible, add, remove)
+                self._insert_label_history(updated_ids)
+                # After commit: an unreachable search index must not undo the assignment.
+                transaction.on_commit(lambda: self._sync_documents(updated_ids))
+            return output_result_success({'updated': len(updated_ids)})
+        except Exception as exc:
+            return output_exception(model_name='Individual', method='update_labels', exception=exc)
+
+    # One UPDATE and one history INSERT ... SELECT: saving row by row, or Django's bulk_update, takes about
+    # half a second per thousand individuals, which is too slow for labelling whole populations.
+    def _update_labels_in_db(self, visible, add, remove):
+        visible_sql, visible_params = visible.values('id').query.sql_with_params()
+        sql = f"""
+            UPDATE individual_individual
+            SET labels = ARRAY(
+                    SELECT code FROM unnest(labels) WITH ORDINALITY AS current(code, position)
+                    WHERE NOT code = ANY(%s::varchar[]) ORDER BY position
+                ) || ARRAY(
+                    SELECT code FROM unnest(%s::varchar[]) WITH ORDINALITY AS added(code, position)
+                    WHERE NOT code = ANY(labels) ORDER BY position
+                )::varchar[],
+                version = version + 1,
+                "DateUpdated" = %s,
+                "UserUpdatedUUID" = %s
+            WHERE "UUID" IN ({visible_sql})
+                AND (labels && %s::varchar[] OR NOT labels @> %s::varchar[])
+            RETURNING "UUID"
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [remove, add, datetime.now(), self.user.id, *visible_params, remove, add])
+            return [row[0] for row in cursor.fetchall()]
+
+    def _insert_label_history(self, individual_ids):
+        if not individual_ids:
+            return
+        history_model = Individual.history.model
+        columns = ', '.join(connection.ops.quote_name(f.column) for f in Individual._meta.concrete_fields)
+        sql = f"""
+            INSERT INTO {connection.ops.quote_name(history_model._meta.db_table)}
+                ({columns}, history_date, history_type, history_change_reason, history_user_id)
+            SELECT {columns}, %s, '~', NULL, %s FROM individual_individual WHERE "UUID" = ANY(%s::uuid[])
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [datetime.now(), self.user.id, individual_ids])
+
+    @staticmethod
+    def _sync_documents(individual_ids):
+        # Raw updates fire no post_save, so the search index has to be told explicitly.
+        if not individual_ids or 'opensearch_reports' not in apps.app_configs:
+            return
+        from individual.documents import IndividualDocument
+        try:
+            IndividualDocument().update(Individual.objects.filter(id__in=individual_ids), 'index')
+        except Exception:
+            logger.exception("Search index not updated after bulk label assignment")
 
     @register_service_signal('individual_service.undo_delete')
     @check_authentication
@@ -116,6 +194,19 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
     def create_accept_enrolment_task(self, individual_queryset, benefit_plan_id):
         pass
 
+    def _base_payload_adjust(self, obj_data):
+        self._normalize_labels(obj_data)
+        return obj_data
+
+    @staticmethod
+    def _normalize_labels(obj_data):
+        if not obj_data or 'labels' not in obj_data:
+            return
+        if obj_data['labels'] is None:
+            del obj_data['labels']
+        else:
+            obj_data['labels'] = list(dict.fromkeys(obj_data['labels']))
+
     def _update_json_ext(self, obj_data):
         if not obj_data or 'json_ext' not in obj_data or 'location_id' not in obj_data:
             return
@@ -137,6 +228,25 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
 
     def __init__(self, user, validation_class=IndividualValidation):
         super().__init__(user, validation_class)
+
+
+class IndividualLabelService(BaseService):
+    OBJECT_TYPE = IndividualLabel
+
+    def __init__(self, user, validation_class=IndividualLabelValidation):
+        super().__init__(user, validation_class)
+
+    @register_service_signal('individual_label_service.create')
+    def create(self, obj_data):
+        return super().create(obj_data)
+
+    @register_service_signal('individual_label_service.update')
+    def update(self, obj_data):
+        return super().update(obj_data)
+
+    @register_service_signal('individual_label_service.delete')
+    def delete(self, obj_data):
+        return super().delete(obj_data)
 
 
 class IndividualDataSourceService(BaseService):
@@ -606,6 +716,7 @@ class IndividualImportService:
         loc_name_code_district_ids_from_db,
         user_allowed_loc_ids,
         duplicate_village_name_code_tuples,
+        known_label_codes=None,
     ):
         validated_dataframe = []
 
@@ -632,9 +743,23 @@ class IndividualImportService:
                     )
                 )
 
+            if 'labels' in chunk.columns:
+                field_validation['validations']['labels'] = IndividualImportService._validate_labels(
+                    row.labels, known_label_codes or set()
+                )
+
             validated_dataframe.append(field_validation)
 
         return validated_dataframe
+
+    @staticmethod
+    def _validate_labels(value, known_label_codes):
+        codes = split_label_codes(value)
+        unknown = [code for code in codes if code not in known_label_codes]
+        result = {"success": not unknown, "field_name": "labels"}
+        if unknown:
+            result["note"] = f"Unknown label codes: {', '.join(unknown)}"
+        return result
 
     def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
         schema_dict = json.loads(IndividualConfig.individual_schema)
@@ -659,6 +784,12 @@ class IndividualImportService:
             user_allowed_loc_ids = None
             duplicate_village_name_code_tuples = None
 
+        known_label_codes = None
+        if 'labels' in dataframe.columns:
+            known_label_codes = set(
+                IndividualLabel.objects.filter(is_deleted=False).values_list('code', flat=True)
+            )
+
         # TODO: Use ProcessPoolExecutor after resolving django dependency loading issue
         validated_dataframe = IndividualImportService.process_chunk(
             dataframe,
@@ -667,6 +798,7 @@ class IndividualImportService:
             loc_name_code_district_ids_from_db,
             user_allowed_loc_ids,
             duplicate_village_name_code_tuples,
+            known_label_codes,
         )
 
         self.save_validation_error_in_data_source_bulk(validated_dataframe)

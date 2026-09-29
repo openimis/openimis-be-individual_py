@@ -50,6 +50,7 @@ class TestView(APITestCase):
             expected_base_csv_header in content,
             f'Expect csv template header to contain {expected_base_csv_header}, but got {content}'
         )
+        self.assertIn('id,labels', content)
 
     def test_download_template_file_on_individual_schema_update(self):
         # First set the individual config to be empty

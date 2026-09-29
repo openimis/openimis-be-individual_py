@@ -8,7 +8,7 @@ from individual.models import (
     IndividualDataUploadRecords,
 )
 from individual.workflows.base_individual_update import process_update_individuals_workflow
-from individual.tests.test_helpers import create_test_village, create_individual
+from individual.tests.test_helpers import create_test_village, create_individual, create_individual_label
 from opensearch_reports.service import BaseSyncDocument
 from unittest.mock import patch
 import uuid
@@ -168,6 +168,41 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         individual2_from_db = Individual.objects.get(id=self.individual2.id)
         self.assertEqual(individual2_from_db.first_name, self.individual2_updated_first_name)
         self.assertIsNone(individual2_from_db.location)
+
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
+    def test_process_update_individuals_workflow_labels(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        create_individual_label(self.user.username, 'TEST_LABEL_B')
+        for individual in (self.individual1, self.individual2):
+            individual.labels = ['TEST_LABEL_A']
+            individual.save(username=self.user.username)
+        individual3 = create_individual(
+            self.user.username, {'first_name': 'Foo 3', 'json_ext': {}, 'labels': ['TEST_LABEL_A']})
+
+        self.valid_data_source.json_ext['labels'] = 'TEST_LABEL_B'
+        self.valid_data_source.save(user=self.user)
+        self.invalid_data_source.json_ext = {
+            "ID": str(self.individual2.id),
+            "first_name": self.individual2_updated_first_name,
+            "location_name": None,
+            "location_code": None,
+        }
+        self.invalid_data_source.save(user=self.user)
+        IndividualDataSource(
+            upload_id=self.upload_uuid,
+            json_ext={"ID": str(individual3.id), "first_name": "Foo 3", "labels": "",
+                      "location_name": None, "location_code": None},
+        ).save(user=self.user)
+
+        process_update_individuals_workflow(self.user_uuid, self.upload_uuid)
+
+        upload = IndividualDataSourceUpload.objects.get(id=self.upload_uuid)
+        self.assertEqual(upload.status, "SUCCESS", upload.error)
+        self.assertEqual(Individual.objects.get(id=self.individual1.id).labels, ['TEST_LABEL_B'])
+        self.assertNotIn('labels', Individual.objects.get(id=self.individual1.id).json_ext)
+        self.assertNotIn('labels', Individual.objects.get(id=individual3.id).json_ext)
+        self.assertEqual(Individual.objects.get(id=self.individual2.id).labels, ['TEST_LABEL_A'])
+        self.assertEqual(Individual.objects.get(id=individual3.id).labels, [])
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', True)
     def test_process_update_individuals_workflow_with_maker_checker_enabled(self):

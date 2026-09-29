@@ -27,6 +27,7 @@ if 'opensearch_reports' in apps.app_configs:
         dob = opensearch_fields.DateField()
         date_created = opensearch_fields.DateField()
         json_ext = opensearch_fields.ObjectField()
+        labels = opensearch_fields.KeywordField(multi=True)
 
         class Index:
             name = 'individual'

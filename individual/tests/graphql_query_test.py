@@ -1,6 +1,7 @@
 import json
 from individual.tests.test_helpers import (
     create_individual,
+    create_individual_label,
     create_group,
     create_group_with_individual,
     IndividualGQLTestCase,
@@ -929,3 +930,50 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertEqual(summary['totalNumberOfIndividuals'], '5')
         self.assertEqual(summary['numberOfIndividualsAssignedToProgramme'], '0')
         self.assertEqual(summary['numberOfIndividualsNotAssignedToProgramme'], '3')
+
+    def _query_individual_uuids_by_labels(self, labels):
+        query_str = f'''query {{
+          individual(labels: {json.dumps(labels)}) {{
+            edges {{
+              node {{
+                uuid
+                labels
+              }}
+            }}
+          }}
+        }}'''
+        response = self.query(query_str, headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        self.assertResponseNoErrors(response)
+        edges = json.loads(response.content)['data']['individual']['edges']
+        return {e['node']['uuid']: e['node']['labels'] for e in edges}
+
+    def test_individual_query_filter_by_labels(self):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_B')
+        labelled_a = create_individual(self.admin_user.username, payload_override={'labels': ['TEST_LABEL_A']})
+        labelled_b = create_individual(self.admin_user.username, payload_override={'labels': ['TEST_LABEL_B']})
+
+        found = self._query_individual_uuids_by_labels(['TEST_LABEL_A', 'TEST_LABEL_B'])
+        self.assertEqual(set(found), {str(labelled_a.uuid), str(labelled_b.uuid)})
+
+        found = self._query_individual_uuids_by_labels(['TEST_LABEL_A'])
+        self.assertEqual(found, {str(labelled_a.uuid): ['TEST_LABEL_A']})
+
+    def test_individual_label_query_permission(self):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        deleted = create_individual_label(self.admin_user.username, 'TEST_LABEL_B')
+        deleted.delete(username=self.admin_user.username)
+        query_str = '''query {
+          individualLabel(code_Istartswith: "TEST_LABEL_") {
+            edges { node { uuid code name jsonSchema isDeleted } }
+          }
+        }'''
+
+        response = self.query(query_str)
+        content = json.loads(response.content)
+        self.assertEqual(content['errors'][0]['message'], 'Unauthorized')
+
+        response = self.query(query_str, headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        self.assertResponseNoErrors(response)
+        codes = [e['node']['code'] for e in json.loads(response.content)['data']['individualLabel']['edges']]
+        self.assertEqual(codes, ['TEST_LABEL_A'])

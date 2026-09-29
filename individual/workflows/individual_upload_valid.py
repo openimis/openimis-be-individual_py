@@ -1,7 +1,7 @@
 import logging
 
 from core.models import User
-from individual.workflows.utils import SqlProcedurePythonWorkflow
+from individual.workflows.utils import SqlProcedurePythonWorkflow, with_csv_labels
 from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def process_import_valid_individuals_workflow(user_uuid, upload_uuid, accepted=N
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-upload_sql = """
+upload_sql = with_csv_labels("""
 DO $$
 DECLARE
     current_upload_id UUID := %s::UUID;
@@ -65,14 +65,15 @@ BEGIN
         WITH new_entry AS (
             INSERT INTO individual_individual(
                 "UUID", "isDeleted", version, "UserCreatedUUID", "UserUpdatedUUID",
-                "Json_ext", first_name, last_name, dob, location_id
+                "Json_ext", first_name, last_name, dob, location_id, labels
             )
             SELECT gen_random_uuid(), false, 1, userUUID, userUUID,
                    "Json_ext",
                    "Json_ext"->>'first_name',
                    "Json_ext" ->> 'last_name',
                    to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
-                   loc."LocationId"
+                   loc."LocationId",
+                   CSV_LABELS(ds)
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
@@ -93,6 +94,15 @@ BEGIN
           AND individual_individualdatasource."isDeleted" = False
           AND individual_individualdatasource."Json_ext" = ne."Json_ext"
           AND validations ->> 'validation_errors' = '[]';
+
+        -- The codes live in the labels column; drop the copied cell now that the rows are linked.
+        UPDATE individual_individual
+        SET "Json_ext" = "Json_ext" - 'labels'
+        WHERE "Json_ext" ? 'labels'
+            AND "UUID" IN (
+                SELECT individual_id FROM individual_individualdatasource
+                WHERE upload_id = current_upload_id AND individual_id IS NOT NULL
+            );
 
         -- Calculate counts of valid and total entries
         SELECT count(*) INTO total_valid_entries
@@ -133,9 +143,9 @@ EXCEPTION WHEN OTHERS THEN
     )
     WHERE "UUID" = current_upload_id;
 END $$;
-"""
+""")
 
-upload_sql_partial = """
+upload_sql_partial = with_csv_labels("""
 DO $$
 DECLARE
     current_upload_id UUID := %s::UUID;
@@ -188,14 +198,15 @@ BEGIN
         WITH new_entry AS (
             INSERT INTO individual_individual(
                 "UUID", "isDeleted", version, "UserCreatedUUID", "UserUpdatedUUID",
-                "Json_ext", first_name, last_name, dob, location_id
+                "Json_ext", first_name, last_name, dob, location_id, labels
             )
             SELECT gen_random_uuid(), false, 1, userUUID, userUUID,
                    "Json_ext",
                    "Json_ext"->>'first_name',
                    "Json_ext" ->> 'last_name',
                    to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
-                   loc."LocationId"
+                   loc."LocationId",
+                   CSV_LABELS(ds)
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
@@ -218,6 +229,15 @@ BEGIN
           AND individual_individualdatasource."Json_ext" = ne."Json_ext"
           AND validations ->> 'validation_errors' = '[]'
           AND (accepted IS NULL OR individual_individualdatasource."UUID" = ANY(accepted));
+
+        -- The codes live in the labels column; drop the copied cell now that the rows are linked.
+        UPDATE individual_individual
+        SET "Json_ext" = "Json_ext" - 'labels'
+        WHERE "Json_ext" ? 'labels'
+            AND "UUID" IN (
+                SELECT individual_id FROM individual_individualdatasource
+                WHERE upload_id = current_upload_id AND individual_id IS NOT NULL
+            );
     END IF;
 EXCEPTION WHEN OTHERS THEN
     UPDATE individual_individualdatasourceupload SET status = 'FAIL', error = jsonb_build_object(
@@ -227,4 +247,4 @@ EXCEPTION WHEN OTHERS THEN
     )
     WHERE "UUID" = current_upload_id;
 END $$;
-"""
+""")
