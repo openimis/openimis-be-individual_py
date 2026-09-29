@@ -108,7 +108,11 @@ DEFAULT_CONFIG = {
     ],
     "individual_base_fields": [
         'first_name', 'last_name', 'dob', 'location_name', 'location_code', 'id'
-    ]
+    ],
+    # Individuals carrying one of these labels are indexed in OpenSearch with
+    # their id, labels and creation date only: every holder of the dashboard
+    # right reads the index, and insurees have their own, narrower rights.
+    "individual_opensearch_private_labels": ["INSUREE"],
 }
 
 
@@ -160,6 +164,7 @@ class IndividualConfig(AppConfig):
     individual_mask_fields = None
     individual_masking_enabled = None
     individual_base_fields = None
+    individual_opensearch_private_labels = None
 
     def ready(self):
         from core.models import ModuleConfiguration
