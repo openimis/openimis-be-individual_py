@@ -1,4 +1,3 @@
-import json
 import graphene
 import graphene_django_optimizer as gql_optimizer
 import pandas as pd
@@ -17,7 +16,8 @@ from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualM
     UpdateGroupIndividualMutation, DeleteGroupIndividualMutation, \
     CreateGroupIndividualsMutation, CreateGroupAndMoveIndividualMutation, ConfirmIndividualEnrollmentMutation, \
     UndoDeleteIndividualMutation, ConfirmGroupEnrollmentMutation, CreateIndividualLabelMutation, \
-    UpdateIndividualLabelMutation, DeleteIndividualLabelMutation, AssignIndividualLabelsMutation
+    UpdateIndividualLabelMutation, DeleteIndividualLabelMutation, AssignIndividualLabelsMutation, \
+    UpdateIndividualSchemaMutation
 from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, IndividualDataSourceGQLType, \
     GroupGQLType, GroupIndividualGQLType, \
     IndividualDataSourceUploadGQLType, GroupHistoryGQLType, \
@@ -485,11 +485,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         Query._check_permissions(
             info.context.user, IndividualConfig.gql_individual_search_perms
         )
-        individual_schema = IndividualConfig.individual_schema
-        if individual_schema:
-            individual_schema_dict = json.loads(individual_schema)
-            return GlobalSchemaType(schema=individual_schema_dict)
-        return GlobalSchemaType(schema={})
+        return GlobalSchemaType(schema=IndividualConfig.current_individual_schema())
 
     @staticmethod
     def _check_permissions(user, perms):
@@ -515,6 +511,7 @@ class Mutation(graphene.ObjectType):
     update_individual_label = UpdateIndividualLabelMutation.Field()
     delete_individual_label = DeleteIndividualLabelMutation.Field()
     assign_individual_labels = AssignIndividualLabelsMutation.Field()
+    update_individual_schema = UpdateIndividualSchemaMutation.Field()
 
     create_group = CreateGroupMutation.Field()
     update_group = UpdateGroupMutation.Field()

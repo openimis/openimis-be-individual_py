@@ -3,13 +3,13 @@ Guard rails on individual's rights declaration.
 
 Same structure as `claim` and `core`: `DJANGO_PERMS` by entity then by action, and
 `_PERM_CFG` deriving the config keys from it. What is particular to individual is that
-it carries **three** entities in two distinct blocks of identifiers of the openIMIS
-catalogue: `individual` (159xxx, the register of people), its `label` registry (the next
-free identifiers of that block) and `group` (180xxx, the households). The test locks
-that separation down - it is what the flat shape hid.
+it carries **four** entities in two distinct blocks of identifiers of the openIMIS
+catalogue: `individual` (159xxx, the register of people), its `label` registry and the
+system-wide `schema` (the next free identifiers of that block) and `group` (180xxx, the
+households). The test locks that separation down - it is what the flat shape hid.
 
 What is locked down here:
-  * the identifiers 159001-159008 and 180001-180004, as deployed and as
+  * the identifiers 159001-159009 and 180001-180004, as deployed and as
     `permissions_map.json` carries them - changing one withdraws access from the roles
     that hold it;
   * a config key with no class attribute is never loaded by `__load_config` and
@@ -45,6 +45,7 @@ EXPECTED_RIGHTS = {
     "gql_individual_label_create_perms": ["159006"],
     "gql_individual_label_update_perms": ["159007"],
     "gql_individual_label_delete_perms": ["159008"],
+    "gql_individual_schema_update_perms": ["159009"],
     "gql_group_search_perms": ["180001"],
     "gql_group_create_perms": ["180002"],
     "gql_group_update_perms": ["180003"],
@@ -61,6 +62,7 @@ EXPECTED_MAP_ENTRIES = {
     "individual.individual_label_create": "159006",
     "individual.individual_label_update": "159007",
     "individual.individual_label_delete": "159008",
+    "individual.individual_schema_update": "159009",
     "individual.group_search": "180001",
     "individual.group_create": "180002",
     "individual.group_update": "180003",
@@ -117,7 +119,7 @@ class IndividualPermissionDeclarationTestCase(TestCase):
                 self.assertEqual(getattr(IndividualConfig, key), perms(entity, action))
 
     def test_the_entities_are_declared_separately(self):
-        self.assertEqual(set(DJANGO_PERMS), {"individual", "label", "group"})
+        self.assertEqual(set(DJANGO_PERMS), {"individual", "label", "schema", "group"})
 
     def test_individual_and_group_never_share_a_right(self):
         """

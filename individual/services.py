@@ -4,18 +4,19 @@ import uuid
 from datetime import datetime
 import pandas as pd
 from pandas import DataFrame
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db import connection, transaction
 
 from calculation.services import get_calculation_object
 from core.custom_filters import CustomFilterWizardStorage
-from core.models import User
+from core.models import ModuleConfiguration, User
 from core.services import BaseService
 from core.signals import register_service_signal
 from django.apps import apps
 # from django.utils.translation import gettext as _
 from django.db.models import Q, OuterRef, Subquery, Count
-from individual.apps import IndividualConfig
+from individual.apps import IndividualConfig, MODULE_NAME, stored_configuration
 from individual.models import (
     Individual,
     IndividualDataSource,
@@ -31,6 +32,8 @@ from individual.utils import (
     fetch_summary_of_broken_items
 )
 from individual.validation import (
+    schema_change_errors,
+    schema_errors,
     split_label_codes,
     validate_bulk_label_change,
     IndividualValidation,
@@ -247,6 +250,39 @@ class IndividualLabelService(BaseService):
     @register_service_signal('individual_label_service.delete')
     def delete(self, obj_data):
         return super().delete(obj_data)
+
+
+class IndividualSchemaService:
+    """Saves the system-wide individual schema into the module's stored configuration."""
+
+    def __init__(self, user):
+        self.user = user
+
+    @register_service_signal('individual_schema_service.update')
+    @check_authentication
+    def update(self, schema):
+        try:
+            errors = schema_errors(schema)
+            if errors:
+                raise ValidationError(errors)
+            with transaction.atomic():
+                config = stored_configuration().select_for_update().first()
+                errors = schema_change_errors(
+                    IndividualConfig.current_individual_schema().get('properties', {}),
+                    schema.get('properties', {}),
+                )
+                if errors:
+                    raise ValidationError(errors)
+                if config is None:
+                    config = ModuleConfiguration(module=MODULE_NAME, layer='be', version='1', config='{}')
+                stored = json.loads(config.config)
+                # Stored as a JSON string, the form DEFAULT_CONFIG and every reader use.
+                stored['individual_schema'] = json.dumps(schema)
+                config.config = json.dumps(stored)
+                config.save()
+            return output_result_success({'individual_schema': schema})
+        except Exception as exc:
+            return output_exception(model_name='ModuleConfiguration', method='update_individual_schema', exception=exc)
 
 
 class IndividualDataSourceService(BaseService):
@@ -762,7 +798,7 @@ class IndividualImportService:
         return result
 
     def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
-        schema_dict = json.loads(IndividualConfig.individual_schema)
+        schema_dict = IndividualConfig.current_individual_schema()
         properties = schema_dict.get("properties", {})
 
         unique_fields = [field for field, props in properties.items() if "uniqueness" in props]

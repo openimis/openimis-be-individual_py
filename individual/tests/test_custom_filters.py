@@ -1,17 +1,19 @@
 import os
 import json
 from collections import namedtuple
-from unittest.mock import patch
 
 from django.test import TestCase
 
 from core.models import ModuleConfiguration
 from core.test_helpers import LogInHelper
 from individual.custom_filters import IndividualCustomFilterWizard
+from individual.models import Individual
 from individual.tests.test_helpers import (
     IndividualGQLTestCase,
+    create_individual,
     create_individual_label,
     reload_individual_config,
+    set_individual_schema,
 )
 
 
@@ -69,7 +71,7 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
         self.assertEqual(possible_filters, [])
 
         # Then update individual config to with the fixture config
-        with open(self.test_config_path, 'rb') as test_file:
+        with open(self.test_config_path) as test_file:
             config.config = test_file.read()
         with self.captureOnCommitCallbacks(execute=True):
             config.save()
@@ -91,8 +93,6 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
             self.assertTrue(f in possible_filters, f'expected to find {f} in {possible_filters}')
 
 
-@patch('individual.apps.IndividualConfig.individual_schema',
-       json.dumps({"properties": {"email": {"type": "string"}}}))
 class IndividualCustomFilterLabelSchemaTest(TestCase):
     definition = namedtuple('definition', ['field', 'filter', 'type'])
 
@@ -100,6 +100,10 @@ class IndividualCustomFilterLabelSchemaTest(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = LogInHelper().get_or_create_user_api()
+
+    def setUp(self):
+        super().setUp()
+        set_individual_schema(self, {"properties": {"email": {"type": "string"}}})
 
     def _fields(self, additional_params):
         definitions = IndividualCustomFilterWizard().load_definition(
@@ -117,3 +121,30 @@ class IndividualCustomFilterLabelSchemaTest(TestCase):
         self.assertEqual(self._fields({}), ['email'])
         self.assertEqual(self._fields({'label': 'TEST_LABEL_A'}), ['email'])
         self.assertEqual(self._fields({'label': 'TEST_LABEL_NOPE'}), ['email'])
+
+
+class IndividualCustomFilterValueTypesTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = LogInHelper().get_or_create_user_api()
+
+    def _filter(self, *custom_filters):
+        return set(IndividualCustomFilterWizard().apply_filter_to_queryset(
+            list(custom_filters), Individual.objects.filter(id__in=self.ids)).values_list('id', flat=True))
+
+    def setUp(self):
+        super().setUp()
+        self.low = create_individual(self.user.username, {'json_ext': {'income': 10.5, 'registered_on': '2020-01-15'}})
+        self.high = create_individual(self.user.username, {'json_ext': {'income': 99.9, 'registered_on': '2024-06-01'}})
+        self.ids = [self.low.id, self.high.id]
+
+    def test_decimal_values_are_compared_as_numbers(self):
+        self.assertEqual(self._filter('income__gt__decimal=50'), {self.high.id})
+        self.assertEqual(self._filter('income__exact__decimal=10.5'), {self.low.id})
+        self.assertEqual(self._filter('income__gt__decimal="50"'), {self.high.id})
+
+    def test_date_values_are_compared_in_date_order(self):
+        self.assertEqual(self._filter('registered_on__lt__date=2021-01-01'), {self.low.id})
+        self.assertEqual(self._filter('registered_on__gte__date="2020-01-15"'), {self.low.id, self.high.id})

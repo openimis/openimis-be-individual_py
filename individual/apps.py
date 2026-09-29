@@ -1,8 +1,10 @@
 import copy
 import json
 import logging
+from datetime import datetime
 
 from django.apps import AppConfig
+from django.db.models import Q
 
 from core.custom_filters import CustomFilterRegistryPoint
 from core.data_masking import MaskingClassRegistryPoint
@@ -38,6 +40,11 @@ DJANGO_PERMS = {
         "update": ("individual.change_individuallabel", 159007),
         "delete": ("individual.delete_individuallabel", 159008),
     },
+    # The system-wide individual schema, stored in the module configuration: no model
+    # carries it, the django name exists only to map the right.
+    "schema": {
+        "update": ("individual.change_individual_schema", 159009),
+    },
     "group": {
         "query": ("individual.view_group", 180001),
         "create": ("individual.add_group", 180002),
@@ -55,6 +62,7 @@ _PERM_CFG = {
     "gql_individual_label_create_perms": ("label", "create"),
     "gql_individual_label_update_perms": ("label", "update"),
     "gql_individual_label_delete_perms": ("label", "delete"),
+    "gql_individual_schema_update_perms": ("schema", "update"),
     "gql_group_search_perms": ("group", "query"),
     "gql_group_create_perms": ("group", "create"),
     "gql_group_update_perms": ("group", "update"),
@@ -112,6 +120,16 @@ DEFAULT_CONFIG = {
 }
 
 
+def stored_configuration():
+    """The module's stored configuration rows that are in force, as `get_or_default` selects them."""
+    from core.models import ModuleConfiguration
+
+    return ModuleConfiguration.objects.filter(
+        Q(is_disabled_until=None) | Q(is_disabled_until__lt=datetime.now()),
+        module=MODULE_NAME, layer='be',
+    )
+
+
 class IndividualConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = MODULE_NAME
@@ -129,6 +147,8 @@ class IndividualConfig(AppConfig):
     gql_individual_label_update_perms = RIGHTS.perms("label", "update")
     gql_individual_label_delete_perms = RIGHTS.perms("label", "delete")
 
+    gql_individual_schema_update_perms = RIGHTS.perms("schema", "update")
+
     gql_group_search_perms = RIGHTS.perms("group", "query")
     gql_group_create_perms = RIGHTS.perms("group", "create")
     gql_group_update_perms = RIGHTS.perms("group", "update")
@@ -141,6 +161,7 @@ class IndividualConfig(AppConfig):
     python_individual_import_workflow_group = None
     python_individual_import_workflow_name = None
     individual_schema = None
+    _loaded_individual_schema = None
     individual_accept_enrolment = None
     validation_calculation_uuid = None
     validation_import_valid_items_workflow = None
@@ -173,6 +194,10 @@ class IndividualConfig(AppConfig):
         register_validator(self.name, self._validate_module_config)
         register_reloader(self.name, self._reload_module_config)
 
+        from individual.models import IndividualLabel
+        from individual.schema_usage import register_schema_owner
+        register_schema_owner(IndividualLabel, 'code', 'json_schema')
+
     def _merge_with_defaults(self, instance):
         # `instance._cfg` has already stripped the `_perms` keys from the stored
         # config, and DEFAULT_CONFIG holds none any more: the merge therefore cannot
@@ -184,7 +209,9 @@ class IndividualConfig(AppConfig):
         self.__validate_individual_schema(cfg)
 
     def _reload_module_config(self, instance):
-        cfg = self._merge_with_defaults(instance)
+        self._apply_config(self._merge_with_defaults(instance))
+
+    def _apply_config(self, cfg):
         self.__load_config(cfg)
 
         # Reinitialize custom filters to apply the new schema
@@ -197,6 +224,27 @@ class IndividualConfig(AppConfig):
         logger.info(f"Reloaded app configs (except masking configs) for {self.name} module")
 
     @classmethod
+    def current_individual_schema(cls):
+        """
+        The system-wide schema, as a dict. Saving the configuration reloads only the process
+        that saved it; reading the stored value here lets every other worker follow without a
+        restart. It is compared with what this process last loaded, not with the attribute,
+        so only a save made elsewhere triggers a reload.
+        """
+        from django.apps import apps
+        from core.models import ModuleConfiguration
+
+        stored = stored_configuration().values_list('config', flat=True).first()
+        try:
+            stored_schema = json.loads(stored).get('individual_schema') if stored else None
+        except ValueError:
+            stored_schema = cls._loaded_individual_schema
+        if (stored_schema or DEFAULT_CONFIG['individual_schema']) != cls._loaded_individual_schema:
+            apps.get_app_config(MODULE_NAME)._apply_config(
+                ModuleConfiguration.get_or_default(MODULE_NAME, DEFAULT_CONFIG))
+        return json.loads(cls.individual_schema or '{}')
+
+    @classmethod
     def __load_config(cls, cfg):
         """
         Load all config fields that match current AppConfig class fields, all custom fields have to be loaded separately
@@ -204,6 +252,7 @@ class IndividualConfig(AppConfig):
         for field in cfg:
             if hasattr(IndividualConfig, field):
                 setattr(IndividualConfig, field, cfg[field])
+        cls._loaded_individual_schema = cfg.get('individual_schema')
 
     @classmethod
     def __validate_individual_schema(cls, cfg):
@@ -212,8 +261,11 @@ class IndividualConfig(AppConfig):
             logging.error('No individual_schema in individual module config.')
             return
 
-        from core.utils import validate_json_schema
-        errors = validate_json_schema(cfg['individual_schema'])
+        from individual.validation import schema_errors
+        try:
+            errors = schema_errors(json.loads(cfg['individual_schema']))
+        except (TypeError, ValueError) as error:
+            errors = [{'message': str(error)}]
 
         if errors:
             error_messages = [error['message'] for error in errors]

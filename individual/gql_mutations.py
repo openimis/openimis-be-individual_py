@@ -10,8 +10,8 @@ from core.gql.gql_mutations.base_mutation import BaseHistoryModelDeleteMutationM
 from core.schema import OpenIMISMutation
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualLabel, Group, GroupIndividual
-from individual.services import IndividualService, IndividualLabelService, GroupService, GroupIndividualService, \
-    CreateGroupAndMoveIndividualService
+from individual.services import IndividualService, IndividualLabelService, IndividualSchemaService, GroupService, \
+    GroupIndividualService, CreateGroupAndMoveIndividualService
 from location.models import Location, LocationManager
 
 
@@ -203,6 +203,26 @@ class AssignIndividualLabelsMutation(BaseMutation):
         ids = graphene.List(graphene.UUID, required=True)
         add = graphene.List(graphene.String, required=False)
         remove = graphene.List(graphene.String, required=False)
+
+
+class UpdateIndividualSchemaMutation(BaseMutation):
+    _mutation_class = "UpdateIndividualSchemaMutation"
+    _mutation_module = "individual"
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        if type(user) is AnonymousUser or not user.id:
+            raise PermissionDenied(_("mutation.authentication_required"))
+        if not user.has_perms(IndividualConfig.gql_individual_schema_update_perms):
+            raise PermissionDenied(_("unauthorized"))
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        result = IndividualSchemaService(user).update(data['schema'])
+        return result if not result['success'] else None
+
+    class Input(OpenIMISMutation.Input):
+        schema = graphene.types.json.JSONString(required=True)
 
 
 class CreateIndividualMutation(BaseHistoryModelCreateMutationMixin, BaseMutation):

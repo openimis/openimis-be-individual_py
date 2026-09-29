@@ -1,5 +1,4 @@
 import logging
-import json
 import mimetypes
 import os
 
@@ -55,7 +54,7 @@ def is_valid_file(import_file):
 # Function to retrieve global schema fields from IndividualConfig
 def get_global_schema_fields():
     # Load individual schema as a dictionary
-    schema = json.loads(IndividualConfig.individual_schema)
+    schema = IndividualConfig.current_individual_schema()
     # Extract property keys and add additional fields specific to individuals
     schema_properties = set(schema.get('properties', {}).keys())
     schema_properties.update(['recipient_info', 'individual_role', 'group_code'])

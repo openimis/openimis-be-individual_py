@@ -5,7 +5,7 @@ from django.test import TestCase
 from core.test_helpers import LogInHelper
 from individual.models import Individual, IndividualLabel
 from individual.services import IndividualLabelService, IndividualService
-from individual.tests.test_helpers import create_individual, create_individual_label
+from individual.tests.test_helpers import create_individual, create_individual_label, set_individual_schema
 
 
 class IndividualLabelServiceTest(TestCase):
@@ -17,6 +17,13 @@ class IndividualLabelServiceTest(TestCase):
         super().setUpClass()
         cls.user = LogInHelper().get_or_create_user_api()
         cls.service = IndividualLabelService(cls.user)
+
+    def setUp(self):
+        super().setUp()
+        set_individual_schema(self, {"properties": {
+            "licence_no": {"type": "string"}, "years": {"type": "integer"}, "fee": {"type": "decimal"},
+            "licensed_on": {"type": "date"}, "active": {"type": "boolean"},
+        }})
 
     def test_create_label(self):
         result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'Test A'})
@@ -39,6 +46,44 @@ class IndividualLabelServiceTest(TestCase):
         result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'again'})
         self.assertFalse(result.get('success', True))
         self.assertIn('TEST_LABEL_A', result.get('detail', ''))
+
+    def test_create_label_accepts_every_filter_type(self):
+        schema = {"properties": {
+            "licence_no": {"type": "string"}, "years": {"type": "integer"}, "fee": {"type": "decimal"},
+            "licensed_on": {"type": "date"}, "active": {"type": "boolean"},
+        }}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+        self.assertTrue(result.get('success'), result)
+
+    def test_create_label_rejects_fields_missing_from_the_individual_schema(self):
+        schema = {"properties": {"licence_no": {"type": "string"}, "badge": {"type": "string"}}}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('badge', result.get('detail', ''))
+        self.assertNotIn('licence_no', result.get('detail', ''))
+
+    def test_create_label_rejects_a_type_that_differs_from_the_individual_schema(self):
+        schema = {"properties": {"years": {"type": "string"}, "badge": {"type": "string"}}}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('years', result.get('detail', ''))
+        self.assertIn('badge', result.get('detail', ''))
+
+    def test_create_label_accepts_a_schema_without_fields(self):
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': {"properties": {}}})
+        self.assertTrue(result.get('success'), result)
+
+    def test_update_label_rejects_fields_missing_from_the_individual_schema(self):
+        label = create_individual_label(self.user.username, 'TEST_LABEL_A')
+        result = self.service.update({'id': label.id, 'json_schema': {"properties": {"badge": {"type": "string"}}}})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('badge', result.get('detail', ''))
+
+    def test_create_label_applies_the_field_option_rules(self):
+        schema = {"properties": {"licence_no": {"type": "string", "uniqueness": False}}}
+        result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': schema})
+        self.assertFalse(result.get('success', True))
+        self.assertIn('licence_no', result.get('detail', ''))
 
     def test_create_label_rejects_invalid_schema(self):
         result = self.service.create({'code': 'TEST_LABEL_A', 'name': 'x', 'json_schema': {'type': 'nope'}})
