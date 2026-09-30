@@ -44,6 +44,20 @@ if 'opensearch_reports' in apps.app_configs:
             ]
             queryset_pagination = 5000
 
+        def prepare(self, instance):
+            # An `index` action (saves, label changes, `opensearch document index`)
+            # replaces the whole document, so it also clears personal data indexed
+            # before the label was added; an `update` action merges and would not.
+            from individual.apps import IndividualConfig
+
+            private = IndividualConfig.individual_opensearch_private_labels or []
+            if isinstance(private, str):
+                private = [private]
+            if set(private) & set(instance.labels or []):
+                data = super().prepare(instance)
+                return {key: data[key] for key in ('id', 'labels', 'date_created') if key in data}
+            return super().prepare(instance)
+
         def prepare_json_ext(self, instance):
             json_ext_data = instance.json_ext
             json_data = self.__flatten_dict(json_ext_data)
