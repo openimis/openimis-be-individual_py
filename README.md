@@ -71,6 +71,7 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * gql_group_create_perms: required rights to call createGroup and addIndividualToGroup and createGroupIndividuals GraphQL Mutation (default: ["180002"])
 * gql_group_update_perms: required rights to call updateGroup and editIndividualInGroup GraphQL Mutation (default: ["180003"])
 * gql_group_delete_perms: required rights to call deleteGroup and removeIndividualFromGroup GraphQL Mutation (default: ["180004"])
+* individual_opensearch_private_labels: individuals carrying one of these labels are indexed in OpenSearch with their id, labels and creation date only (default: ["INSUREE"]). Every holder of the dashboard right reads the index; insurees have their own, narrower rights. After adding a label here, or on a site where such individuals were indexed before, rebuild the index with `python manage.py opensearch document index --models individual.Individual` (an `index` replaces each document; `update` would keep the old fields).
 
 ## Label rights
 Declared in the module's rights table (`individual/apps.py`) and not configurable through `core.ModuleConfiguration`:
