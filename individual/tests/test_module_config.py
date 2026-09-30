@@ -34,3 +34,9 @@ class ModuleConfigTest(TestCase):
 
         self.assertFalse(IndividualConfig.enable_maker_checker_for_individual_upload)
         self.assertFalse(IndividualConfig.enable_maker_checker_for_individual_update)
+
+    def test_private_labels_default_to_insuree_when_the_stored_config_omits_them(self):
+        config = ModuleConfiguration.objects.filter(module='individual', layer='be').first()
+        self.addCleanup(reload_individual_config, config.config if config else '{}')
+        reload_individual_config('{}')
+        self.assertEqual(IndividualConfig.individual_opensearch_private_labels, ['INSUREE'])

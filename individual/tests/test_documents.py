@@ -1,4 +1,5 @@
-from unittest import mock, skipUnless
+from unittest import skipUnless
+from unittest.mock import patch
 
 from django.apps import apps
 from django.test import SimpleTestCase
@@ -18,19 +19,19 @@ class IndividualDocumentPrivateLabelsTest(SimpleTestCase):
         )
         return IndividualDocument().prepare(individual)
 
-    @mock.patch.object(IndividualConfig, 'individual_opensearch_private_labels', ['INSUREE'])
+    @patch.object(IndividualConfig, 'individual_opensearch_private_labels', ['INSUREE'])
     def test_an_individual_with_a_private_label_is_indexed_without_personal_data(self):
         document = self.document(['INSUREE', 'BENEFICIARY'])
         self.assertEqual(set(document), {'id', 'labels', 'date_created'})
         self.assertEqual(document['labels'], ['INSUREE', 'BENEFICIARY'])
 
-    @mock.patch.object(IndividualConfig, 'individual_opensearch_private_labels', ['INSUREE'])
+    @patch.object(IndividualConfig, 'individual_opensearch_private_labels', ['INSUREE'])
     def test_other_individuals_are_indexed_whole(self):
         document = self.document(['BENEFICIARY'])
         self.assertEqual(document['first_name'], 'Ada')
         self.assertEqual(document['json_ext']['address__city'], 'London')
 
-    @mock.patch.object(IndividualConfig, 'individual_opensearch_private_labels', [])
+    @patch.object(IndividualConfig, 'individual_opensearch_private_labels', [])
     def test_no_private_label_indexes_everyone_whole(self):
         self.assertEqual(self.document(['INSUREE'])['last_name'], 'Lovelace')
 
@@ -38,3 +39,7 @@ class IndividualDocumentPrivateLabelsTest(SimpleTestCase):
         from individual.apps import DEFAULT_CONFIG
 
         self.assertEqual(DEFAULT_CONFIG['individual_opensearch_private_labels'], ['INSUREE'])
+
+    @patch.object(IndividualConfig, 'individual_opensearch_private_labels', 'INSUREE')
+    def test_a_single_label_stored_as_text_still_counts(self):
+        self.assertEqual(set(self.document(['INSUREE'])), {'id', 'labels', 'date_created'})
