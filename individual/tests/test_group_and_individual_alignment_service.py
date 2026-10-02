@@ -1,9 +1,13 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from core.test_helpers import LogInHelper
+from individual.apps import IndividualConfig
 from individual.models import Individual, GroupIndividual, Group
 from individual.services import GroupAndGroupIndividualAlignmentService
 from individual.tests.test_helpers import (
+    add_individual_to_group,
     create_individual,
     create_group,
 )
@@ -100,3 +104,131 @@ class GroupAndGroupIndividualAlignmentServiceTest(TestCase):
         self.assert_group_and_individual_location_equal(
             self.group.id, self.individual.id, self.loc_b.id
         )
+
+
+class GroupJsonExtAlignmentTest(TestCase):
+    household_keys = {'household_size': 5, 'is_refugee_household': False, 'household_type': 'RURAL'}
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = LogInHelper().get_or_create_user_api()
+        cls.username = cls.user.username
+
+    def setUp(self):
+        self.head = create_individual(
+            self.username, {'first_name': 'Head', 'json_ext': {'head_only': 'from-head'}}
+        )
+        self.group = create_group(self.username)
+        self.head_link = add_individual_to_group(self.username, self.head, self.group, is_head=True)
+        self.group.refresh_from_db()
+        self.group.json_ext.update(self.household_keys)
+        self.group.save(username=self.username)
+
+    def _refreshed_json_ext(self):
+        self.group.refresh_from_db()
+        return self.group.json_ext
+
+    def assert_household_keys_kept(self, json_ext):
+        for key, value in self.household_keys.items():
+            self.assertIn(key, json_ext)
+            self.assertEqual(json_ext[key], value)
+
+    def test_household_keys_kept_when_member_added(self):
+        member = create_individual(self.username, {'first_name': 'Member'})
+        add_individual_to_group(self.username, member, self.group, is_head=False)
+
+        json_ext = self._refreshed_json_ext()
+        self.assertIn(str(member.id), json_ext['members'])
+        self.assertEqual(len(json_ext['members']), 2)
+        self.assert_household_keys_kept(json_ext)
+
+    def test_household_keys_kept_when_member_removed(self):
+        member = create_individual(self.username, {'first_name': 'Member'})
+        member_link = add_individual_to_group(self.username, member, self.group, is_head=False)
+        member_link.delete(username=self.username)
+
+        json_ext = self._refreshed_json_ext()
+        self.assertNotIn(str(member.id), json_ext['members'])
+        self.assert_household_keys_kept(json_ext)
+
+    def test_household_keys_kept_when_primary_recipient_changes(self):
+        self.head_link.recipient_type = GroupIndividual.RecipientType.PRIMARY
+        self.head_link.save(username=self.username)
+        self.assertEqual(self._refreshed_json_ext()['primary_recipient_id'], str(self.head.id))
+
+        member = create_individual(self.username, {'first_name': 'Member'})
+        member_link = add_individual_to_group(self.username, member, self.group, is_head=False)
+        member_link.recipient_type = GroupIndividual.RecipientType.PRIMARY
+        member_link.save(username=self.username)
+
+        json_ext = self._refreshed_json_ext()
+        self.assertEqual(json_ext['primary_recipient_id'], str(member.id))
+        self.assert_household_keys_kept(json_ext)
+
+    def test_head_json_ext_keys_copied_to_group(self):
+        self.assertEqual(self._refreshed_json_ext()['head_only'], 'from-head')
+
+        self.head.json_ext = {
+            **self.head.json_ext, 'head_only': 'updated', 'head_new': 1, 'household_type': None
+        }
+        self.head.save(username=self.username)
+        member = create_individual(self.username, {'first_name': 'Member'})
+        add_individual_to_group(self.username, member, self.group, is_head=False)
+
+        json_ext = self._refreshed_json_ext()
+        self.assertEqual(json_ext['head_only'], 'updated')
+        self.assertEqual(json_ext['head_new'], 1)
+        self.assertEqual(json_ext['head_id'], str(self.head.id))
+        self.assert_household_keys_kept(json_ext)
+
+    def test_head_change_copies_new_head_keys_and_keeps_previous_head_keys(self):
+        new_head = create_individual(
+            self.username,
+            {'first_name': 'New head', 'json_ext': {'new_head_only': 'from-new-head', 'household_size': 6}},
+        )
+        add_individual_to_group(self.username, new_head, self.group, is_head=True)
+
+        self.head_link.refresh_from_db()
+        self.assertIsNone(self.head_link.role)
+        json_ext = self._refreshed_json_ext()
+        self.assertEqual(json_ext['head_id'], str(new_head.id))
+        self.assertEqual(json_ext['new_head_only'], 'from-new-head')
+        self.assertEqual(json_ext['household_size'], 6)
+        self.assertEqual(json_ext['is_refugee_household'], False)
+        self.assertEqual(json_ext['household_type'], 'RURAL')
+        # A key copied from the previous head stays on the group when the new head lacks it.
+        self.assertEqual(json_ext['head_only'], 'from-head')
+
+    def test_keys_configured_as_not_copied_from_head_keep_the_group_value(self):
+        self.group.json_ext.update({'id': 'household-1', 'social_id': '2500301000346810'})
+        self.group.save(username=self.username)
+        self.head.json_ext = {
+            **self.head.json_ext, 'id': 'individual-7', 'social_id': '2500301000346810.0',
+            'head_only': 'updated',
+        }
+        self.head.save(username=self.username)
+
+        with patch.object(IndividualConfig, 'group_json_ext_keys_not_copied_from_head',
+                          ['id', 'social_id']):
+            member = create_individual(self.username, {'first_name': 'Member'})
+            add_individual_to_group(self.username, member, self.group, is_head=False)
+
+        json_ext = self._refreshed_json_ext()
+        self.assertEqual(json_ext['id'], 'household-1')
+        self.assertEqual(json_ext['social_id'], '2500301000346810')
+        self.assertEqual(json_ext['head_only'], 'updated')
+        self.assertEqual(json_ext['head_id'], str(self.head.id))
+        self.assert_household_keys_kept(json_ext)
+
+    def test_keys_not_configured_take_the_head_value(self):
+        self.assertEqual(IndividualConfig.group_json_ext_keys_not_copied_from_head, [])
+        self.group.json_ext.update({'id': 'household-1'})
+        self.group.save(username=self.username)
+        self.head.json_ext = {**self.head.json_ext, 'id': 'individual-7'}
+        self.head.save(username=self.username)
+
+        member = create_individual(self.username, {'first_name': 'Member'})
+        add_individual_to_group(self.username, member, self.group, is_head=False)
+
+        self.assertEqual(self._refreshed_json_ext()['id'], 'individual-7')

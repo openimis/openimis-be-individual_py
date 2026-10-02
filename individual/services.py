@@ -430,19 +430,14 @@ class GroupAndGroupIndividualAlignmentService:
         secondary_id = str(secondary.individual.id) if secondary else None
 
         changes_to_save = {}
-        json_ext_minus_keys = {k: v for k, v in group.json_ext.items() if k not in [
-            "members", "head", "head_id", "primary_recipient",
-            "primary_recipient_id", "secondary_recipient", "secondary_recipient_id"
-        ]}
 
-        if json_ext_minus_keys != head_json_ext:
-            all_keys = set(head_json_ext.keys()).union(json_ext_minus_keys.keys())
-            for key in all_keys:
-                value = head_json_ext.get(key)
-                if value is None and key in group.json_ext:
-                    del group.json_ext[key]
-                else:
-                    group.json_ext[key] = value
+        # Copies the head's non-None json_ext values onto the group. Group keys that the
+        # head lacks or holds as None, and keys listed in
+        # group_json_ext_keys_not_copied_from_head, keep their group value.
+        keys_not_copied = set(IndividualConfig.group_json_ext_keys_not_copied_from_head or ())
+        for key, value in head_json_ext.items():
+            if value is not None and key not in keys_not_copied:
+                group.json_ext[key] = value
 
         current_members = group.json_ext.get("members", {})
         additional_members = {k: v for k, v in group_members.items() if k not in current_members}
