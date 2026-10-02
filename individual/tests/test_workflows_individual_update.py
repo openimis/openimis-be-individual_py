@@ -9,7 +9,7 @@ from individual.models import (
 )
 from individual.workflows.base_individual_update import process_update_individuals_workflow
 from individual.tests.test_helpers import create_test_village, create_individual
-from opensearch_reports.service import BaseSyncDocument
+from individual.tests.test_helpers import patch_opensearch_document_update
 from unittest.mock import patch
 import uuid
 from unittest import skipIf
@@ -27,7 +27,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         )
         cls.validate_headers_patcher.start()
 
-        cls.doc_update_patcher = patch.object(BaseSyncDocument, "update")
+        cls.doc_update_patcher = patch_opensearch_document_update()
         cls.doc_update_patcher.start()
 
         cls.schema_patcher = patch("individual.apps.IndividualConfig.individual_schema", "{}")

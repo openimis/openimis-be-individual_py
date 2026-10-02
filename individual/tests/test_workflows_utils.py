@@ -2,7 +2,7 @@ from django.test import TestCase
 from unittest.mock import patch
 from core.test_helpers import create_test_interactive_user
 from individual.workflows.utils import SqlProcedurePythonWorkflow, PythonWorkflowHandlerException
-from opensearch_reports.service import BaseSyncDocument
+from individual.tests.test_helpers import patch_opensearch_document_update
 import pandas as pd
 import json
 import uuid
@@ -29,7 +29,7 @@ class TestBasePythonWorkflowExecutor(TestCase):
         ).start()
 
         # patch opensearch document update so it doesn't try to connect & sync
-        self.doc_update_patcher = patch.object(BaseSyncDocument, "update")
+        self.doc_update_patcher = patch_opensearch_document_update()
         self.doc_update_patcher.start()
 
         self.executor = SqlProcedurePythonWorkflow(self.upload_id, self.user.id)

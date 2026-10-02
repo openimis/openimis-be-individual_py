@@ -3,6 +3,9 @@ import json
 import random
 import string
 import time
+from unittest.mock import patch
+
+from django.apps import apps
 from core.models import Role, RoleRight
 from core.models.base_mutation import MutationLog
 from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role, create_admin_role
@@ -16,6 +19,26 @@ from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase, Base
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 from tasks_management.models import Task
+
+
+class _NoPatch:
+    def start(self):
+        return None
+
+    def stop(self):
+        return None
+
+
+def patch_opensearch_document_update():
+    """A patcher of the OpenSearch document sync (``BaseSyncDocument.update``).
+
+    The module syncs documents only when opensearch_reports is an installed
+    app; without it there is nothing to patch and the patcher does nothing.
+    """
+    if not apps.is_installed('opensearch_reports'):
+        return _NoPatch()
+    from opensearch_reports.service import BaseSyncDocument
+    return patch.object(BaseSyncDocument, 'update')
 
 
 def generate_random_string(length=6):
