@@ -178,3 +178,21 @@ class GroupJsonExtAlignmentTest(TestCase):
         self.assertEqual(json_ext['head_new'], 1)
         self.assertEqual(json_ext['head_id'], str(self.head.id))
         self.assert_household_keys_kept(json_ext)
+
+    def test_head_change_copies_new_head_keys_and_keeps_previous_head_keys(self):
+        new_head = create_individual(
+            self.username,
+            {'first_name': 'New head', 'json_ext': {'new_head_only': 'from-new-head', 'household_size': 6}},
+        )
+        add_individual_to_group(self.username, new_head, self.group, is_head=True)
+
+        self.head_link.refresh_from_db()
+        self.assertIsNone(self.head_link.role)
+        json_ext = self._refreshed_json_ext()
+        self.assertEqual(json_ext['head_id'], str(new_head.id))
+        self.assertEqual(json_ext['new_head_only'], 'from-new-head')
+        self.assertEqual(json_ext['household_size'], 6)
+        self.assertEqual(json_ext['is_refugee_household'], False)
+        self.assertEqual(json_ext['household_type'], 'RURAL')
+        # A key copied from the previous head stays on the group when the new head lacks it.
+        self.assertEqual(json_ext['head_only'], 'from-head')
