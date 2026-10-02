@@ -5,6 +5,7 @@ import pandas as pd
 import uuid
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.query import QuerySet
+from django.apps import apps
 from django.test import TestCase
 from individual.services import IndividualImportService
 from individual.models import (
@@ -20,7 +21,6 @@ from individual.tests.test_helpers import (
     create_test_interactive_user,
     assign_user_districts,
 )
-from opensearch_reports.service import BaseSyncDocument
 from unittest.mock import MagicMock, patch
 from core.models.user import Role
 from location.models import Location
@@ -339,10 +339,17 @@ class IndividualImportServiceTest(TestCase):
         self.assertIn(df['location_code'].dtype.name, ['string', 'object', 'str'])  # string dtype means it's read as string
         self.assertEqual(df['location_code'].iloc[0], '202')
 
-    @patch.object(BaseSyncDocument, 'update')
-    def test_synchronize_data_for_reporting(self, mock_update):
-        service = IndividualImportService(self.admin_user)
-        service.synchronize_data_for_reporting(self.upload.id)
+    def _synchronize_as_with_opensearch_reports(self, upload_id):
+        """Runs the sync with opensearch_reports seen as installed and the
+        document class mocked, whether or not the package is installed."""
+        installed = {'opensearch_reports': apps.app_configs.get('opensearch_reports', MagicMock())}
+        with patch.dict(apps.app_configs, installed), \
+                patch('individual.documents.IndividualDocument', create=True) as document:
+            IndividualImportService(self.admin_user).synchronize_data_for_reporting(upload_id)
+        return document.return_value.update
+
+    def test_synchronize_data_for_reporting(self):
+        mock_update = self._synchronize_as_with_opensearch_reports(self.upload.id)
 
         mock_update.assert_called()
         args, kwargs = mock_update.call_args
@@ -352,9 +359,7 @@ class IndividualImportServiceTest(TestCase):
         self.assertEqual(actual_sorted_pks, expected_sorted_pks)
         self.assertEqual(args[1], 'index')
 
-    @patch.object(BaseSyncDocument, 'update')
-    def test_synchronize_data_for_reporting_no_individuals(self, mock_update):
-        service = IndividualImportService(self.admin_user)
-        service.synchronize_data_for_reporting(self.empty_upload.id)
+    def test_synchronize_data_for_reporting_no_individuals(self):
+        mock_update = self._synchronize_as_with_opensearch_reports(self.empty_upload.id)
 
         mock_update.assert_not_called()
