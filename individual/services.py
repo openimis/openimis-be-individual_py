@@ -432,9 +432,11 @@ class GroupAndGroupIndividualAlignmentService:
         changes_to_save = {}
 
         # Copies the head's non-None json_ext values onto the group. Group keys that the
-        # head lacks or holds as None keep their group value.
+        # head lacks or holds as None, and keys listed in
+        # group_json_ext_keys_not_copied_from_head, keep their group value.
+        keys_not_copied = set(IndividualConfig.group_json_ext_keys_not_copied_from_head or ())
         for key, value in head_json_ext.items():
-            if value is not None:
+            if value is not None and key not in keys_not_copied:
                 group.json_ext[key] = value
 
         current_members = group.json_ext.get("members", {})

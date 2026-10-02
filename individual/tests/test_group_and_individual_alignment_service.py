@@ -1,6 +1,9 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from core.test_helpers import LogInHelper
+from individual.apps import IndividualConfig
 from individual.models import Individual, GroupIndividual, Group
 from individual.services import GroupAndGroupIndividualAlignmentService
 from individual.tests.test_helpers import (
@@ -196,3 +199,36 @@ class GroupJsonExtAlignmentTest(TestCase):
         self.assertEqual(json_ext['household_type'], 'RURAL')
         # A key copied from the previous head stays on the group when the new head lacks it.
         self.assertEqual(json_ext['head_only'], 'from-head')
+
+    def test_keys_configured_as_not_copied_from_head_keep_the_group_value(self):
+        self.group.json_ext.update({'id': 'household-1', 'social_id': '2500301000346810'})
+        self.group.save(username=self.username)
+        self.head.json_ext = {
+            **self.head.json_ext, 'id': 'individual-7', 'social_id': '2500301000346810.0',
+            'head_only': 'updated',
+        }
+        self.head.save(username=self.username)
+
+        with patch.object(IndividualConfig, 'group_json_ext_keys_not_copied_from_head',
+                          ['id', 'social_id']):
+            member = create_individual(self.username, {'first_name': 'Member'})
+            add_individual_to_group(self.username, member, self.group, is_head=False)
+
+        json_ext = self._refreshed_json_ext()
+        self.assertEqual(json_ext['id'], 'household-1')
+        self.assertEqual(json_ext['social_id'], '2500301000346810')
+        self.assertEqual(json_ext['head_only'], 'updated')
+        self.assertEqual(json_ext['head_id'], str(self.head.id))
+        self.assert_household_keys_kept(json_ext)
+
+    def test_keys_not_configured_take_the_head_value(self):
+        self.assertEqual(IndividualConfig.group_json_ext_keys_not_copied_from_head, [])
+        self.group.json_ext.update({'id': 'household-1'})
+        self.group.save(username=self.username)
+        self.head.json_ext = {**self.head.json_ext, 'id': 'individual-7'}
+        self.head.save(username=self.username)
+
+        member = create_individual(self.username, {'first_name': 'Member'})
+        add_individual_to_group(self.username, member, self.group, is_head=False)
+
+        self.assertEqual(self._refreshed_json_ext()['id'], 'individual-7')

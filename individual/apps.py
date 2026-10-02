@@ -58,7 +58,10 @@ DEFAULT_CONFIG = {
     ],
     "individual_base_fields": [
         'first_name', 'last_name', 'dob', 'location_name', 'location_code', 'id'
-    ]
+    ],
+    # Group json_ext keys that keep the group's value when the head individual's
+    # json_ext is copied onto the group (GroupAndGroupIndividualAlignmentService).
+    "group_json_ext_keys_not_copied_from_head": [],
 }
 
 
@@ -102,6 +105,7 @@ class IndividualConfig(AppConfig):
     individual_mask_fields = None
     individual_masking_enabled = None
     individual_base_fields = None
+    group_json_ext_keys_not_copied_from_head = None
 
     def ready(self):
         from core.models import ModuleConfiguration
