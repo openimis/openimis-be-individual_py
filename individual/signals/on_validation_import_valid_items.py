@@ -417,6 +417,13 @@ def _resolve_task_n(_task, _user):
     _resolve_task_any(_task, _user)
 
 
+def _service_result_message(result):
+    if not isinstance(result, dict):
+        return repr(result)
+    parts = [str(result[key]) for key in ('message', 'detail') if result.get(key)]
+    return "; ".join(parts) if parts else repr(result)
+
+
 def on_task_resolve(**kwargs):
     from tasks_management.apps import TasksManagementConfig
     from individual.apps import IndividualConfig
@@ -425,16 +432,28 @@ def on_task_resolve(**kwargs):
     """
     try:
         result = kwargs.get('result', None)
-        task_data = result['data']['task']
-        if result and result['success'] \
-                and task_data['status'] == Task.Status.ACCEPTED \
+        if not isinstance(result, dict) or not result.get('success'):
+            logger.warning(
+                "on_task_resolve skipped, task service reported a failure: %s",
+                _service_result_message(result),
+            )
+            return
+        # A failed service call carries an empty string in 'data', not a dict
+        data = result.get('data')
+        task_data = data.get('task') if isinstance(data, dict) else None
+        if not isinstance(task_data, dict):
+            logger.warning(
+                "on_task_resolve skipped, task service result has no task data: %s",
+                _service_result_message(result),
+            )
+            return
+        if task_data['status'] == Task.Status.ACCEPTED \
                 and task_data['executor_action_event'] == TasksManagementConfig.default_executor_event \
                 and task_data['business_event'] in [
             IndividualConfig.validation_import_valid_items,
             IndividualConfig.validation_upload_valid_items,
             IndividualConfig.validation_import_group_valid_items
         ]:
-            data = kwargs.get("result").get("data")
             task = Task.objects.select_related('task_group').prefetch_related('task_group__taskexecutor_set').get(
                 id=data["task"]["id"])
             user = User.objects.get(id=data["user"]["id"])
