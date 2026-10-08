@@ -8,6 +8,7 @@ from django.db.models import F
 
 from core.models import User
 from individual.apps import IndividualConfig
+from individual.import_pipeline import valid_items_workflow
 from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataSource,
@@ -297,7 +298,8 @@ def on_task_complete_action(business_event, **kwargs):
     try:
         upload_record = IndividualDataUploadRecords.objects.get(id=task['entity_id'])
         if business_event == IndividualConfig.validation_import_valid_items:
-            workflow = IndividualConfig.validation_import_valid_items_workflow
+            # The pipeline's uploads are imported by the pipeline, the others as configured.
+            workflow = valid_items_workflow(upload_record)
             IndividualItemsImportTaskCompletionEvent(
                 workflow,
                 upload_record,
@@ -360,7 +362,7 @@ def _complete_task_for_accepted(_task, accept, user):
 
     if _task.business_event == IndividualConfig.validation_import_valid_items:
         IndividualItemsImportTaskCompletionEvent(
-            IndividualConfig.validation_import_valid_items_workflow,
+            valid_items_workflow(upload_record),
             upload_record,
             upload_record.data_upload.id,
             user,

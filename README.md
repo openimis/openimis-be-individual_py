@@ -76,6 +76,42 @@ Workflows:
  * individual upload
 
 
+## Python import pipeline (opt-in)
+
+An alternative to the SQL upload workflows, chosen per upload by picking the
+`Python Pipeline Import Individuals` workflow (group `individual`). The SQL
+workflows stay the default. Code: `individual/import_pipeline.py`.
+
+1. **Stage and validate** (one task per chunk, in parallel): parse a chunk,
+   check `first_name`, `last_name`, `dob` (YYYY-MM-DD), validation calculations
+   and the village, and insert the rows with their result. The resolved
+   village id is kept in `validations.location_id`.
+2. **Deduplicate** (once, after every chunk): the schema fields marked
+   `"uniqueness"` are compared across the whole upload, against existing
+   individuals, and against other uploads still pending. Because comparison
+   happens after all chunks are in, a duplicate split across chunks is found.
+3. **Review**: the usual maker-checker task (or an immediate import).
+4. **Import** (per chunk): individuals are created from the accepted valid rows
+   and linked to their row by id.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `individual_import_pipeline_executor` | `inline` | `inline`, `process` (local process pool) or `celery` (one task per chunk for stage 1; the import stage then runs inline in the worker that resolves the review) |
+| `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
+| `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
+| `individual_import_duplicate_policy` | `flag_all` | `flag_all` rejects every copy, as the SQL path does; `keep_first` keeps the first row |
+
+Measured on one machine (14 cores, local PostgreSQL) with 1,000,000 rows, the
+`process` executor and 8 workers: stage and validate 96 s, deduplicate 3 s,
+import of 970,125 individuals 213 s, about 550 MB in the parent process.
+
+## Upload visibility
+
+An upload has no location of its own. It is visible to its uploader, to whoever
+may see its review task, and to whoever may see an individual created from it.
+Rows not yet imported are visible to the uploader and the reviewers; imported
+rows follow their individual.
+
 ## Additional Field Definition
 
 Individual model comes with a minimal set of fields: `first_name`, `last_name`, `dob`.
