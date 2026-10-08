@@ -140,8 +140,9 @@ def download_invalid_items(request):
         # Get the upload ID from the request parameters
         upload_id = request.query_params.get('upload_id')
 
-        # Query invalid items from the data source based on the upload ID
-        invalid_items = IndividualDataSource.objects.filter(
+        # Query invalid items from the data source based on the upload ID, among the
+        # rows the user may see (the uploader's and reviewers' for pending rows).
+        invalid_items = IndividualDataSource.get_queryset(IndividualDataSource.objects.all(), request.user).filter(
             Q(
                 is_deleted=False
             ) & Q(
