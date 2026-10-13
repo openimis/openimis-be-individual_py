@@ -68,7 +68,8 @@ class ImportPipelineTests(TestCase):
         self._saved = {
             name: getattr(IndividualConfig, name)
             for name in ("individual_schema", "individual_import_pipeline_chunk_size",
-                         "individual_import_pipeline_executor", "individual_import_duplicate_policy")
+                         "individual_import_pipeline_executor", "individual_import_duplicate_policy",
+                         "individual_import_pipeline_dispatch")
         }
         IndividualConfig.individual_schema = SCHEMA
         IndividualConfig.individual_import_pipeline_chunk_size = 2
@@ -170,19 +171,24 @@ class ImportPipelineTests(TestCase):
         )
 
     def test_celery_executor_reduces_once_after_the_last_chunk(self):
-        from individual.tasks import finish_validation_task, stage_chunk_task
+        from individual.tasks import dispatch_task, finish_validation_task, stage_chunk_task
 
         IndividualConfig.individual_import_pipeline_executor = "celery"
         # Run the tasks here, as a worker would, without touching the global
         # celery configuration other tests depend on.
-        for task in (stage_chunk_task, finish_validation_task):
+        for task in (dispatch_task, stage_chunk_task, finish_validation_task):
             patcher = patch.object(task, "delay", side_effect=lambda *a, _t=task, **k: _t.apply(args=a, kwargs=k))
             patcher.start()
             self.addCleanup(patcher.stop)
 
-        upload = self._upload(self.ROWS)
-        self.assertEqual(self._errors(upload)["Bob"], ["national_id"])
-        upload.refresh_from_db()
-        state = upload.json_ext["pipeline"]
-        self.assertEqual((state["chunks_done"], state["chunks_total"], state["reduced"]), (4, 4, True))
-        self.assertEqual(Task.objects.filter(json_ext__data_upload_id=str(upload.id)).count(), 1)
+        # "worker": the request only queues the dispatch; "request": it reads the
+        # file and queues the chunks itself. Same outcome either way.
+        for dispatch in ("worker", "request"):
+            with self.subTest(dispatch=dispatch):
+                IndividualConfig.individual_import_pipeline_dispatch = dispatch
+                upload = self._upload(self.ROWS)
+                self.assertEqual(self._errors(upload)["Bob"], ["national_id"])
+                upload.refresh_from_db()
+                state = upload.json_ext["pipeline"]
+                self.assertEqual((state["chunks_done"], state["chunks_total"], state["reduced"]), (4, 4, True))
+                self.assertEqual(Task.objects.filter(json_ext__data_upload_id=str(upload.id)).count(), 1)

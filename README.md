@@ -99,6 +99,7 @@ workflows stay the default. Code: `individual/import_pipeline.py`.
 | `individual_import_pipeline_executor` | `inline` | `inline`, `process` (local process pool) or `celery` (one task per chunk for stage 1; the import stage then runs inline in the worker that resolves the review) |
 | `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
 | `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
+| `individual_import_pipeline_dispatch` | `worker` | `celery` executor only: `worker` reads the file and queues its chunks in a worker, so the request returns at once; `request` does it in the request |
 | `individual_import_duplicate_policy` | `flag_all` | `flag_all` rejects every copy, as the SQL path does; `keep_first` keeps the first row |
 
 Measured on one machine (14 cores, local PostgreSQL) with 1,000,000 rows, the

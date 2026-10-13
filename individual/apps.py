@@ -104,6 +104,9 @@ DEFAULT_CONFIG = {
     "individual_import_pipeline_executor": "inline",
     "individual_import_pipeline_chunk_size": 5000,
     "individual_import_pipeline_workers": 4,
+    # celery executor only: "worker" reads the file and queues its chunks in a
+    # worker (the request returns at once), "request" does it in the request.
+    "individual_import_pipeline_dispatch": "worker",
     # "flag_all" rejects every copy of a duplicated value, as the SQL path does;
     # "keep_first" keeps the first row and rejects the others.
     "individual_import_duplicate_policy": "flag_all",
@@ -157,6 +160,7 @@ class IndividualConfig(AppConfig):
     individual_import_pipeline_executor = None
     individual_import_pipeline_chunk_size = None
     individual_import_pipeline_workers = None
+    individual_import_pipeline_dispatch = None
     individual_import_duplicate_policy = None
 
     def ready(self):

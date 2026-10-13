@@ -94,6 +94,10 @@ def _workers():
     return int(IndividualConfig.individual_import_pipeline_workers or 4)
 
 
+def _dispatch_in_worker():
+    return (IndividualConfig.individual_import_pipeline_dispatch or "worker") == "worker"
+
+
 def _schema_properties():
     return json.loads(IndividualConfig.individual_schema).get("properties", {})
 
@@ -307,12 +311,22 @@ def _run_chunks(function, argument_list):
 
 # --- stage 1 driver ----------------------------------------------------------
 
-def run_validation(upload_id, user_id):
-    """Read the file in chunks and stage them; then deduplicate and open the review."""
+def run_validation(upload_id, user_id, in_worker=False):
+    """Read the file in chunks and stage them; then deduplicate and open the review.
+
+    With the celery executor and ``individual_import_pipeline_dispatch`` set to
+    "worker", the request only queues the dispatch: reading the file and
+    queueing its chunks happen in a worker too, so the request returns at once.
+    """
     upload = IndividualDataSourceUpload.objects.get(id=upload_id)
     state = (upload.json_ext or {}).get("pipeline", {})
     _set_status(upload_id, IndividualDataSourceUpload.Status.IN_PROGRESS)
     try:
+        if _executor() == "celery" and not in_worker and _dispatch_in_worker():
+            from individual.tasks import dispatch_task
+
+            dispatch_task.delay(str(upload_id), str(user_id))
+            return
         chunks = _iter_chunks(state["file"], state["content_type"], _chunk_size())
         if _executor() == "celery":
             _dispatch_celery(upload_id, user_id, chunks)
