@@ -164,7 +164,7 @@ msgstr "Missing group_id."
 
 #: individual/validation.py:21
 msgid "individual.validation.validate_undo_delete.individual_not_deleted"
-msgstr "Individual %(id) is not deleted."
+msgstr "Individual %(id)s is not deleted."
 
 #: individual/validation.py:46
 msgid "individual.validation.validate_create_group_and_individual.group_individual_does_not_exist"
@@ -172,7 +172,7 @@ msgstr "GroupIndividual does not exist."
 
 #: individual/validation.py:100
 msgid "individual.validation.validate_group_task_pending"
-msgstr "There is one task pending for the group %(group_id)."
+msgstr "There is one task pending for the group %(group_id)s."
 
 #: individual/views.py:43
 msgid "Invalid file type. Allowed: .csv, .xls, .xlsx"
