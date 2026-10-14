@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class ItemsUploadTaskCompletionEvent:
+    # True when the workflow only queued its work (the Python pipeline's celery
+    # import): what follows the import then runs when the last chunk finishes.
+    workflow_deferred = False
+
     def run_workflow(self):
         group, name = self.workflow_name.split('.')
         workflow = self._get_workflow(group, name)
@@ -32,6 +36,8 @@ class ItemsUploadTaskCompletionEvent:
             'upload_uuid': str(self.upload_id),
             'accepted': self.accepted
         })
+        data = result.get('data') if result.get('success') else None
+        self.workflow_deferred = isinstance(data, dict) and bool(data.get('deferred'))
         if not result.get('success'):
             if self.upload_record:
                 data_upload = self.upload_record.data_upload
@@ -75,7 +81,11 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
     def run_workflow(self):
         super().run_workflow()
+        if not self.workflow_deferred:
+            self.run_group_step()
 
+    def run_group_step(self):
+        """Group the imported individuals; runs once the individuals exist."""
         if not self.upload_record:
             return
 
@@ -249,8 +259,8 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
 class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
-    def run_workflow(self):
-        super().run_workflow()
+    def run_group_step(self):
+        super().run_group_step()
 
         if self.grouped_individuals is None or not self.grouped_individuals.exists():
             return
@@ -265,8 +275,8 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
 
 class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
-    def run_workflow(self):
-        super().run_workflow()
+    def run_group_step(self):
+        super().run_group_step()
 
         if self.grouped_individuals is None or not self.grouped_individuals.exists():
             return

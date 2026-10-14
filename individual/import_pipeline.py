@@ -22,9 +22,9 @@ Executors (``individual_import_pipeline_executor``):
 
 * ``inline``: in the calling process, chunk by chunk.
 * ``process``: a local process pool of ``individual_import_pipeline_workers``.
-* ``celery``: one celery task per chunk for stage 1; the last chunk to finish
-  triggers stage 2. Stage 4 then runs inline: it is followed by the group step
-  of the same approval, which needs the individuals to exist.
+* ``celery``: one celery task per chunk, for stage 1 and for stage 4. The last
+  validation chunk to finish triggers stage 2; the last import chunk sets the
+  final status and runs the group step, which needs every individual to exist.
 """
 import datetime
 import json
@@ -385,16 +385,21 @@ def _dispatch_celery(upload_id, user_id, chunks):
     chunk_done(upload_id, user_id, increment=0)
 
 
-def chunk_done(upload_id, user_id, increment=1):
-    """Count a finished chunk; whoever sees the last one triggers the reduce, once."""
+def _advance(upload_id, done_key, total_key, flag_key, increment=1):
+    """Count a finished chunk; True for exactly one caller: the one completing the set."""
     with transaction.atomic():
         upload = IndividualDataSourceUpload.objects.select_for_update().get(id=upload_id)
         state = (upload.json_ext or {}).get("pipeline", {})
-        done = state.get("chunks_done", 0) + increment
-        total = state.get("chunks_total")
-        ready = total is not None and done >= total and not state.get("reduced")
-        _update_state(upload_id, chunks_done=done, reduced=state.get("reduced") or ready)
-    if ready:
+        done = state.get(done_key, 0) + increment
+        total = state.get(total_key)
+        ready = total is not None and done >= total and not state.get(flag_key)
+        _update_state(upload_id, **{done_key: done, flag_key: state.get(flag_key) or ready})
+    return ready
+
+
+def chunk_done(upload_id, user_id, increment=1):
+    """Count a finished validation chunk; the last one triggers the reduce, once."""
+    if _advance(upload_id, "chunks_done", "chunks_total", "reduced", increment):
         from individual.tasks import finish_validation_task
 
         finish_validation_task.delay(str(upload_id), str(user_id))
@@ -534,8 +539,7 @@ def import_chunk(user_id, row_ids):
     return len(individuals)
 
 
-def run_import(upload_id, user_id, accepted=None):
-    """Import the valid rows of the upload (only ``accepted`` ones when given)."""
+def _rows_to_import(upload_id, accepted=None):
     rows = IndividualDataSource.objects.filter(
         upload_id=upload_id,
         individual__isnull=True,
@@ -544,18 +548,77 @@ def run_import(upload_id, user_id, accepted=None):
     )
     if isinstance(accepted, list):
         rows = rows.filter(id__in=accepted)
-    ids = list(rows.values_list("id", flat=True))
+    return list(rows.values_list("id", flat=True))
+
+
+def _id_chunks(ids):
     size = _chunk_size()
-    argument_list = [(str(user_id), ids[start:start + size]) for start in range(0, len(ids), size)]
+    return [ids[start:start + size] for start in range(0, len(ids), size)]
+
+
+def run_import(upload_id, user_id, accepted=None):
+    """Import the valid rows of the upload (only ``accepted`` ones when given), here."""
+    ids = _rows_to_import(upload_id, accepted)
+    argument_list = [(str(user_id), chunk) for chunk in _id_chunks(ids)]
     if _executor() == "process":
         _run_chunks(import_chunk, argument_list)
     else:
-        # Celery included: the group step of the same approval runs right after
-        # and needs the individuals to exist.
         for arguments in argument_list:
             import_chunk(*arguments)
     _finish_import(upload_id)
     return len(ids)
+
+
+def dispatch_import(upload_id, user_id, accepted=None):
+    """Queue one celery task per chunk of rows to import; return the number of chunks.
+
+    The last chunk to finish runs ``finish_import``: the final status, the
+    reporting copy and the group step. Tasks are queued once the current
+    transaction commits (the approval runs in one), so they see the chunk count.
+    """
+    from individual.tasks import import_chunk_task
+
+    chunks = _id_chunks(_rows_to_import(upload_id, accepted))
+    if not chunks:
+        return 0
+    _set_status(upload_id, IndividualDataSourceUpload.Status.IN_PROGRESS)
+    _update_state(upload_id, import_total=len(chunks), import_done=0, import_finished=False)
+    for chunk in chunks:
+        arguments = (str(upload_id), str(user_id), [str(row_id) for row_id in chunk])
+        transaction.on_commit(lambda arguments=arguments: import_chunk_task.delay(*arguments))
+    return len(chunks)
+
+
+def import_chunk_done(upload_id, user_id):
+    """Count a finished import chunk; the last one finishes the import, once."""
+    if _advance(upload_id, "import_done", "import_total", "import_finished"):
+        from individual.tasks import finish_import_task
+
+        finish_import_task.delay(str(upload_id), str(user_id))
+
+
+def finish_import(upload_id, user_id):
+    """After the last import chunk: final status, reporting copy, then the group step."""
+    from individual.models import IndividualDataUploadRecords
+    from individual.signals.on_validation_import_valid_items import IndividualItemsImportTaskCompletionEvent
+
+    _finish_import(upload_id)
+    _synchronize_reporting(upload_id, user_id)
+    record = IndividualDataUploadRecords.objects.filter(data_upload_id=upload_id, is_deleted=False).first()
+    if record is not None:
+        IndividualItemsImportTaskCompletionEvent(
+            valid_items_workflow(record), record, upload_id, User.objects.get(id=user_id)
+        ).run_group_step()
+
+
+def _synchronize_reporting(upload_id, user_id):
+    from individual.services import IndividualImportService
+
+    try:
+        IndividualImportService(User.objects.get(id=user_id)).synchronize_data_for_reporting(upload_id)
+    except Exception as exc:
+        # Reporting is a copy; an unreachable index must not fail an import that succeeded.
+        logger.warning("Reporting synchronisation failed for upload %s", upload_id, exc_info=exc)
 
 
 def _finish_import(upload_id):
@@ -581,12 +644,11 @@ def process_pipeline_import_individuals_workflow(user_uuid, upload_uuid):
 
 
 def process_pipeline_valid_individuals_workflow(user_uuid, upload_uuid, accepted=None):
-    from individual.services import IndividualImportService
-
+    if _executor() == "celery":
+        chunks = dispatch_import(upload_uuid, user_uuid, accepted)
+        if chunks:
+            # The approval event skips its group step: finish_import runs it.
+            return {"deferred": True, "chunks": chunks}
     imported = run_import(upload_uuid, user_uuid, accepted)
-    try:
-        IndividualImportService(User.objects.get(id=user_uuid)).synchronize_data_for_reporting(upload_uuid)
-    except Exception as exc:
-        # Reporting is a copy; an unreachable index must not fail an import that succeeded.
-        logger.warning("Reporting synchronisation failed for upload %s", upload_uuid, exc_info=exc)
+    _synchronize_reporting(upload_uuid, user_uuid)
     return {"imported": imported}

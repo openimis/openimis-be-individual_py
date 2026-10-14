@@ -96,7 +96,7 @@ workflows stay the default. Code: `individual/import_pipeline.py`.
 
 | Config key | Default | Meaning |
 |---|---|---|
-| `individual_import_pipeline_executor` | `inline` | `inline`, `process` (local process pool) or `celery` (one task per chunk for stage 1; the import stage then runs inline in the worker that resolves the review) |
+| `individual_import_pipeline_executor` | `inline` | `inline`, `process` (local process pool) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
 | `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
 | `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
 | `individual_import_pipeline_dispatch` | `worker` | `celery` executor only: `worker` reads the file and queues its chunks in a worker, so the request returns at once; `request` does it in the request |

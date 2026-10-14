@@ -30,3 +30,26 @@ def finish_validation_task(upload_id, user_id):
     from individual import import_pipeline
 
     import_pipeline.finish_validation(upload_id, user_id)
+
+
+@shared_task(name="individual.import_pipeline.import_chunk")
+def import_chunk_task(upload_id, user_id, row_ids):
+    from individual import import_pipeline
+
+    try:
+        import_pipeline.import_chunk(user_id, row_ids)
+    except Exception as exc:
+        import_pipeline._fail(upload_id, exc)
+        raise
+    import_pipeline.import_chunk_done(upload_id, user_id)
+
+
+@shared_task(name="individual.import_pipeline.finish_import")
+def finish_import_task(upload_id, user_id):
+    from individual import import_pipeline
+
+    try:
+        import_pipeline.finish_import(upload_id, user_id)
+    except Exception as exc:
+        import_pipeline._fail(upload_id, exc)
+        raise

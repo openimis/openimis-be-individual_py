@@ -86,10 +86,10 @@ class ImportPipelineTests(TestCase):
         village = village or self.village_a
         return f"{first_name},Test,{dob},{village.name},{village.code},{national_id},"
 
-    def _upload(self, rows, user=None):
+    def _upload(self, rows, user=None, header=HEADER):
         user = user or self.admin
         name = f"pipeline-{uuid.uuid4().hex}.csv"
-        content = "\n".join([HEADER, *rows]).encode()
+        content = "\n".join([header, *rows]).encode()
         default_storage.save(IndividualConfig.get_individual_upload_file_path(name), ContentFile(content))
         self.addCleanup(default_storage.delete, IndividualConfig.get_individual_upload_file_path(name))
         upload_file = SimpleUploadedFile(name, content, content_type="text/csv")
@@ -192,3 +192,50 @@ class ImportPipelineTests(TestCase):
                 state = upload.json_ext["pipeline"]
                 self.assertEqual((state["chunks_done"], state["chunks_total"], state["reduced"]), (4, 4, True))
                 self.assertEqual(Task.objects.filter(json_ext__data_upload_id=str(upload.id)).count(), 1)
+
+    def _run_tasks_here(self, *tasks):
+        # Run the tasks here, as a worker would, without touching the global
+        # celery configuration other tests depend on.
+        for task in tasks:
+            patcher = patch.object(task, "delay", side_effect=lambda *a, _t=task, **k: _t.apply(args=a, kwargs=k))
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @patch.object(IndividualImportService, "synchronize_data_for_reporting")
+    def test_celery_import_runs_in_chunks_then_groups_once(self, _sync):
+        from individual.models import GroupDataSource
+        from individual.tasks import (
+            dispatch_task, finish_import_task, finish_validation_task, import_chunk_task, stage_chunk_task,
+        )
+
+        IndividualConfig.individual_import_pipeline_executor = "celery"
+        self._run_tasks_here(dispatch_task, stage_chunk_task, finish_validation_task,
+                             import_chunk_task, finish_import_task)
+        header = HEADER + ",group_code,individual_role"
+        upload = self._upload([
+            self._row("Alice", "G-1") + ",G1,HEAD",
+            self._row("Bob", "G-2") + ",G1,SPOUSE",
+            self._row("Carol", "G-3") + ",G2,HEAD",
+        ], header=header)
+        record = IndividualDataUploadRecords.objects.get(data_upload=upload)
+
+        # The approval only queues the chunks; they run once its transaction commits.
+        with self.captureOnCommitCallbacks(execute=True) as queued:
+            event = IndividualItemsImportTaskCompletionEvent(
+                import_pipeline.valid_items_workflow(record), record, upload.id, self.admin
+            )
+            event.run_workflow()
+        self.assertTrue(event.workflow_deferred)
+        self.assertEqual(len(queued), 2)  # 3 rows, chunks of 2
+
+        upload.refresh_from_db()
+        state = upload.json_ext["pipeline"]
+        self.assertEqual((state["import_done"], state["import_total"], state["import_finished"]), (2, 2, True))
+        self.assertEqual(IndividualDataSource.objects.filter(upload=upload, individual__isnull=False).count(), 3)
+        # The group step ran once, after the last chunk: one data source per group
+        # code, and (group maker-checker on) the household review is now open.
+        self.assertEqual(GroupDataSource.objects.filter(upload=upload).count(), 2)
+        self.assertEqual(upload.status, IndividualDataSourceUpload.Status.WAITING_FOR_VERIFICATION)
+        self.assertTrue(Task.objects.filter(
+            source="import_group_valid_items", json_ext__data_upload_id=str(upload.id)
+        ).exists())
