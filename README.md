@@ -96,7 +96,7 @@ workflows stay the default. Code: `individual/import_pipeline.py`.
 
 | Config key | Default | Meaning |
 |---|---|---|
-| `individual_import_pipeline_executor` | `inline` | `inline`, `process` (local process pool) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
+| `individual_import_pipeline_executor` | `auto` | `auto` (the fastest available: `celery` when async mutations are on, `inline` otherwise), `inline`, `process` (local process pool) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
 | `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
 | `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
 | `individual_import_pipeline_dispatch` | `worker` | `celery` executor only: `worker` reads the file and queues its chunks in a worker, so the request returns at once; `request` does it in the request |
@@ -105,6 +105,16 @@ workflows stay the default. Code: `individual/import_pipeline.py`.
 Measured on one machine (14 cores, local PostgreSQL) with 1,000,000 rows, the
 `process` executor and 8 workers: stage and validate 96 s, deduplicate 3 s,
 import of 970,125 individuals 213 s, about 550 MB in the parent process.
+
+## Following an upload
+
+`individualDataSourceUpload` / `individualDataUploadHistory { dataUpload { status error progress } }`:
+`status` moves `TRIGGERED` → `IN_PROGRESS` → `WAITING_FOR_VERIFICATION` →
+(approval) `IN_PROGRESS` → `SUCCESS` / `PARTIAL_SUCCESS` / `FAIL`; `progress` is
+`{"stage": "validation" | "import", "done", "total", "duplicates"}` for pipeline
+uploads (`total` is null while the file is still being read). The approval
+mutation completing only means the import is queued: the upload status says when
+it is done. The upload history dialog polls while an upload is running.
 
 ## Upload visibility
 

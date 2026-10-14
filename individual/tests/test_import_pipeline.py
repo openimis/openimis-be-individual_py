@@ -239,3 +239,31 @@ class ImportPipelineTests(TestCase):
         self.assertTrue(Task.objects.filter(
             source="import_group_valid_items", json_ext__data_upload_id=str(upload.id)
         ).exists())
+
+    def test_auto_executor_follows_async_mutations(self):
+        import core
+
+        IndividualConfig.individual_import_pipeline_executor = "auto"
+        with patch.object(core, "async_mutations", True):
+            self.assertEqual(import_pipeline._executor(), "celery")
+        with patch.object(core, "async_mutations", False):
+            self.assertEqual(import_pipeline._executor(), "inline")
+
+    def test_progress_and_public_json_ext(self):
+        from individual.gql_queries import IndividualDataSourceUploadGQLType
+
+        upload = IndividualDataSourceUpload(json_ext={"pipeline": {
+            "file": "individual_upload/secret.csv", "content_type": "text/csv",
+            "chunks_total": 4, "chunks_done": 4, "duplicates": 3, "import_total": 5, "import_done": 2,
+        }})
+        self.assertEqual(import_pipeline.progress(upload),
+                         {"stage": "import", "done": 2, "total": 5, "duplicates": 3})
+        public = IndividualDataSourceUploadGQLType.resolve_json_ext(upload, None)["pipeline"]
+        self.assertNotIn("file", public)
+        self.assertNotIn("content_type", public)
+        self.assertEqual(public["import_done"], 2)
+
+        reading = IndividualDataSourceUpload(json_ext={"pipeline": {"file": "x.csv"}})
+        self.assertEqual(import_pipeline.progress(reading),
+                         {"stage": "validation", "done": 0, "total": None, "duplicates": None})
+        self.assertIsNone(import_pipeline.progress(IndividualDataSourceUpload(json_ext=None)))

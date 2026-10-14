@@ -83,6 +83,18 @@ class IndividualHistoryGQLType(DjangoObjectType):
 
 class IndividualDataSourceUploadGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
+    json_ext = graphene.JSONString()
+    progress = graphene.JSONString()
+
+    def resolve_json_ext(self, info):
+        from individual.import_pipeline import public_json_ext
+
+        return public_json_ext(self)
+
+    def resolve_progress(self, info):
+        from individual.import_pipeline import progress
+
+        return progress(self)
 
     class Meta:
         model = IndividualDataSourceUpload

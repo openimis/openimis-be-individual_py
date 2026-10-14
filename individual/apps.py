@@ -100,8 +100,9 @@ DEFAULT_CONFIG = {
     ],
     # Python import pipeline, used by the "Python Pipeline Import Individuals"
     # workflow only (see individual.import_pipeline). The SQL workflows stay the
-    # default. Executor: "inline", "process" (local process pool) or "celery".
-    "individual_import_pipeline_executor": "inline",
+    # default. Executor: "auto" (celery when async mutations are on, inline
+    # otherwise), "inline", "process" (local process pool) or "celery".
+    "individual_import_pipeline_executor": "auto",
     "individual_import_pipeline_chunk_size": 5000,
     "individual_import_pipeline_workers": 4,
     # celery executor only: "worker" reads the file and queues its chunks in a

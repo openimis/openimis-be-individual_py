@@ -83,7 +83,18 @@ def valid_items_workflow(upload_record):
 # --- configuration -----------------------------------------------------------
 
 def _executor():
-    return IndividualConfig.individual_import_pipeline_executor or "inline"
+    """The configured executor; "auto" picks the fastest one the deployment supports.
+
+    "auto" means celery (chunks across the workers, nothing held in the request)
+    when async mutations are on - which is when celery workers are deployed -
+    and inline otherwise, so an installation without a broker never waits on one.
+    """
+    executor = IndividualConfig.individual_import_pipeline_executor or "auto"
+    if executor == "auto":
+        import core
+
+        return "celery" if core.async_mutations else "inline"
+    return executor
 
 
 def _chunk_size():
@@ -635,6 +646,38 @@ def _finish_import(upload_id):
             "total_valid_entries": valid,
             "total_entries": total,
         })
+
+
+# --- what clients see ------------------------------------------------------------
+
+# Bookkeeping the pipeline keeps on the upload that clients have no use for.
+_INTERNAL_STATE = ("file", "content_type")
+
+
+def public_json_ext(upload):
+    """The upload's json_ext without the pipeline's internal bookkeeping."""
+    json_ext = dict(upload.json_ext or {})
+    if isinstance(json_ext.get("pipeline"), dict):
+        json_ext["pipeline"] = {
+            key: value for key, value in json_ext["pipeline"].items() if key not in _INTERNAL_STATE
+        }
+    return json_ext
+
+
+def progress(upload):
+    """Where a pipeline upload stands: {"stage", "done", "total", "duplicates"}, or None.
+
+    ``total`` is None until the number of chunks is known (the file is still
+    being read); a client then shows an indeterminate bar.
+    """
+    state = (upload.json_ext or {}).get("pipeline")
+    if not isinstance(state, dict):
+        return None
+    if state.get("import_total") is not None:
+        stage, done, total = "import", state.get("import_done", 0), state.get("import_total")
+    else:
+        stage, done, total = "validation", state.get("chunks_done", 0), state.get("chunks_total")
+    return {"stage": stage, "done": done, "total": total, "duplicates": state.get("duplicates")}
 
 
 # --- workflow entry points ---------------------------------------------------
