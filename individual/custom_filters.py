@@ -72,7 +72,12 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
         if value_type == 'integer':
             return int(value)
         elif value_type == 'string':
-            return str(value[1:-1])
+            # Searchers send the value JSON-quoted ("abc"); enrolment criteria and
+            # stored advanced criteria send it bare (abc). Only one enclosing pair is removed.
+            value = str(value)
+            if len(value) >= 2 and value[0] == value[-1] == '"':
+                return value[1:-1]
+            return value
         elif value_type == 'numeric':
             return float(value)
         elif value_type == 'boolean':
