@@ -350,7 +350,7 @@ def _delete_rejected(uuids_list, task_source):
         source.is_deleted = True
 
     # Perform the bulk update
-    model.objects.bulk_update(sources_to_update, ['is_deleted'])
+    model.objects.bulk_update(sources_to_update, ['is_deleted'], batch_size=1000)
 
 
 def _complete_task_for_accepted(_task, accept, user):

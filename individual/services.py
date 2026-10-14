@@ -831,7 +831,9 @@ class IndividualImportService:
             )
 
         if data_sources_to_update:
-            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'])
+            # Batched: one UPDATE ... CASE over every row grows much faster than the
+            # row count, and never finished for 100,000 rows.
+            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'], batch_size=1000)
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
