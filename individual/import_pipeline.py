@@ -475,11 +475,26 @@ def _record_duplicates(duplicates):
         IndividualDataSource.objects.bulk_update(batch, ["validations"], batch_size=1000)
 
 
+def _refresh_statistics():
+    """Let the planner see the rows just staged before comparing them.
+
+    Deduplication runs right after a bulk insert, before autovacuum has
+    analyzed it: the planner still believes the staging table holds what it
+    held before (often nothing) and picks nested loops over the actual rows.
+    Measured: 24 s for 10,000 rows instead of 0.01 s.
+    """
+    if connections["default"].vendor != "postgresql":
+        return
+    with connections["default"].cursor() as cursor:
+        cursor.execute(f'ANALYZE "{IndividualDataSource._meta.db_table}"')
+
+
 def finish_validation(upload_id, user_id):
     """Stage 2 and 3: deduplicate over the whole upload, then open the review."""
     from individual.services import IndividualImportService
 
     try:
+        _refresh_statistics()
         duplicates = find_duplicates(upload_id)
         _record_duplicates(duplicates)
         _update_state(upload_id, duplicates=len(duplicates))
