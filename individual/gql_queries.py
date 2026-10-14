@@ -81,8 +81,20 @@ class IndividualHistoryGQLType(DjangoObjectType):
         return queryset.filter(id__in=accessible_uuids)
 
 
-class IndividualDataSourceUploadGQLType(DjangoObjectType):
+class IndividualDataSourceUploadGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
+    json_ext = graphene.JSONString()
+    progress = graphene.JSONString()
+
+    def resolve_json_ext(self, info):
+        from individual.import_pipeline import public_json_ext
+
+        return public_json_ext(self)
+
+    def resolve_progress(self, info):
+        from individual.import_pipeline import progress
+
+        return progress(self)
 
     class Meta:
         model = IndividualDataSourceUpload
@@ -239,7 +251,7 @@ class GroupIndividualHistoryGQLType(DjangoObjectType):
         return queryset.filter(group__id__in=accessible_uuids)
 
 
-class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
+class IndividualDataUploadQGLType(ScopedQuerysetMixin, DjangoObjectType, JsonExtMixin):
     uuid = graphene.String(source='uuid')
 
     class Meta:

@@ -25,7 +25,6 @@ from individual.models import (
 )
 from individual.utils import (
     load_dataframe,
-    fetch_summary_of_valid_items,
     fetch_summary_of_broken_items
 )
 from individual.validation import (
@@ -557,7 +556,13 @@ class IndividualImportService:
                            import_file: InMemoryUploadedFile,
                            workflow: WorkflowHandler,
                            group_aggregation_column: str):
-        upload = self._save_sources(import_file)
+        from individual.import_pipeline import is_pipeline_workflow, register_upload
+
+        if is_pipeline_workflow(workflow.name):
+            # The pipeline reads the stored file itself, in chunks.
+            upload = register_upload(self.user, import_file)
+        else:
+            upload = self._save_sources(import_file)
         self._create_individual_data_upload_records(workflow, upload, group_aggregation_column)
         self._trigger_workflow(workflow, upload)
         return {'success': True, 'data': {'upload_uuid': upload.uuid}}
@@ -826,7 +831,9 @@ class IndividualImportService:
             )
 
         if data_sources_to_update:
-            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'])
+            # Batched: one UPDATE ... CASE over every row grows much faster than the
+            # row count, and never finished for 100,000 rows.
+            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'], batch_size=1000)
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
@@ -837,9 +844,10 @@ class IndividualImportService:
                 data_upload_id=upload_id,
                 is_deleted=False
             )
+            from individual.import_pipeline import valid_items_workflow
             from individual.signals.on_validation_import_valid_items import IndividualItemsImportTaskCompletionEvent
             IndividualItemsImportTaskCompletionEvent(
-                IndividualConfig.validation_import_valid_items_workflow,
+                valid_items_workflow(record),
                 record,
                 record.data_upload.id,
                 self.user
@@ -908,8 +916,9 @@ class IndividualTaskCreatorService:
         data_upload.save(user=self.user)
 
     def __calculate_percentage_of_invalid_items(self, upload_id):
-        number_of_valid_items = len(fetch_summary_of_valid_items(upload_id))
-        number_of_invalid_items = len(fetch_summary_of_broken_items(upload_id))
+        rows = IndividualDataSource.objects.filter(upload_id=upload_id, is_deleted=False)
+        number_of_valid_items = rows.filter(validations__validation_errors=[]).count()
+        number_of_invalid_items = rows.count() - number_of_valid_items
         total_items = number_of_invalid_items + number_of_valid_items
 
         if total_items == 0:

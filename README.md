@@ -76,6 +76,53 @@ Workflows:
  * individual upload
 
 
+## Python import pipeline (opt-in)
+
+An alternative to the SQL upload workflows, chosen per upload by picking the
+`Python Pipeline Import Individuals` workflow (group `individual`). The SQL
+workflows stay the default. Code: `individual/import_pipeline.py`.
+
+1. **Stage and validate** (one task per chunk, in parallel): parse a chunk,
+   check `first_name`, `last_name`, `dob` (YYYY-MM-DD), validation calculations
+   and the village, and insert the rows with their result. The resolved
+   village id is kept in `validations.location_id`.
+2. **Deduplicate** (once, after every chunk): the schema fields marked
+   `"uniqueness"` are compared across the whole upload, against existing
+   individuals, and against other uploads still pending. Because comparison
+   happens after all chunks are in, a duplicate split across chunks is found.
+3. **Review**: the usual maker-checker task (or an immediate import).
+4. **Import** (per chunk): individuals are created from the accepted valid rows
+   and linked to their row by id.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `individual_import_pipeline_executor` | `auto` | `auto` (the fastest available: `celery` when async mutations are on, `inline` otherwise), `inline`, `process` (local process pool) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
+| `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
+| `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
+| `individual_import_pipeline_dispatch` | `worker` | `celery` executor only: `worker` reads the file and queues its chunks in a worker, so the request returns at once; `request` does it in the request |
+| `individual_import_duplicate_policy` | `flag_all` | `flag_all` rejects every copy, as the SQL path does; `keep_first` keeps the first row |
+
+Measured on one machine (14 cores, local PostgreSQL) with 1,000,000 rows, the
+`process` executor and 8 workers: stage and validate 96 s, deduplicate 3 s,
+import of 970,125 individuals 213 s, about 550 MB in the parent process.
+
+## Following an upload
+
+`individualDataSourceUpload` / `individualDataUploadHistory { dataUpload { status error progress } }`:
+`status` moves `TRIGGERED` → `IN_PROGRESS` → `WAITING_FOR_VERIFICATION` →
+(approval) `IN_PROGRESS` → `SUCCESS` / `PARTIAL_SUCCESS` / `FAIL`; `progress` is
+`{"stage": "validation" | "import", "done", "total", "duplicates"}` for pipeline
+uploads (`total` is null while the file is still being read). The approval
+mutation completing only means the import is queued: the upload status says when
+it is done. The upload history dialog polls while an upload is running.
+
+## Upload visibility
+
+An upload has no location of its own. It is visible to its uploader, to whoever
+may see its review task, and to whoever may see an individual created from it.
+Rows not yet imported are visible to the uploader and the reviewers; imported
+rows follow their individual.
+
 ## Additional Field Definition
 
 Individual model comes with a minimal set of fields: `first_name`, `last_name`, `dob`.

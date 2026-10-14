@@ -8,6 +8,7 @@ from django.db.models import F
 
 from core.models import User
 from individual.apps import IndividualConfig
+from individual.import_pipeline import valid_items_workflow
 from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataSource,
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class ItemsUploadTaskCompletionEvent:
+    # True when the workflow only queued its work (the Python pipeline's celery
+    # import): what follows the import then runs when the last chunk finishes.
+    workflow_deferred = False
+
     def run_workflow(self):
         group, name = self.workflow_name.split('.')
         workflow = self._get_workflow(group, name)
@@ -31,6 +36,8 @@ class ItemsUploadTaskCompletionEvent:
             'upload_uuid': str(self.upload_id),
             'accepted': self.accepted
         })
+        data = result.get('data') if result.get('success') else None
+        self.workflow_deferred = isinstance(data, dict) and bool(data.get('deferred'))
         if not result.get('success'):
             if self.upload_record:
                 data_upload = self.upload_record.data_upload
@@ -74,7 +81,11 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
     def run_workflow(self):
         super().run_workflow()
+        if not self.workflow_deferred:
+            self.run_group_step()
 
+    def run_group_step(self):
+        """Group the imported individuals; runs once the individuals exist."""
         if not self.upload_record:
             return
 
@@ -248,8 +259,8 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
 class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
-    def run_workflow(self):
-        super().run_workflow()
+    def run_group_step(self):
+        super().run_group_step()
 
         if self.grouped_individuals is None or not self.grouped_individuals.exists():
             return
@@ -264,8 +275,8 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
 
 class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
-    def run_workflow(self):
-        super().run_workflow()
+    def run_group_step(self):
+        super().run_group_step()
 
         if self.grouped_individuals is None or not self.grouped_individuals.exists():
             return
@@ -297,7 +308,8 @@ def on_task_complete_action(business_event, **kwargs):
     try:
         upload_record = IndividualDataUploadRecords.objects.get(id=task['entity_id'])
         if business_event == IndividualConfig.validation_import_valid_items:
-            workflow = IndividualConfig.validation_import_valid_items_workflow
+            # The pipeline's uploads are imported by the pipeline, the others as configured.
+            workflow = valid_items_workflow(upload_record)
             IndividualItemsImportTaskCompletionEvent(
                 workflow,
                 upload_record,
@@ -348,7 +360,7 @@ def _delete_rejected(uuids_list, task_source):
         source.is_deleted = True
 
     # Perform the bulk update
-    model.objects.bulk_update(sources_to_update, ['is_deleted'])
+    model.objects.bulk_update(sources_to_update, ['is_deleted'], batch_size=1000)
 
 
 def _complete_task_for_accepted(_task, accept, user):
@@ -360,7 +372,7 @@ def _complete_task_for_accepted(_task, accept, user):
 
     if _task.business_event == IndividualConfig.validation_import_valid_items:
         IndividualItemsImportTaskCompletionEvent(
-            IndividualConfig.validation_import_valid_items_workflow,
+            valid_items_workflow(upload_record),
             upload_record,
             upload_record.data_upload.id,
             user,

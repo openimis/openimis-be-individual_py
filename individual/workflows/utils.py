@@ -18,6 +18,31 @@ from workflow.exceptions import PythonWorkflowHandlerException
 logger = logging.getLogger(__name__)
 
 
+def check_dataframe_headers(df_headers, schema, is_update=False):
+    """Raise when the uploaded columns are not the schema's plus the base fields."""
+    schema_properties = set(schema.get('properties', {}).keys())
+    schema_properties.update(['recipient_info', 'group_code', 'individual_role'])
+    required_headers = set(IndividualConfig.individual_base_fields)
+    if is_update:
+        required_headers.add('ID')
+
+    errors = []
+    if not (df_headers - required_headers).issubset(schema_properties):
+        invalid_headers = df_headers - schema_properties - required_headers
+        errors.append(
+            F"Uploaded individuals contains invalid columns: {invalid_headers}"
+        )
+
+    for field in required_headers:
+        if field not in df_headers:
+            errors.append(
+                F"Uploaded individuals missing essential header: {field}"
+            )
+
+    if errors:
+        raise PythonWorkflowHandlerException("\n".join(errors))
+
+
 class BasePythonWorkflowExecutor(metaclass=ABCMeta):
 
     def __init__(self, upload_uuid, user_uuid, accepted=None):
@@ -49,28 +74,7 @@ class BasePythonWorkflowExecutor(metaclass=ABCMeta):
         3. 'id' is field automatically added to DataFrame which is used for upload.
         4. If action is data upload then 'ID' unique identifier is required as well.
         """
-        df_headers = set(self.df.columns)
-        schema_properties = set(self.schema.get('properties', {}).keys())
-        schema_properties.update(['recipient_info', 'group_code', 'individual_role'])
-        required_headers = set(IndividualConfig.individual_base_fields)
-        if is_update:
-            required_headers.add('ID')
-
-        errors = []
-        if not (df_headers - required_headers).issubset(schema_properties):
-            invalid_headers = df_headers - schema_properties - required_headers
-            errors.append(
-                F"Uploaded individuals contains invalid columns: {invalid_headers}"
-            )
-
-        for field in required_headers:
-            if field not in df_headers:
-                errors.append(
-                    F"Uploaded individuals missing essential header: {field}"
-                )
-
-        if errors:
-            raise PythonWorkflowHandlerException("\n".join(errors))
+        check_dataframe_headers(set(self.df.columns), self.schema, is_update)
 
     @abstractmethod
     def execute(self, **kwargs):
