@@ -320,7 +320,7 @@ class UpdateGroupMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
 
 class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
     _mutation_class = "DeleteGroupMutation"
-    _mutation_module = "social_protection"
+    _mutation_module = "individual"
     _model = Group
 
     @classmethod
