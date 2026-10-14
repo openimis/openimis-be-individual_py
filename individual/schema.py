@@ -31,7 +31,15 @@ from location.apps import LocationConfig
 def patch_details(data_df: pd.DataFrame):
     # Transform extension to DF columns
     if 'json_ext' in data_df:
-        df_unfolded = pd.json_normalize(data_df['json_ext'])
+        # Nullable dtypes keep whole numbers whole when some rows lack the key
+        # (plain int columns turn float when pandas fills the gaps with NaN);
+        # whole-valued floats are written as integers too.
+        df_unfolded = pd.json_normalize(data_df['json_ext']).convert_dtypes()
+        # A json_ext key with the name of an exported field (case-insensitive) would add
+        # a second column of that name; the field's own column is kept, the key is dropped.
+        exported = {str(column).lower() for column in data_df.columns}
+        df_unfolded = df_unfolded.drop(
+            columns=[column for column in df_unfolded.columns if str(column).lower() in exported])
         # Merge unfolded DataFrame with the original DataFrame
         df_final = pd.concat([data_df, df_unfolded], axis=1)
         df_final = df_final.drop('json_ext', axis=1)
