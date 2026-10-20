@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 MODULE_NAME = "individual"
 
-# Rights, by entity then by action. Two distinct entities, and two distinct blocks of
-# identifiers in the openIMIS catalogue: `individual` (159xxx) is the register of
-# people, `group` (180xxx) that of households. No identifier is shared between the two.
+# Rights, by entity then by action, in two distinct blocks of identifiers of the openIMIS
+# catalogue: `individual` (159xxx) is the register of people, and its `label` registry
+# takes the next free identifiers of that block; `group` (180xxx) is the register of
+# households. No identifier is shared between entities.
 #
 # The django names all carry the `individual` app_label: `Group` is a model of this
 # app, not of a "group" app - the entity is named after the business object, the django
@@ -29,6 +30,13 @@ DJANGO_PERMS = {
         # A business action: restoring a soft-deleted person is neither a creation
         # nor an ordinary modification, and already carries its own identifier.
         "undoDelete": ("individual.undo_delete_individual", 159005),
+    },
+    # The label registry. Its writes follow the individual block (159006-159008); reading
+    # labels is reading individual data, so it stays on the individual query right.
+    "label": {
+        "create": ("individual.add_individuallabel", 159006),
+        "update": ("individual.change_individuallabel", 159007),
+        "delete": ("individual.delete_individuallabel", 159008),
     },
     "group": {
         "query": ("individual.view_group", 180001),
@@ -44,6 +52,9 @@ _PERM_CFG = {
     "gql_individual_update_perms": ("individual", "update"),
     "gql_individual_delete_perms": ("individual", "delete"),
     "gql_individual_undo_delete_perms": ("individual", "undoDelete"),
+    "gql_individual_label_create_perms": ("label", "create"),
+    "gql_individual_label_update_perms": ("label", "update"),
+    "gql_individual_label_delete_perms": ("label", "delete"),
     "gql_group_search_perms": ("group", "query"),
     "gql_group_create_perms": ("group", "create"),
     "gql_group_update_perms": ("group", "update"),
@@ -113,6 +124,10 @@ class IndividualConfig(AppConfig):
     gql_individual_update_perms = RIGHTS.perms("individual", "update")
     gql_individual_delete_perms = RIGHTS.perms("individual", "delete")
     gql_individual_undo_delete_perms = RIGHTS.perms("individual", "undoDelete")
+
+    gql_individual_label_create_perms = RIGHTS.perms("label", "create")
+    gql_individual_label_update_perms = RIGHTS.perms("label", "update")
+    gql_individual_label_delete_perms = RIGHTS.perms("label", "delete")
 
     gql_group_search_perms = RIGHTS.perms("group", "query")
     gql_group_create_perms = RIGHTS.perms("group", "create")

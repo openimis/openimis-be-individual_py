@@ -1,8 +1,16 @@
 import os
 import json
+from collections import namedtuple
+from unittest.mock import patch
+
+from django.test import TestCase
+
 from core.models import ModuleConfiguration
+from core.test_helpers import LogInHelper
+from individual.custom_filters import IndividualCustomFilterWizard
 from individual.tests.test_helpers import (
     IndividualGQLTestCase,
+    create_individual_label,
     reload_individual_config,
 )
 
@@ -81,3 +89,31 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
         ]
         for f in expected_possible_filters:
             self.assertTrue(f in possible_filters, f'expected to find {f} in {possible_filters}')
+
+
+@patch('individual.apps.IndividualConfig.individual_schema',
+       json.dumps({"properties": {"email": {"type": "string"}}}))
+class IndividualCustomFilterLabelSchemaTest(TestCase):
+    definition = namedtuple('definition', ['field', 'filter', 'type'])
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = LogInHelper().get_or_create_user_api()
+
+    def _fields(self, additional_params):
+        definitions = IndividualCustomFilterWizard().load_definition(
+            self.definition, additional_params=additional_params)
+        return [d.field for d in definitions]
+
+    def test_label_schema_drives_definitions(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A', {
+            'json_schema': {"properties": {"licence_no": {"type": "string"}}},
+        })
+        self.assertEqual(self._fields({'label': 'TEST_LABEL_A'}), ['licence_no'])
+
+    def test_falls_back_to_global_schema(self):
+        create_individual_label(self.user.username, 'TEST_LABEL_A')
+        self.assertEqual(self._fields({}), ['email'])
+        self.assertEqual(self._fields({'label': 'TEST_LABEL_A'}), ['email'])
+        self.assertEqual(self._fields({'label': 'TEST_LABEL_NOPE'}), ['email'])

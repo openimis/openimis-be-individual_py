@@ -15,6 +15,7 @@ from individual.models import (
 from individual.tests.test_helpers import (
     generate_random_string,
     create_individual,
+    create_individual_label,
     create_sp_role,
     create_test_village,
     create_test_interactive_user,
@@ -155,6 +156,30 @@ class IndividualImportServiceTest(TestCase):
         for row in validated_rows:
             self.assertIn('validations', row)
             self.assertTrue(all(v.get('success', True) for v in row['validations'].values()))
+
+    @patch('individual.services.load_dataframe')
+    @patch('individual.services.fetch_summary_of_broken_items')
+    def test_validate_import_individuals_labels(self, mock_fetch_summary, mock_load_dataframe):
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_A')
+        create_individual_label(self.admin_user.username, 'TEST_LABEL_B')
+        mock_load_dataframe.return_value = pd.DataFrame({
+            'id': [1, 2, 3, 4],
+            'first_name': ['A', 'B', 'C', 'D'],
+            'last_name': ['X', 'X', 'X', 'X'],
+            'labels': ['TEST_LABEL_A;TEST_LABEL_B', '', 'TEST_LABEL_NOPE', 'TEST_LABEL_A; TEST_LABEL_B'],
+        })
+        mock_fetch_summary.return_value = {"invalid_items_count": 2}
+
+        result = IndividualImportService(self.admin_user).validate_import_individuals(uuid.uuid4(), MagicMock())
+
+        self.assertTrue(result['success'])
+        validations = {row['row']['first_name']: row['validations']['labels'] for row in result['data']}
+        self.assertTrue(validations['A']['success'])
+        self.assertTrue(validations['B']['success'])
+        self.assertFalse(validations['C']['success'])
+        self.assertEqual(validations['C']['note'], 'Unknown label codes: TEST_LABEL_NOPE')
+        self.assertFalse(validations['D']['success'])
+        self.assertEqual(validations['D']['note'], 'Unknown label codes:  TEST_LABEL_B')
 
     @patch('individual.services.IndividualConfig.individual_schema', json.dumps({
         "properties": {
