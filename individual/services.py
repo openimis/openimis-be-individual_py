@@ -184,7 +184,7 @@ class GroupService(
                 if individuals_data:
                     individual_ids = [data["individual_id"] for data in individuals_data]
                     self._update_group_json_ext(group_id, individual_ids)
-                    for data in individuals_data:
+                    for data in self._in_assembly_order(individuals_data):
                         obj_data = {
                             'group_id': group_id,
                             'individual_id': data.get("individual_id"),
@@ -221,7 +221,7 @@ class GroupService(
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
                         service.delete({'id': group_individual.id})
 
-                for data in individuals_data:
+                for data in self._in_assembly_order(individuals_data):
                     if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
                         obj_data = {
                             'group_id': group_id,
@@ -235,6 +235,24 @@ class GroupService(
                 return output_result_success(dict_representation=dict_repr)
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
+
+    @staticmethod
+    def _in_assembly_order(individuals_data):
+        """Save a declared primary recipient first, then the head, then everyone else.
+
+        Every GroupIndividual save appoints a fallback primary recipient if the group has
+        none yet. Saving members in payload order lets that fallback pick whichever member
+        happens to come first - and once a primary exists it is never reconsidered, so a
+        head saved later is not made primary. The sort is stable, so the remaining members
+        keep their payload order.
+        """
+        def rank(data):
+            if data.get("recipient_type") == GroupIndividual.RecipientType.PRIMARY:
+                return 0
+            if data.get("role") == GroupIndividual.Role.HEAD:
+                return 1
+            return 2
+        return sorted(individuals_data, key=rank)
 
     @register_service_signal('group_service.delete')
     def delete(self, obj_data):
@@ -503,13 +521,22 @@ class GroupAndGroupIndividualAlignmentService:
         if primary_exists:
             return
 
-        new_primary = group_individuals.first()
+        # Prefer the head when the group has one. `first()` is unordered, so without
+        # this the primary recipient is whichever member the database happens to return
+        # - in a benefit context that decides who gets paid.
+        new_primary = group_individuals.filter(role=GroupIndividual.Role.HEAD).first() \
+            or group_individuals.first()
 
         if not new_primary:
             return
 
         new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
-        if not head_exists:
+        # Only appoint a head if this member has no role of its own. Overwriting a
+        # declared role destroys it: the member is created with, say, SON, is promoted
+        # to HEAD here because the group is still being assembled and has no head yet,
+        # and when the real head is created moments later `_change_head` sets this
+        # member's role to None - SON is gone, and nothing reports it.
+        if not head_exists and not new_primary.role:
             new_primary.role = GroupIndividual.Role.HEAD
         new_primary.save(user=self.user)
 
