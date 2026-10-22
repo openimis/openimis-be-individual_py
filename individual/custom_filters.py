@@ -4,7 +4,9 @@ import re
 
 from collections import namedtuple
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.db.models.query import QuerySet
+from django.utils.translation import gettext as _
 from typing import List
 
 from core.custom_filters import CustomFilterWizardInterface
@@ -36,10 +38,23 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
             return self.__process_schema_and_build_tuple(individual_schema_dict, tuple_type)
         return []
 
+    @staticmethod
+    def parse_condition(condition: str):
+        """
+        Split a "<field>__<filter>__<type>=<value>" condition into ("<field>__<filter>", type, value).
+        An incomplete one, such as "____=" sent for an empty criteria row, is refused: applied,
+        it filtered on json_ext____ and matched nothing (OP-3251).
+        """
+        path, separator, value = condition.partition('=')
+        field_and_filter, __, value_type = path.rpartition('__')
+        field, __, filter_name = field_and_filter.rpartition('__')
+        if not (separator and field.strip('_') and filter_name and value_type):
+            raise ValidationError(_("Incomplete custom filter condition: %(condition)s") % {"condition": condition})
+        return field_and_filter, value_type, value
+
     def apply_filter_to_queryset(self, custom_filters: List[namedtuple], query: QuerySet, relation=None) -> QuerySet:
         for filter_part in custom_filters:
-            field, value = filter_part.split('=')
-            field, value_type = field.rsplit('__', 1)
+            field, value_type, value = self.parse_condition(filter_part)
             value = self.__cast_value(value, value_type)
             filter_kwargs = {f"{relation}__json_ext__{field}" if relation else f"json_ext__{field}": value}
             query = query.filter(**filter_kwargs)

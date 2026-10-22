@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from core.test_helpers import create_test_interactive_user
@@ -40,3 +41,24 @@ class IndividualCustomFilterStringValueTest(TestCase):
         ):
             with self.subTest(condition=condition):
                 self.assertEqual(self._filter(condition), [self.match.id])
+
+    def test_incomplete_condition_is_refused(self):
+        # OP-3251: an empty criteria row reached the backend as "____=" and was applied
+        # as a filter on json_ext____, which matches nothing: the enrolment selected 0.
+        for condition in (
+            '____=',
+            '__iexact__string=UAT',
+            'source____string=UAT',
+            'source__iexact__=UAT',
+            'source__string=UAT',
+            'source__iexact__string',
+        ):
+            with self.subTest(condition=condition):
+                with self.assertRaises(ValidationError):
+                    self._filter(condition)
+
+    def test_incomplete_condition_next_to_a_valid_one_is_refused(self):
+        queryset = Individual.objects.filter(id__in=[self.match.id, self.other.id])
+        with self.assertRaises(ValidationError):
+            IndividualCustomFilterWizard().apply_filter_to_queryset(
+                ['source__icontains__string=release', '____='], queryset)
