@@ -82,6 +82,11 @@ An alternative to the SQL upload workflows, chosen per upload by picking the
 `Python Pipeline Import Individuals` workflow (group `individual`). The SQL
 workflows stay the default. Code: `individual/import_pipeline.py`.
 
+The pipeline workflows are registered only while `enable_python_workflows` is on.
+With the `celery` executor and `dispatch: worker`, the workers read the uploaded
+file from `default_storage`: the backend and the workers must share its storage
+(in openimis-dist_dkr, the `file_storage` volume). Otherwise use `dispatch: request`.
+
 1. **Stage and validate** (one task per chunk, in parallel): parse a chunk,
    check `first_name`, `last_name`, `dob` (YYYY-MM-DD), validation calculations
    and the village, and insert the rows with their result. The resolved
@@ -96,7 +101,7 @@ workflows stay the default. Code: `individual/import_pipeline.py`.
 
 | Config key | Default | Meaning |
 |---|---|---|
-| `individual_import_pipeline_executor` | `auto` | `auto` (the fastest available: `celery` when async mutations are on, `inline` otherwise), `inline`, `process` (local process pool) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
+| `individual_import_pipeline_executor` | `auto` | `auto` (the fastest available: `celery` when async mutations are on, `inline` otherwise), `inline`, `process` (local process pool, for validation; the import runs inline in the approval) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
 | `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
 | `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
 | `individual_import_pipeline_dispatch` | `worker` | `celery` executor only: `worker` reads the file and queues its chunks in a worker, so the request returns at once; `request` does it in the request |

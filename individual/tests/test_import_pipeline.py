@@ -22,7 +22,7 @@ from individual.models import (
 from individual.services import IndividualImportService
 from individual.signals.on_validation_import_valid_items import IndividualItemsImportTaskCompletionEvent
 from location.models import Location
-from location.test_helpers import assign_user_districts, create_basic_test_locations
+from location.test_helpers import assign_user_districts, create_basic_test_locations, create_test_location
 from tasks_management.models import Task
 from workflow.services import WorkflowService
 
@@ -248,6 +248,56 @@ class ImportPipelineTests(TestCase):
             self.assertEqual(import_pipeline._executor(), "celery")
         with patch.object(core, "async_mutations", False):
             self.assertEqual(import_pipeline._executor(), "inline")
+
+    def test_a_village_created_after_a_first_upload_is_accepted(self):
+        # The validation context is per upload: a new village, grant or schema
+        # counts from the next upload on, without a restart.
+        self._upload([self._row("Alice", "C-1")])
+        village = create_test_location("V", custom_props={
+            "code": "R1D1M1V9", "name": "Newville", "parent": self.village_a.parent,
+        })
+        errors = self._errors(self._upload([self._row("Bob", "C-2", village=village)]))
+        self.assertEqual(errors, {"Bob": []})
+
+    def test_a_header_only_file_fails_without_a_review(self):
+        upload = self._upload([])
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, IndividualDataSourceUpload.Status.FAIL)
+        self.assertFalse(Task.objects.filter(json_ext__data_upload_id=str(upload.id)).exists())
+
+    def test_the_failure_reason_survives_the_workflow_handler(self):
+        with patch.object(import_pipeline, "find_duplicates", side_effect=ValueError("deduplication exploded")):
+            upload = self._upload(self.ROWS)
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, IndividualDataSourceUpload.Status.FAIL)
+        self.assertIn("deduplication exploded", json.dumps(upload.error))
+
+    @patch.object(IndividualImportService, "synchronize_data_for_reporting")
+    def test_inline_progress_reaches_the_end_of_each_stage(self, _sync):
+        upload = self._upload(self.ROWS)
+        upload.refresh_from_db()
+        progress = import_pipeline.progress(upload)
+        self.assertEqual((progress["stage"], progress["done"], progress["total"]), ("validation", 4, 4))
+        record = IndividualDataUploadRecords.objects.get(data_upload=upload)
+        IndividualItemsImportTaskCompletionEvent(
+            import_pipeline.valid_items_workflow(record), record, upload.id, self.admin
+        ).run_workflow()
+        upload.refresh_from_db()
+        progress = import_pipeline.progress(upload)
+        self.assertEqual((progress["stage"], progress["done"], progress["total"]), ("import", 1, 1))
+
+    @patch.object(IndividualImportService, "synchronize_data_for_reporting")
+    def test_the_process_executor_approves_inside_a_transaction(self, _sync):
+        upload = self._upload(self.ROWS)  # validated inline: this test runs in a transaction
+        IndividualConfig.individual_import_pipeline_executor = "process"
+        record = IndividualDataUploadRecords.objects.get(data_upload=upload)
+        # TaskService.resolve_task runs the approval in a transaction, as this test does.
+        IndividualItemsImportTaskCompletionEvent(
+            import_pipeline.valid_items_workflow(record), record, upload.id, self.admin
+        ).run_workflow()
+        self.assertEqual(
+            IndividualDataSource.objects.filter(upload=upload, individual__isnull=False).count(), 1
+        )
 
     def test_progress_and_public_json_ext(self):
         from individual.gql_queries import IndividualDataSourceUploadGQLType

@@ -21,7 +21,9 @@ Stages:
 Executors (``individual_import_pipeline_executor``):
 
 * ``inline``: in the calling process, chunk by chunk.
-* ``process``: a local process pool of ``individual_import_pipeline_workers``.
+* ``process``: a local process pool of ``individual_import_pipeline_workers``,
+  for stage 1. Stage 4 runs inline: it runs inside the approval's transaction,
+  where forking would close the connection the approval still needs.
 * ``celery``: one celery task per chunk, for stage 1 and for stage 4. The last
   validation chunk to finish triggers stage 2; the last import chunk sets the
   final status and runs the group step, which needs every individual to exist.
@@ -31,7 +33,7 @@ import json
 import logging
 import multiprocessing
 import uuid
-from collections import deque
+from collections import OrderedDict, deque
 from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
@@ -42,6 +44,7 @@ from django.db.models import Count, Exists, OuterRef
 from django.db.models.fields.json import KeyTextTransform
 
 from core.models import User
+from workflow.exceptions import PythonWorkflowHandlerException
 from individual.apps import IndividualConfig
 from individual.models import (
     Individual,
@@ -227,14 +230,27 @@ class _ValidationContext:
         self.allowed = None if unrestricted else set(LocationManager().get_allowed_ids(user))
 
 
-_CONTEXTS = {}
+# One context per upload, built when its first chunk is validated: locations,
+# grants and schema are read fresh for every upload, and a worker keeps only the
+# few uploads it is working on.
+_CONTEXTS = OrderedDict()
+_MAX_CONTEXTS = 4
 
 
-def _context(user_id):
-    context = _CONTEXTS.get(user_id)
+def _context(upload_id, user_id):
+    key = str(upload_id)
+    context = _CONTEXTS.get(key)
     if context is None:
-        context = _CONTEXTS[user_id] = _ValidationContext(User.objects.get(id=user_id))
+        context = _CONTEXTS[key] = _ValidationContext(User.objects.get(id=user_id))
+        while len(_CONTEXTS) > _MAX_CONTEXTS:
+            _CONTEXTS.popitem(last=False)
+    else:
+        _CONTEXTS.move_to_end(key)
     return context
+
+
+def _forget_context(upload_id):
+    _CONTEXTS.pop(str(upload_id), None)
 
 
 def _blank(value):
@@ -283,7 +299,7 @@ def _validate_record(record, context):
 
 def stage_chunk(upload_id, user_id, records, first_row):
     """Stage 1 for one chunk: validate its rows and insert them with the result."""
-    context = _context(user_id)
+    context = _context(upload_id, user_id)
     rows = []
     for offset, record in enumerate(records):
         errors, location_id = _validate_record(record, context)
@@ -311,15 +327,6 @@ def _process_pool():
     return ProcessPoolExecutor(max_workers=_workers(), mp_context=multiprocessing.get_context("fork"))
 
 
-def _run_chunks(function, argument_list):
-    """Run ``function(*arguments)`` for each item, inline or on the process pool."""
-    if _executor() == "process":
-        with _process_pool() as pool:
-            futures = [pool.submit(function, *arguments) for arguments in argument_list]
-            return [future.result() for future in futures]
-    return [function(*arguments) for arguments in argument_list]
-
-
 # --- stage 1 driver ----------------------------------------------------------
 
 def run_validation(upload_id, user_id, in_worker=False):
@@ -343,11 +350,15 @@ def run_validation(upload_id, user_id, in_worker=False):
             _dispatch_celery(upload_id, user_id, chunks)
             return
         rows, count = _stage_all(upload_id, user_id, chunks)
-        _update_state(upload_id, rows=rows, chunks_total=count)
+        _update_state(upload_id, rows=rows, chunks_total=count, chunks_done=count, reduced=True)
         finish_validation(upload_id, user_id)
     except Exception as exc:
         _fail(upload_id, exc)
-        raise
+        if in_worker:
+            raise
+        # The workflow handler keeps the message of this exception only; any
+        # other is saved as "Error while executing workflow" over the reason.
+        raise PythonWorkflowHandlerException(str(exc)) from exc
 
 
 def _stage_all(upload_id, user_id, chunks):
@@ -374,7 +385,8 @@ def _stage_all(upload_id, user_id, chunks):
     finally:
         if pool is not None:
             pool.shutdown(cancel_futures=True)
-    if not count:
+    # A header-only file still yields one (empty) chunk: count the rows.
+    if not first_row:
         raise ValueError("Import file is empty")
     return first_row, count
 
@@ -390,7 +402,7 @@ def _dispatch_celery(upload_id, user_id, chunks):
         stage_chunk_task.delay(str(upload_id), str(user_id), _records(chunk), first_row)
         first_row += len(chunk)
         count += 1
-    if not count:
+    if not first_row:
         raise ValueError("Import file is empty")
     _update_state(upload_id, rows=first_row, chunks_total=count)
     chunk_done(upload_id, user_id, increment=0)
@@ -509,6 +521,7 @@ def finish_validation(upload_id, user_id):
     """Stage 2 and 3: deduplicate over the whole upload, then open the review."""
     from individual.services import IndividualImportService
 
+    _forget_context(upload_id)
     try:
         _refresh_statistics()
         duplicates = find_duplicates(upload_id)
@@ -570,12 +583,14 @@ def _id_chunks(ids):
 def run_import(upload_id, user_id, accepted=None):
     """Import the valid rows of the upload (only ``accepted`` ones when given), here."""
     ids = _rows_to_import(upload_id, accepted)
-    argument_list = [(str(user_id), chunk) for chunk in _id_chunks(ids)]
-    if _executor() == "process":
-        _run_chunks(import_chunk, argument_list)
-    else:
-        for arguments in argument_list:
-            import_chunk(*arguments)
+    chunks = _id_chunks(ids)
+    # Inline even with the process executor: this runs inside the approval's
+    # transaction, and a pool would close the connection it still needs.
+    _update_state(upload_id, import_total=len(chunks), import_done=0, import_finished=False)
+    for done, chunk in enumerate(chunks, start=1):
+        import_chunk(str(user_id), chunk)
+        _update_state(upload_id, import_done=done)
+    _update_state(upload_id, import_finished=True)
     _finish_import(upload_id)
     return len(ids)
 
