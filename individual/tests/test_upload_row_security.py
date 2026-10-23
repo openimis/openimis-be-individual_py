@@ -81,3 +81,12 @@ class UploadRowSecurityTests(TestCase):
         self.assertFalse(self._uploads(self.outsider))
         self.assertEqual(self._rows(self.outsider), set())
         self.assertFalse(self._records(self.outsider))
+
+    def test_reviewer_matches_a_task_whatever_the_case_of_its_entity_id(self):
+        # SQL Server casts a uniqueidentifier to uppercase text while Task.entity_id
+        # holds str(uuid), lowercase: the task must match its record as a UUID,
+        # whatever case either side is written in.
+        task = Task.objects.get(task_group__code="h01_reviewers")
+        Task.objects.filter(id=task.id).update(entity_id=task.entity_id.upper())
+        self.assertTrue(self._uploads(self.reviewer))
+        self.assertIn(self.pending.id, self._rows(self.reviewer))

@@ -1,8 +1,9 @@
+import uuid
+
 from django.apps import apps
 from django.conf import settings
 from django.db import models, transaction
-from django.db.models import CharField, Exists, OuterRef, Q
-from django.db.models.functions import Cast
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
@@ -104,12 +105,21 @@ class IndividualDataSourceUpload(HistoryModel):
             from django.contrib.contenttypes.models import ContentType
             from tasks_management.models import Task
 
-            tasks = Task.get_queryset(Task.objects.filter(
+            # Compared as UUIDs, not text: Task.entity_id holds str(uuid) in lowercase,
+            # and a uniqueidentifier cast to text is uppercase on SQL Server.
+            entity_ids = Task.get_queryset(Task.objects.filter(
                 entity_type=ContentType.objects.get_for_model(IndividualDataUploadRecords),
-                entity_id=Cast(OuterRef("id"), CharField()),
-            ), user)
-            records = IndividualDataUploadRecords.objects.filter(data_upload=OuterRef("pk")).filter(Exists(tasks))
-            handled |= Q(Exists(records))
+            ), user).values_list("entity_id", flat=True)
+            record_ids = set()
+            for entity_id in entity_ids:
+                try:
+                    record_ids.add(uuid.UUID(str(entity_id)))
+                except ValueError:
+                    continue
+            if record_ids:
+                handled |= Q(id__in=IndividualDataUploadRecords.objects.filter(
+                    id__in=record_ids,
+                ).values("data_upload_id"))
         return handled
 
     @classmethod
