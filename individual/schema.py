@@ -295,7 +295,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
-        query = IndividualDataSource.objects.filter(*filters)
+        query = IndividualDataSource.get_queryset(IndividualDataSource.objects.filter(*filters), info)
         return gql_optimizer.query(query, info)
 
     def resolve_group_data_source(self, info, **kwargs):
@@ -321,7 +321,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
-        query = IndividualDataSourceUpload.objects.filter(*filters)
+        query = IndividualDataSourceUpload.get_queryset(IndividualDataSourceUpload.objects.filter(*filters), info)
         return gql_optimizer.query(query, info)
 
     def resolve_group(self, info, **kwargs):
@@ -427,7 +427,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             info.context.user,
             IndividualConfig.gql_individual_search_perms
         )
-        query = IndividualDataUploadRecords.objects.filter(*filters)
+        query = IndividualDataUploadRecords.get_queryset(IndividualDataUploadRecords.objects.filter(*filters), info)
         return gql_optimizer.query(query, info)
 
     def resolve_group_enrollment_summary(self, info, **kwargs):
