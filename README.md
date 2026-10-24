@@ -60,6 +60,7 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * gql_group_create_perms: required rights to call createGroup and addIndividualToGroup and createGroupIndividuals GraphQL Mutation (default: ["180002"])
 * gql_group_update_perms: required rights to call updateGroup and editIndividualInGroup GraphQL Mutation (default: ["180003"])
 * gql_group_delete_perms: required rights to call deleteGroup and removeIndividualFromGroup GraphQL Mutation (default: ["180004"])
+* group_json_ext_keys_not_copied_from_head: group json_ext keys that keep the group's value when the head's json_ext is copied onto the group on a membership change (default: []). Other head values overwrite the group's, a head value set to null removes the key from the group, and keys the head does not have are left as they are.
 
 
 ## openIMIS Modules Dependencies
