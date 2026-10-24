@@ -111,6 +111,9 @@ DEFAULT_CONFIG = {
     # "flag_all" rejects every copy of a duplicated value, as the SQL path does;
     # "keep_first" keeps the first row and rejects the others.
     "individual_import_duplicate_policy": "flag_all",
+    # Group json_ext keys that keep the group's value when the head's json_ext is
+    # copied onto the group (GroupAndGroupIndividualAlignmentService).
+    "group_json_ext_keys_not_copied_from_head": [],
 }
 
 
@@ -163,6 +166,7 @@ class IndividualConfig(AppConfig):
     individual_import_pipeline_workers = None
     individual_import_pipeline_dispatch = None
     individual_import_duplicate_policy = None
+    group_json_ext_keys_not_copied_from_head = None
 
     def ready(self):
         from core.models import ModuleConfiguration

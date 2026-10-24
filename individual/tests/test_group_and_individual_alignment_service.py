@@ -1,6 +1,9 @@
+from unittest import mock
+
 from django.test import TestCase
 
 from core.test_helpers import LogInHelper
+from individual.apps import IndividualConfig
 from individual.models import Individual, GroupIndividual, Group
 from individual.services import GroupAndGroupIndividualAlignmentService
 from individual.tests.test_helpers import (
@@ -114,3 +117,69 @@ class GroupAndGroupIndividualAlignmentServiceTest(TestCase):
         self.assertEqual(Individual.objects.get(id=self.individual.id).location_id, self.loc_a.id,
                          "a member of a household with no location lost its own location")
 
+
+class GroupJsonExtFromHeadTest(TestCase):
+    # Keys a household carries but its head does not, as a group upload writes them.
+    household_keys = {'household_size': 5, 'household_type': 'RURAL'}
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = LogInHelper().get_or_create_user_api()
+        cls.username = cls.user.username
+
+    def setUp(self):
+        self.head = create_individual(self.username, {'json_ext': {'head_only': 'from-head'}})
+        self.group = create_group(self.username)
+        add_individual_to_group(self.username, self.head, self.group, is_head=True)
+        self.group.refresh_from_db()
+        self.group.json_ext.update(self.household_keys)
+        self.group.save(username=self.username)
+
+    def add_member(self):
+        member = create_individual(self.username, {'first_name': 'Member'})
+        add_individual_to_group(self.username, member, self.group, is_head=False)
+
+    def group_json_ext(self):
+        self.group.refresh_from_db()
+        return self.group.json_ext
+
+    def test_keys_the_head_lacks_are_kept(self):
+        self.add_member()
+
+        json_ext = self.group_json_ext()
+        self.assertEqual(len(json_ext['members']), 2)
+        for key, value in self.household_keys.items():
+            self.assertEqual(json_ext.get(key), value, key)
+
+    def test_head_values_are_copied(self):
+        self.head.json_ext = {**self.head.json_ext, 'head_only': 'updated', 'household_size': 6}
+        self.head.save(username=self.username)
+        self.add_member()
+
+        json_ext = self.group_json_ext()
+        self.assertEqual(json_ext['head_only'], 'updated')
+        self.assertEqual(json_ext['household_size'], 6)
+        self.assertEqual(json_ext['household_type'], 'RURAL')
+
+    def test_head_value_set_to_none_clears_the_group_value(self):
+        self.head.json_ext = {**self.head.json_ext, 'household_type': None}
+        self.head.save(username=self.username)
+        self.add_member()
+
+        json_ext = self.group_json_ext()
+        self.assertNotIn('household_type', json_ext)
+        self.assertEqual(json_ext['household_size'], 5)
+
+    def test_configured_keys_keep_the_group_value(self):
+        self.head.json_ext = {**self.head.json_ext, 'household_size': 6, 'household_type': None}
+        self.head.save(username=self.username)
+        with mock.patch.object(
+            IndividualConfig, 'group_json_ext_keys_not_copied_from_head',
+            ['household_size', 'household_type'], create=True,
+        ):
+            self.add_member()
+
+        json_ext = self.group_json_ext()
+        self.assertEqual(json_ext['household_size'], 5)
+        self.assertEqual(json_ext['household_type'], 'RURAL')
