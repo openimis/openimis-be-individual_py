@@ -6,8 +6,9 @@ import graphene_django_optimizer as gql_optimizer
 from core import prefix_filterset, ExtendedConnection
 from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
-from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
+from individual.models import Individual, IndividualDataSource, IndividualLabel, Group, GroupIndividual, \
     IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+from core.gql import ScopedQuerysetMixin
 
 
 def _have_permissions(user, permission):
@@ -47,6 +48,21 @@ class IndividualGQLType(DjangoObjectType):
     @classmethod
     def get_queryset(cls, queryset, info):
         return Individual.get_queryset(queryset, info.context.user)
+
+
+class IndividualLabelGQLType(DjangoObjectType):
+    uuid = graphene.String(source='uuid')
+
+    class Meta:
+        model = IndividualLabel
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "code": ["exact", "iexact", "istartswith", "icontains"],
+            "name": ["iexact", "istartswith", "icontains"],
+            "is_deleted": ["exact"],
+        }
+        connection_class = ExtendedConnection
 
 
 class IndividualHistoryGQLType(DjangoObjectType):
@@ -99,7 +115,7 @@ class IndividualDataSourceUploadGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
-class IndividualDataSourceGQLType(DjangoObjectType):
+class IndividualDataSourceGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
     class Meta:
@@ -256,7 +272,7 @@ class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
         connection_class = ExtendedConnection
 
 
-class GroupDataSourceGQLType(DjangoObjectType):
+class GroupDataSourceGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
     class Meta:

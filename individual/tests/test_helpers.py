@@ -3,11 +3,12 @@ import json
 import random
 import string
 import time
-from core.models import Role, RoleRight
+from core.models import ModuleConfiguration, Role, RoleRight
+from core.module_config_registry import reload_module_configuration
 from core.models.base_mutation import MutationLog
 from core.test_helpers import create_test_interactive_user, create_enrolment_officer_role, create_admin_role
 from core.utils import TimeUtils
-from individual.models import Individual, Group, GroupIndividual
+from individual.models import Individual, IndividualLabel, Group, GroupIndividual
 from individual.tests.data import (
     service_add_individual_payload
 )
@@ -16,6 +17,20 @@ from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase, Base
 from django.db.models import Q
 from django.contrib.contenttypes.models import ContentType
 from tasks_management.models import Task
+
+
+def reload_individual_config(raw_config):
+    """
+    Re-apply `raw_config` to the individual module's AppConfig.
+
+    A config reload writes IndividualConfig class attributes, which the test
+    transaction rollback does not undo - a test that changes the module config
+    has to restore it, or every test running afterwards in the same process
+    sees its schema.
+    """
+    reload_module_configuration(
+        ModuleConfiguration(module='individual', layer='be', config=raw_config)
+    )
 
 
 def generate_random_string(length=6):
@@ -39,6 +54,12 @@ def create_individual(username, payload_override={}):
     individual.save(username=username)
 
     return individual
+
+
+def create_individual_label(username, code, payload_override={}):
+    label = IndividualLabel(**{'code': code, 'name': code.title(), **payload_override})
+    label.save(username=username)
+    return label
 
 
 def create_group(username, payload_override={}):

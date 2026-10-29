@@ -1,7 +1,7 @@
 import logging
 
 from core.models import User
-from individual.workflows.utils import DataUploadWorkflow
+from individual.workflows.utils import DataUploadWorkflow, with_csv_labels
 from individual.services import IndividualImportService
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ def process_import_individuals_workflow(user_uuid, upload_uuid):
     IndividualImportService(user).synchronize_data_for_reporting(upload_uuid)
 
 
-upload_sql = """
+upload_sql = with_csv_labels("""
 DO $$
  DECLARE
             current_upload_id UUID := %s::UUID;
@@ -58,14 +58,15 @@ DO $$
           WITH new_entry AS (
             INSERT INTO individual_individual(
             "UUID", "isDeleted", version, "UserCreatedUUID", "UserUpdatedUUID",
-            "Json_ext", first_name, last_name, dob, location_id
+            "Json_ext", first_name, last_name, dob, location_id, labels
             )
             SELECT gen_random_uuid(), false, 1, userUUID, userUUID,
                 "Json_ext",
                 "Json_ext"->>'first_name',
                 "Json_ext" ->> 'last_name',
                 to_date("Json_ext" ->> 'dob', 'YYYY-MM-DD'),
-                loc."LocationId"
+                loc."LocationId",
+                CSV_LABELS(ds)
             FROM individual_individualdatasource AS ds
             LEFT JOIN "tblLocations" AS loc
                     ON loc."LocationName" = ds."Json_ext"->>'location_name'
@@ -84,6 +85,14 @@ DO $$
             and individual_id is null
             and "isDeleted"=False
             and individual_individualdatasource."Json_ext" = new_entry."Json_ext";  -- match on Json_ext
+            -- The codes live in the labels column; drop the copied cell now that the rows are linked.
+            UPDATE individual_individual
+            SET "Json_ext" = "Json_ext" - 'labels'
+            WHERE "Json_ext" ? 'labels'
+                AND "UUID" IN (
+                    SELECT individual_id FROM individual_individualdatasource
+                    WHERE upload_id = current_upload_id AND individual_id IS NOT NULL
+                );
             update individual_individualdatasourceupload set status='SUCCESS', error='{}' where "UUID" = current_upload_id;
             EXCEPTION
             WHEN OTHERS then
@@ -98,4 +107,4 @@ DO $$
         END;
     END IF;
 END $$;
-        """
+        """)

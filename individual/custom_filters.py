@@ -9,7 +9,7 @@ from typing import List
 
 from core.custom_filters import CustomFilterWizardInterface
 from individual.apps import IndividualConfig
-from individual.models import Individual, Group, GroupIndividual
+from individual.models import Individual, IndividualLabel, Group, GroupIndividual
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,12 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
             benefit_plan = BenefitPlan.objects.get(id=benefit_plan_id)
             if benefit_plan.beneficiary_data_schema and benefit_plan.beneficiary_data_schema != '{}':
                 return self.__process_schema_and_build_tuple(benefit_plan.beneficiary_data_schema, tuple_type)
+        label_code = additional_params.get("label", None)
+        if label_code:
+            label_schema = IndividualLabel.objects.filter(code=label_code, is_deleted=False) \
+                .values_list('json_schema', flat=True).first()
+            if label_schema:
+                return self.__process_schema_and_build_tuple(label_schema, tuple_type)
         if individual_schema:
             individual_schema_dict = json.loads(individual_schema)
             return self.__process_schema_and_build_tuple(individual_schema_dict, tuple_type)

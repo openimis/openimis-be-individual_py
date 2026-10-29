@@ -7,19 +7,69 @@ from django.apps import AppConfig
 from core.custom_filters import CustomFilterRegistryPoint
 from core.data_masking import MaskingClassRegistryPoint
 from core.module_config_registry import register_validator, register_reloader
+from core.rights_declaration import RightsDeclaration
 
 logger = logging.getLogger(__name__)
 
+MODULE_NAME = "individual"
+
+# Rights, by entity then by action, in two distinct blocks of identifiers of the openIMIS
+# catalogue: `individual` (159xxx) is the register of people, and its `label` registry
+# takes the next free identifiers of that block; `group` (180xxx) is the register of
+# households. No identifier is shared between entities.
+#
+# The django names all carry the `individual` app_label: `Group` is a model of this
+# app, not of a "group" app - the entity is named after the business object, the django
+# name after the app that hosts the model.
+DJANGO_PERMS = {
+    "individual": {
+        "query": ("individual.view_individual", 159001),
+        "create": ("individual.add_individual", 159002),
+        "update": ("individual.change_individual", 159003),
+        "delete": ("individual.delete_individual", 159004),
+        # A business action: restoring a soft-deleted person is neither a creation
+        # nor an ordinary modification, and already carries its own identifier.
+        "undoDelete": ("individual.undo_delete_individual", 159005),
+    },
+    # The label registry. Its writes follow the individual block (159006-159008); reading
+    # labels is reading individual data, so it stays on the individual query right.
+    "label": {
+        "create": ("individual.add_individuallabel", 159006),
+        "update": ("individual.change_individuallabel", 159007),
+        "delete": ("individual.delete_individuallabel", 159008),
+    },
+    "group": {
+        "query": ("individual.view_group", 180001),
+        "create": ("individual.add_group", 180002),
+        "update": ("individual.change_group", 180003),
+        "delete": ("individual.delete_group", 180004),
+    },
+}
+
+_PERM_CFG = {
+    "gql_individual_search_perms": ("individual", "query"),
+    "gql_individual_create_perms": ("individual", "create"),
+    "gql_individual_update_perms": ("individual", "update"),
+    "gql_individual_delete_perms": ("individual", "delete"),
+    "gql_individual_undo_delete_perms": ("individual", "undoDelete"),
+    "gql_individual_label_create_perms": ("label", "create"),
+    "gql_individual_label_update_perms": ("label", "update"),
+    "gql_individual_label_delete_perms": ("label", "delete"),
+    "gql_group_search_perms": ("group", "query"),
+    "gql_group_create_perms": ("group", "create"),
+    "gql_group_update_perms": ("group", "update"),
+    "gql_group_delete_perms": ("group", "delete"),
+}
+
+RIGHTS = RightsDeclaration(MODULE_NAME, DJANGO_PERMS, _PERM_CFG)
+
+perms = RIGHTS.perms
+django_perms = RIGHTS.django_perm_names
+configured_perms = RIGHTS.configured
+require = RIGHTS.require
+
+
 DEFAULT_CONFIG = {
-    "gql_individual_search_perms": ["159001"],
-    "gql_individual_create_perms": ["159002"],
-    "gql_individual_update_perms": ["159003"],
-    "gql_individual_delete_perms": ["159004"],
-    "gql_individual_undo_delete_perms": ["159005"],
-    "gql_group_search_perms": ["180001"],
-    "gql_group_create_perms": ["180002"],
-    "gql_group_update_perms": ["180003"],
-    "gql_group_delete_perms": ["180004"],
     "check_individual_update": True,
     "check_individual_delete": True,
     "check_group_individual_update": True,
@@ -64,17 +114,25 @@ DEFAULT_CONFIG = {
 
 class IndividualConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'individual'
+    name = MODULE_NAME
 
-    gql_individual_search_perms = None
-    gql_individual_create_perms = None
-    gql_individual_update_perms = None
-    gql_individual_delete_perms = None
-    gql_individual_undo_delete_perms = None
-    gql_group_search_perms = None
-    gql_group_create_perms = None
-    gql_group_update_perms = None
-    gql_group_delete_perms = None
+    # Rights: constants, no longer overridable. They go neither through DEFAULT_CFG
+    # nor through ready(): `ModuleConfiguration.get_or_default` now ignores any
+    # `_perms` key stored in the database.
+    gql_individual_search_perms = RIGHTS.perms("individual", "query")
+    gql_individual_create_perms = RIGHTS.perms("individual", "create")
+    gql_individual_update_perms = RIGHTS.perms("individual", "update")
+    gql_individual_delete_perms = RIGHTS.perms("individual", "delete")
+    gql_individual_undo_delete_perms = RIGHTS.perms("individual", "undoDelete")
+
+    gql_individual_label_create_perms = RIGHTS.perms("label", "create")
+    gql_individual_label_update_perms = RIGHTS.perms("label", "update")
+    gql_individual_label_delete_perms = RIGHTS.perms("label", "delete")
+
+    gql_group_search_perms = RIGHTS.perms("group", "query")
+    gql_group_create_perms = RIGHTS.perms("group", "create")
+    gql_group_update_perms = RIGHTS.perms("group", "update")
+    gql_group_delete_perms = RIGHTS.perms("group", "delete")
     check_individual_update = None
     check_individual_delete = None
     check_group_individual_update = None
@@ -116,6 +174,9 @@ class IndividualConfig(AppConfig):
         register_reloader(self.name, self._reload_module_config)
 
     def _merge_with_defaults(self, instance):
+        # `instance._cfg` has already stripped the `_perms` keys from the stored
+        # config, and DEFAULT_CONFIG holds none any more: the merge therefore cannot
+        # reintroduce a right, and `__load_config` leaves the class constants intact.
         return {**copy.deepcopy(DEFAULT_CONFIG), **instance._cfg}
 
     def _validate_module_config(self, instance):
