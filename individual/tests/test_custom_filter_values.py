@@ -42,6 +42,12 @@ class IndividualCustomFilterStringValueTest(TestCase):
             with self.subTest(condition=condition):
                 self.assertEqual(self._filter(condition), [self.match.id])
 
+    def test_condition_without_operator_is_an_exact_match(self):
+        # OP-3313: "field__type=value" was accepted before OP-3251 and is still stored in
+        # payroll and payment plan criteria: it filters on json_ext__field, an exact match.
+        self.assertEqual(self._filter('source__string=UAT release 26.10'), [self.match.id])
+        self.assertEqual(self._filter('source__string=UAT'), [])
+
     def test_incomplete_condition_is_refused(self):
         # OP-3251: an empty criteria row reached the backend as "____=" and was applied
         # as a filter on json_ext____, which matches nothing: the enrolment selected 0.
@@ -50,7 +56,6 @@ class IndividualCustomFilterStringValueTest(TestCase):
             '__iexact__string=UAT',
             'source____string=UAT',
             'source__iexact__=UAT',
-            'source__string=UAT',
             'source__iexact__string',
         ):
             with self.subTest(condition=condition):

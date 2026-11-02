@@ -42,13 +42,18 @@ class IndividualCustomFilterWizard(CustomFilterWizardInterface):
     def parse_condition(condition: str):
         """
         Split a "<field>__<filter>__<type>=<value>" condition into ("<field>__<filter>", type, value).
+        "<field>__<type>=<value>", without an operator, is an exact match on the field (OP-3313).
         An incomplete one, such as "____=" sent for an empty criteria row, is refused: applied,
         it filtered on json_ext____ and matched nothing (OP-3251).
         """
         path, separator, value = condition.partition('=')
         field_and_filter, __, value_type = path.rpartition('__')
-        field, __, filter_name = field_and_filter.rpartition('__')
-        if not (separator and field.strip('_') and filter_name and value_type):
+        if '__' in field_and_filter:
+            field, __, filter_name = field_and_filter.rpartition('__')
+            has_field = field.strip('_') and filter_name
+        else:
+            has_field = field_and_filter.strip('_')
+        if not (separator and has_field and value_type):
             raise ValidationError(_("Incomplete custom filter condition: %(condition)s") % {"condition": condition})
         return field_and_filter, value_type, value
 
