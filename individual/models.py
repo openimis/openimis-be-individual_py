@@ -1,5 +1,9 @@
+import uuid
+
+from django.apps import apps
 from django.conf import settings
 from django.db import models, transaction
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
@@ -7,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 import core
 from core.models import HistoryModel
 from location.models import Location, LocationManager
+from core.models import ParentScope
 
 
 class Individual(HistoryModel):
@@ -30,6 +35,15 @@ class Individual(HistoryModel):
 
     class Meta:
         managed = True
+
+    @classmethod
+    def get_rights(cls, action):
+        # Read at call time and not at import: the `_perms` keys only hold their
+        # value after `ready()`, and a snapshot taken at import would capture the
+        # placeholder - hence an empty list, which `has_perms` grants to everybody.
+        from individual.apps import configured_perms
+
+        return configured_perms("individual", action)
 
     @classmethod
     def get_queryset(cls, queryset, user):
@@ -78,15 +92,80 @@ class IndividualDataSourceUpload(HistoryModel):
     status = models.CharField(max_length=255, choices=Status.choices, default=Status.PENDING)
     error = models.JSONField(blank=True, default=dict)
 
+    @classmethod
+    def handled_by(cls, user):
+        """``Q`` on the uploads ``user`` made or may review.
+
+        An upload has no location of its own, and its rows have none until they
+        are imported: until then it belongs to its uploader and to whoever can see
+        its review task (the task group's executors, triage).
+        """
+        handled = Q(user_created=user)
+        if apps.is_installed("tasks_management"):
+            from django.contrib.contenttypes.models import ContentType
+            from tasks_management.models import Task
+
+            # Compared as UUIDs, not text: Task.entity_id holds str(uuid) in lowercase,
+            # and a uniqueidentifier cast to text is uppercase on SQL Server.
+            entity_ids = Task.get_queryset(Task.objects.filter(
+                entity_type=ContentType.objects.get_for_model(IndividualDataUploadRecords),
+            ), user).values_list("entity_id", flat=True)
+            record_ids = set()
+            for entity_id in entity_ids:
+                try:
+                    record_ids.add(uuid.UUID(str(entity_id)))
+                except ValueError:
+                    continue
+            if record_ids:
+                handled |= Q(id__in=IndividualDataUploadRecords.objects.filter(
+                    id__in=record_ids,
+                ).values("data_upload_id"))
+        return handled
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        """Uploads the user made or may review, and those that created an individual the user may see."""
+        user = cls.scoping_user(user)
+        if queryset is None:
+            queryset = cls.objects.all()
+        if user is None or user.is_anonymous:
+            return queryset.none()
+        if not settings.ROW_SECURITY or user.is_superuser:
+            return queryset
+        visible = Individual.get_queryset(Individual.objects.all(), user)
+        imported = IndividualDataSource.objects.filter(upload=OuterRef("pk"), individual__in=visible)
+        return queryset.filter(cls.handled_by(user) | Q(Exists(imported)))
+
 
 class IndividualDataSource(HistoryModel):
+    # Imported rows are as visible as their individual.
+    row_scope = ParentScope("individual")
+
     USE_CACHE = False
     individual = models.ForeignKey(Individual, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
     validations = models.JSONField(blank=True, default=dict)
 
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        """Imported rows follow their individual; the others, their upload's uploader and reviewers."""
+        user = cls.scoping_user(user)
+        if queryset is None:
+            queryset = cls.objects.all()
+        if user is None or user.is_anonymous:
+            return queryset.none()
+        if not settings.ROW_SECURITY or user.is_superuser:
+            return queryset
+        pending = queryset.filter(
+            individual__isnull=True,
+            upload__in=IndividualDataSourceUpload.objects.filter(IndividualDataSourceUpload.handled_by(user)),
+        )
+        return super().get_queryset(queryset, user) | pending
+
 
 class IndividualDataUploadRecords(HistoryModel):
+    row_scope = ParentScope("data_upload")
+
     USE_CACHE = False
     data_upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, null=False)
     workflow = models.CharField(max_length=50)
@@ -106,6 +185,14 @@ class Group(HistoryModel):
         null=True,
         related_name='groups'
     )
+
+    @classmethod
+    def get_rights(cls, action):
+        # An entity distinct from `individual`: the household has its own block of
+        # rights (180xxx). Read at call time, for the same reason as on Individual.
+        from individual.apps import configured_perms
+
+        return configured_perms("group", action)
 
     @classmethod
     def get_queryset(cls, queryset, user):
@@ -140,6 +227,8 @@ def update_member_individuals_location(sender, instance, **kwargs):
 
 
 class GroupDataSource(HistoryModel):
+    row_scope = ParentScope("group")
+
     USE_CACHE = False
     group = models.ForeignKey(Group, models.DO_NOTHING, blank=True, null=True)
     upload = models.ForeignKey(IndividualDataSourceUpload, models.DO_NOTHING, blank=True, null=True)
@@ -147,6 +236,15 @@ class GroupDataSource(HistoryModel):
 
 
 class GroupIndividual(HistoryModel):
+    # A person's membership of a household is not an object one holds rights on
+    # separately: composing it means modifying the household. Of the two foreign keys,
+    # `group` is the owner and not `individual` - every existing call site attests to
+    # it: the Create/Update/Delete GroupIndividual mutations check
+    # gql_group_{create,update,delete}_perms, and the groupIndividual /
+    # groupIndividualHistory resolvers check gql_group_search_perms. A person outlives
+    # their household; a membership link does not.
+    scope_parent = "group"
+
     USE_CACHE = False
 
     class Role(models.TextChoices):

@@ -3,6 +3,7 @@ import json
 from core.models import ModuleConfiguration
 from individual.tests.test_helpers import (
     IndividualGQLTestCase,
+    reload_individual_config,
 )
 
 
@@ -16,13 +17,21 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
         )
 
     def test_individual_custom_filter_query(self):
-        # First set the individual config to be empty
-        config = ModuleConfiguration.objects.filter(module='individual', layer='be')
-        if not config:
-            config = ModuleConfiguration(module='individual', layer='be', config='{}')
+        # First set the individual schema to be empty. An empty *config* is not
+        # enough: it is merged with DEFAULT_CONFIG, whose individual_schema
+        # ships properties of its own, and those would surface as filters here.
+        empty_schema_config = json.dumps({'individual_schema': json.dumps({})})
+        config = ModuleConfiguration.objects.filter(module='individual', layer='be').first()
+        self.addCleanup(reload_individual_config, config.config if config else '{}')
+        if config is None:
+            config = ModuleConfiguration(
+                module='individual', layer='be', config=empty_schema_config)
         else:
-            config.config = '{}'
-        config.save()
+            config.config = empty_schema_config
+        # The module reload is queued with transaction.on_commit, which never
+        # runs inside a TestCase's rolled-back transaction.
+        with self.captureOnCommitCallbacks(execute=True):
+            config.save()
 
         query_str = '''
             {
@@ -54,7 +63,8 @@ class IndividualCustomFilterQueryTest(IndividualGQLTestCase):
         # Then update individual config to with the fixture config
         with open(self.test_config_path, 'rb') as test_file:
             config.config = test_file.read()
-        config.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            config.save()
 
         response = self.query(
             query_str,

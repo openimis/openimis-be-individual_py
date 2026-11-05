@@ -25,7 +25,6 @@ from individual.models import (
 )
 from individual.utils import (
     load_dataframe,
-    fetch_summary_of_valid_items,
     fetch_summary_of_broken_items
 )
 from individual.validation import (
@@ -184,7 +183,7 @@ class GroupService(
                 if individuals_data:
                     individual_ids = [data["individual_id"] for data in individuals_data]
                     self._update_group_json_ext(group_id, individual_ids)
-                    for data in individuals_data:
+                    for data in self._in_assembly_order(individuals_data):
                         obj_data = {
                             'group_id': group_id,
                             'individual_id': data.get("individual_id"),
@@ -221,7 +220,7 @@ class GroupService(
                         group_individual = GroupIndividual.objects.get(group_id=group_id, individual_id=individual_id)
                         service.delete({'id': group_individual.id})
 
-                for data in individuals_data:
+                for data in self._in_assembly_order(individuals_data):
                     if uuid.UUID(data["individual_id"]) not in assigned_individuals_ids:
                         obj_data = {
                             'group_id': group_id,
@@ -235,6 +234,24 @@ class GroupService(
                 return output_result_success(dict_representation=dict_repr)
         except Exception as exc:
             return output_exception(model_name=self.OBJECT_TYPE.__name__, method="update", exception=exc)
+
+    @staticmethod
+    def _in_assembly_order(individuals_data):
+        """Save a declared primary recipient first, then the head, then everyone else.
+
+        Every GroupIndividual save appoints a fallback primary recipient if the group has
+        none yet. Saving members in payload order lets that fallback pick whichever member
+        happens to come first - and once a primary exists it is never reconsidered, so a
+        head saved later is not made primary. The sort is stable, so the remaining members
+        keep their payload order.
+        """
+        def rank(data):
+            if data.get("recipient_type") == GroupIndividual.RecipientType.PRIMARY:
+                return 0
+            if data.get("role") == GroupIndividual.Role.HEAD:
+                return 1
+            return 2
+        return sorted(individuals_data, key=rank)
 
     @register_service_signal('group_service.delete')
     def delete(self, obj_data):
@@ -430,19 +447,17 @@ class GroupAndGroupIndividualAlignmentService:
         secondary_id = str(secondary.individual.id) if secondary else None
 
         changes_to_save = {}
-        json_ext_minus_keys = {k: v for k, v in group.json_ext.items() if k not in [
-            "members", "head", "head_id", "primary_recipient",
-            "primary_recipient_id", "secondary_recipient", "secondary_recipient_id"
-        ]}
-
-        if json_ext_minus_keys != head_json_ext:
-            all_keys = set(head_json_ext.keys()).union(json_ext_minus_keys.keys())
-            for key in all_keys:
-                value = head_json_ext.get(key)
-                if value is None and key in group.json_ext:
-                    del group.json_ext[key]
-                else:
-                    group.json_ext[key] = value
+        # The head's json_ext is copied onto the group: a head value set to None clears the
+        # group's value. Keys the head lacks are the household's own and are kept, as are
+        # the keys listed in group_json_ext_keys_not_copied_from_head.
+        keys_not_copied = set(IndividualConfig.group_json_ext_keys_not_copied_from_head or ())
+        for key, value in head_json_ext.items():
+            if key in keys_not_copied:
+                continue
+            if value is None:
+                group.json_ext.pop(key, None)
+            else:
+                group.json_ext[key] = value
 
         current_members = group.json_ext.get("members", {})
         additional_members = {k: v for k, v in group_members.items() if k not in current_members}
@@ -488,12 +503,19 @@ class GroupAndGroupIndividualAlignmentService:
         if group.location_id == individual.location_id:
             return
 
-        if role == GroupIndividual.Role.HEAD and group.location_id is None:
-            group.location_id = individual.location_id
-            group.save(user=self.user)
-        else:
-            individual.location_id = group.location_id
-            individual.save(user=self.user)
+        if group.location_id is None:
+            if role == GroupIndividual.Role.HEAD:
+                group.location_id = individual.location_id
+                group.save(user=self.user)
+            # Only the head gives a group its location. Until the group has one, a member's
+            # own location is the only record of where they live - overwriting it with None
+            # destroys valid data without making anything consistent. A group whose head is
+            # never added (e.g. the head's record was rejected on import) would otherwise
+            # leave every one of its members with no location at all.
+            return
+
+        individual.location_id = group.location_id
+        individual.save(user=self.user)
 
     def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group=group, is_deleted=False)
@@ -503,13 +525,22 @@ class GroupAndGroupIndividualAlignmentService:
         if primary_exists:
             return
 
-        new_primary = group_individuals.first()
+        # Prefer the head when the group has one. `first()` is unordered, so without
+        # this the primary recipient is whichever member the database happens to return
+        # - in a benefit context that decides who gets paid.
+        new_primary = group_individuals.filter(role=GroupIndividual.Role.HEAD).first() \
+            or group_individuals.first()
 
         if not new_primary:
             return
 
         new_primary.recipient_type = GroupIndividual.RecipientType.PRIMARY
-        if not head_exists:
+        # Only appoint a head if this member has no role of its own. Overwriting a
+        # declared role destroys it: the member is created with, say, SON, is promoted
+        # to HEAD here because the group is still being assembled and has no head yet,
+        # and when the real head is created moments later `_change_head` sets this
+        # member's role to None - SON is gone, and nothing reports it.
+        if not head_exists and not new_primary.role:
             new_primary.role = GroupIndividual.Role.HEAD
         new_primary.save(user=self.user)
 
@@ -557,7 +588,13 @@ class IndividualImportService:
                            import_file: InMemoryUploadedFile,
                            workflow: WorkflowHandler,
                            group_aggregation_column: str):
-        upload = self._save_sources(import_file)
+        from individual.import_pipeline import is_pipeline_workflow, register_upload
+
+        if is_pipeline_workflow(workflow.name):
+            # The pipeline reads the stored file itself, in chunks.
+            upload = register_upload(self.user, import_file)
+        else:
+            upload = self._save_sources(import_file)
         self._create_individual_data_upload_records(workflow, upload, group_aggregation_column)
         self._trigger_workflow(workflow, upload)
         return {'success': True, 'data': {'upload_uuid': upload.uuid}}
@@ -826,7 +863,9 @@ class IndividualImportService:
             )
 
         if data_sources_to_update:
-            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'])
+            # Batched: one UPDATE ... CASE over every row grows much faster than the
+            # row count, and never finished for 100,000 rows.
+            IndividualDataSource.objects.bulk_update(data_sources_to_update, ['validations'], batch_size=1000)
 
     def create_task_with_importing_valid_items(self, upload_id: uuid):
         if IndividualConfig.enable_maker_checker_for_individual_upload:
@@ -837,9 +876,10 @@ class IndividualImportService:
                 data_upload_id=upload_id,
                 is_deleted=False
             )
+            from individual.import_pipeline import valid_items_workflow
             from individual.signals.on_validation_import_valid_items import IndividualItemsImportTaskCompletionEvent
             IndividualItemsImportTaskCompletionEvent(
-                IndividualConfig.validation_import_valid_items_workflow,
+                valid_items_workflow(record),
                 record,
                 record.data_upload.id,
                 self.user
@@ -908,8 +948,9 @@ class IndividualTaskCreatorService:
         data_upload.save(user=self.user)
 
     def __calculate_percentage_of_invalid_items(self, upload_id):
-        number_of_valid_items = len(fetch_summary_of_valid_items(upload_id))
-        number_of_invalid_items = len(fetch_summary_of_broken_items(upload_id))
+        rows = IndividualDataSource.objects.filter(upload_id=upload_id, is_deleted=False)
+        number_of_valid_items = rows.filter(validations__validation_errors=[]).count()
+        number_of_invalid_items = rows.count() - number_of_valid_items
         total_items = number_of_invalid_items + number_of_valid_items
 
         if total_items == 0:

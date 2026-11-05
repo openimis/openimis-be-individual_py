@@ -31,7 +31,15 @@ from location.apps import LocationConfig
 def patch_details(data_df: pd.DataFrame):
     # Transform extension to DF columns
     if 'json_ext' in data_df:
-        df_unfolded = pd.json_normalize(data_df['json_ext'])
+        # Nullable dtypes keep whole numbers whole when some rows lack the key
+        # (plain int columns turn float when pandas fills the gaps with NaN);
+        # whole-valued floats are written as integers too.
+        df_unfolded = pd.json_normalize(data_df['json_ext']).convert_dtypes()
+        # A json_ext key with the name of an exported field (case-insensitive) would add
+        # a second column of that name; the field's own column is kept, the key is dropped.
+        exported = {str(column).lower() for column in data_df.columns}
+        df_unfolded = df_unfolded.drop(
+            columns=[column for column in df_unfolded.columns if str(column).lower() in exported])
         # Merge unfolded DataFrame with the original DataFrame
         df_final = pd.concat([data_df, df_unfolded], axis=1)
         df_final = df_final.drop('json_ext', axis=1)
@@ -287,7 +295,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
-        query = IndividualDataSource.objects.filter(*filters)
+        query = IndividualDataSource.get_queryset(IndividualDataSource.objects.filter(*filters), info)
         return gql_optimizer.query(query, info)
 
     def resolve_group_data_source(self, info, **kwargs):
@@ -313,7 +321,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
-        query = IndividualDataSourceUpload.objects.filter(*filters)
+        query = IndividualDataSourceUpload.get_queryset(IndividualDataSourceUpload.objects.filter(*filters), info)
         return gql_optimizer.query(query, info)
 
     def resolve_group(self, info, **kwargs):
@@ -419,7 +427,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             info.context.user,
             IndividualConfig.gql_individual_search_perms
         )
-        query = IndividualDataUploadRecords.objects.filter(*filters)
+        query = IndividualDataUploadRecords.get_queryset(IndividualDataUploadRecords.objects.filter(*filters), info)
         return gql_optimizer.query(query, info)
 
     def resolve_group_enrollment_summary(self, info, **kwargs):
@@ -461,6 +469,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         )
 
     def resolve_global_schema(self, info):
+        # The schema describes the register's fields: same right as reading it. The
+        # class already defined _check_permissions without calling it here.
+        Query._check_permissions(
+            info.context.user, IndividualConfig.gql_individual_search_perms
+        )
         individual_schema = IndividualConfig.individual_schema
         if individual_schema:
             individual_schema_dict = json.loads(individual_schema)

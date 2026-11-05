@@ -60,6 +60,7 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * gql_group_create_perms: required rights to call createGroup and addIndividualToGroup and createGroupIndividuals GraphQL Mutation (default: ["180002"])
 * gql_group_update_perms: required rights to call updateGroup and editIndividualInGroup GraphQL Mutation (default: ["180003"])
 * gql_group_delete_perms: required rights to call deleteGroup and removeIndividualFromGroup GraphQL Mutation (default: ["180004"])
+* group_json_ext_keys_not_copied_from_head: group json_ext keys that keep the group's value when the head's json_ext is copied onto the group on a membership change (default: []). Other head values overwrite the group's, a head value set to null removes the key from the group, and keys the head does not have are left as they are.
 
 
 ## openIMIS Modules Dependencies
@@ -75,6 +76,58 @@ Specifically, the `enable_python_workflows` parameter to `true` within module co
 Workflows: 
  * individual upload
 
+
+## Python import pipeline (opt-in)
+
+An alternative to the SQL upload workflows, chosen per upload by picking the
+`Python Pipeline Import Individuals` workflow (group `individual`). The SQL
+workflows stay the default. Code: `individual/import_pipeline.py`.
+
+The pipeline workflows are registered only while `enable_python_workflows` is on.
+With the `celery` executor and `dispatch: worker`, the workers read the uploaded
+file from `default_storage`: the backend and the workers must share its storage
+(in openimis-dist_dkr, the `file_storage` volume). Otherwise use `dispatch: request`.
+
+1. **Stage and validate** (one task per chunk, in parallel): parse a chunk,
+   check `first_name`, `last_name`, `dob` (YYYY-MM-DD), validation calculations
+   and the village, and insert the rows with their result. The resolved
+   village id is kept in `validations.location_id`.
+2. **Deduplicate** (once, after every chunk): the schema fields marked
+   `"uniqueness"` are compared across the whole upload, against existing
+   individuals, and against other uploads still pending. Because comparison
+   happens after all chunks are in, a duplicate split across chunks is found.
+3. **Review**: the usual maker-checker task (or an immediate import).
+4. **Import** (per chunk): individuals are created from the accepted valid rows
+   and linked to their row by id.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `individual_import_pipeline_executor` | `auto` | `auto` (the fastest available: `celery` when async mutations are on, `inline` otherwise), `inline`, `process` (local process pool, for validation; the import runs inline in the approval) or `celery` (one task per chunk for validation and for import; the last import chunk runs the group step) |
+| `individual_import_pipeline_chunk_size` | `5000` | rows per chunk |
+| `individual_import_pipeline_workers` | `4` | processes for the `process` executor |
+| `individual_import_pipeline_dispatch` | `worker` | `celery` executor only: `worker` reads the file and queues its chunks in a worker, so the request returns at once; `request` does it in the request |
+| `individual_import_duplicate_policy` | `flag_all` | `flag_all` rejects every copy, as the SQL path does; `keep_first` keeps the first row |
+
+Measured on one machine (14 cores, local PostgreSQL) with 1,000,000 rows, the
+`process` executor and 8 workers: stage and validate 96 s, deduplicate 3 s,
+import of 970,125 individuals 213 s, about 550 MB in the parent process.
+
+## Following an upload
+
+`individualDataSourceUpload` / `individualDataUploadHistory { dataUpload { status error progress } }`:
+`status` moves `TRIGGERED` → `IN_PROGRESS` → `WAITING_FOR_VERIFICATION` →
+(approval) `IN_PROGRESS` → `SUCCESS` / `PARTIAL_SUCCESS` / `FAIL`; `progress` is
+`{"stage": "validation" | "import", "done", "total", "duplicates"}` for pipeline
+uploads (`total` is null while the file is still being read). The approval
+mutation completing only means the import is queued: the upload status says when
+it is done. The upload history dialog polls while an upload is running.
+
+## Upload visibility
+
+An upload has no location of its own. It is visible to its uploader, to whoever
+may see its review task, and to whoever may see an individual created from it.
+Rows not yet imported are visible to the uploader and the reviewers; imported
+rows follow their individual.
 
 ## Additional Field Definition
 

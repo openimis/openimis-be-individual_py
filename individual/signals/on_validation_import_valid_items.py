@@ -8,6 +8,7 @@ from django.db.models import F
 
 from core.models import User
 from individual.apps import IndividualConfig
+from individual.import_pipeline import valid_items_workflow
 from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataSource,
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class ItemsUploadTaskCompletionEvent:
+    # True when the workflow only queued its work (the Python pipeline's celery
+    # import): what follows the import then runs when the last chunk finishes.
+    workflow_deferred = False
+
     def run_workflow(self):
         group, name = self.workflow_name.split('.')
         workflow = self._get_workflow(group, name)
@@ -31,6 +36,8 @@ class ItemsUploadTaskCompletionEvent:
             'upload_uuid': str(self.upload_id),
             'accepted': self.accepted
         })
+        data = result.get('data') if result.get('success') else None
+        self.workflow_deferred = isinstance(data, dict) and bool(data.get('deferred'))
         if not result.get('success'):
             if self.upload_record:
                 data_upload = self.upload_record.data_upload
@@ -74,7 +81,11 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
     def run_workflow(self):
         super().run_workflow()
+        if not self.workflow_deferred:
+            self.run_group_step()
 
+    def run_group_step(self):
+        """Group the imported individuals; runs once the individuals exist."""
         if not self.upload_record:
             return
 
@@ -111,7 +122,11 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
     def group_data_sources_into_entities(upload_id, user, accepted: List[str] = None):
         data_sources = GroupDataSource.objects.filter(upload_id=upload_id, group=None)
 
-        if accepted:
+        # `is not None`, not truthiness: an approval flow that rejected every
+        # row passes an empty list, which means "process nothing". Treating
+        # [] as "no filter" would import the whole upload - the exact inverse
+        # of the guarantee. None still means "no flow, process everything".
+        if accepted is not None:
             data_sources = data_sources.filter(id__in=accepted)
 
         service = GroupService(user)
@@ -216,6 +231,12 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
     @staticmethod
     def _individual_role_parser(individual_role):
+        # A member already in the group had `individual_role` removed from its json_ext by
+        # _clean_json_ext() when its own upload finished, so it arrives here as None.
+        # GroupService.update() only creates rows for individuals not yet assigned and
+        # leaves existing GroupIndividual rows untouched, so no role is needed for them.
+        if not individual_role:
+            return None
         return getattr(GroupIndividual.Role, individual_role.upper(), None)
 
     def _create_group_data_source(self, json_ext_data):
@@ -248,8 +269,8 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
 
 class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
-    def run_workflow(self):
-        super().run_workflow()
+    def run_group_step(self):
+        super().run_group_step()
 
         if self.grouped_individuals is None or not self.grouped_individuals.exists():
             return
@@ -264,8 +285,8 @@ class IndividualItemsImportTaskCompletionEvent(BaseGroupColumnAggregationClass):
 
 
 class IndividualItemsUploadTaskCompletionEvent(BaseGroupColumnAggregationClass):
-    def run_workflow(self):
-        super().run_workflow()
+    def run_group_step(self):
+        super().run_group_step()
 
         if self.grouped_individuals is None or not self.grouped_individuals.exists():
             return
@@ -296,13 +317,44 @@ def on_task_complete_action(business_event, **kwargs):
     upload_record = None
     try:
         upload_record = IndividualDataUploadRecords.objects.get(id=task['entity_id'])
+        completion_user = User.objects.get(id=data['user']['id'])
+
+        # A task that followed an approval flow accumulated its per-record
+        # verdicts across every step. accepted=None below means "no filter,
+        # process the whole upload" (both the SQL workflows and
+        # group_data_sources_into_entities already support this) - a flow
+        # task instead passes the surviving ids explicitly, which every one
+        # of those paths already knows how to honour. This is the same
+        # existing mechanism a manual re-run with a hand-picked id list would
+        # use, not a new filter bolted on afterwards.
+        accepted_ids = None
+        task_obj = Task.objects.filter(id=task['id']).first()
+        if task_obj and task_obj.flow_id:
+            from tasks_management.signals import flow_rejected_record_ids
+            rejected = flow_rejected_record_ids(task_obj)
+            upload_id = upload_record.data_upload.id
+            if business_event == IndividualConfig.validation_import_group_valid_items:
+                universe = set(str(i) for i in GroupDataSource.objects.filter(
+                    upload_id=upload_id, is_deleted=False).values_list('id', flat=True))
+            else:
+                universe = set(str(i) for i in IndividualDataSource.objects.filter(
+                    upload_id=upload_id, is_deleted=False).values_list('id', flat=True))
+            accepted_ids = list(universe - rejected)
+            logger.info(
+                "individual.flow: task %s completion restricted to %s surviving "
+                "record(s) of %s (%s rejected during the approval flow)",
+                task_obj.id, len(accepted_ids), len(universe), len(rejected),
+            )
+
         if business_event == IndividualConfig.validation_import_valid_items:
-            workflow = IndividualConfig.validation_import_valid_items_workflow
+            # The pipeline's uploads are imported by the pipeline, the others as configured.
+            workflow = valid_items_workflow(upload_record)
             IndividualItemsImportTaskCompletionEvent(
                 workflow,
                 upload_record,
                 upload_record.data_upload.id,
-                User.objects.get(id=data['user']['id'])
+                completion_user,
+                accepted_ids,
             ).run_workflow()
         elif business_event == IndividualConfig.validation_upload_valid_items:
             workflow = IndividualConfig.validation_upload_valid_items_workflow
@@ -310,11 +362,12 @@ def on_task_complete_action(business_event, **kwargs):
                 workflow,
                 upload_record,
                 upload_record.data_upload.id,
-                User.objects.get(id=data['user']['id'])
+                completion_user,
+                accepted_ids,
             ).run_workflow()
         elif business_event == IndividualConfig.validation_import_group_valid_items:
             BaseGroupColumnAggregationClass.group_data_sources_into_entities(
-                upload_record.data_upload.id, User.objects.get(id=data['user']['id'])
+                upload_record.data_upload.id, completion_user, accepted_ids,
             )
         else:
             raise ValueError(f"Business event {business_event} doesn't have assigned workflow.")
@@ -348,7 +401,7 @@ def _delete_rejected(uuids_list, task_source):
         source.is_deleted = True
 
     # Perform the bulk update
-    model.objects.bulk_update(sources_to_update, ['is_deleted'])
+    model.objects.bulk_update(sources_to_update, ['is_deleted'], batch_size=1000)
 
 
 def _complete_task_for_accepted(_task, accept, user):
@@ -360,7 +413,7 @@ def _complete_task_for_accepted(_task, accept, user):
 
     if _task.business_event == IndividualConfig.validation_import_valid_items:
         IndividualItemsImportTaskCompletionEvent(
-            IndividualConfig.validation_import_valid_items_workflow,
+            valid_items_workflow(upload_record),
             upload_record,
             upload_record.data_upload.id,
             user,
@@ -441,6 +494,14 @@ def on_task_resolve(**kwargs):
 
             # Task only relevant for this specific source
             if task.source != 'import_valid_items' and task.source != 'import_group_valid_items':
+                return
+
+            # A task following an approval flow is resolved by
+            # tasks_management's batch path: each vote is recorded per record
+            # against the current step, and the surviving set is applied once
+            # at completion. Resolving here as well would run the import on
+            # the first vote, bypassing every later step.
+            if task.flow_id:
                 return
 
             if not task.task_group:

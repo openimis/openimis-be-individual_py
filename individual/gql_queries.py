@@ -8,6 +8,7 @@ from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
     IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+from core.gql import ScopedQuerysetMixin
 
 
 def _have_permissions(user, permission):
@@ -80,8 +81,20 @@ class IndividualHistoryGQLType(DjangoObjectType):
         return queryset.filter(id__in=accessible_uuids)
 
 
-class IndividualDataSourceUploadGQLType(DjangoObjectType):
+class IndividualDataSourceUploadGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
+    json_ext = graphene.JSONString()
+    progress = graphene.JSONString()
+
+    def resolve_json_ext(self, info):
+        from individual.import_pipeline import public_json_ext
+
+        return public_json_ext(self)
+
+    def resolve_progress(self, info):
+        from individual.import_pipeline import progress
+
+        return progress(self)
 
     class Meta:
         model = IndividualDataSourceUpload
@@ -99,7 +112,7 @@ class IndividualDataSourceUploadGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
-class IndividualDataSourceGQLType(DjangoObjectType):
+class IndividualDataSourceGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
     class Meta:
@@ -238,7 +251,7 @@ class GroupIndividualHistoryGQLType(DjangoObjectType):
         return queryset.filter(group__id__in=accessible_uuids)
 
 
-class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
+class IndividualDataUploadQGLType(ScopedQuerysetMixin, DjangoObjectType, JsonExtMixin):
     uuid = graphene.String(source='uuid')
 
     class Meta:
@@ -256,7 +269,7 @@ class IndividualDataUploadQGLType(DjangoObjectType, JsonExtMixin):
         connection_class = ExtendedConnection
 
 
-class GroupDataSourceGQLType(DjangoObjectType):
+class GroupDataSourceGQLType(ScopedQuerysetMixin, DjangoObjectType):
     uuid = graphene.String(source='uuid')
 
     class Meta:
