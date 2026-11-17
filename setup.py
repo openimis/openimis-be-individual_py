@@ -12,6 +12,9 @@ setup(
     version='1.3.1',
     packages=find_packages(),
     include_package_data=True,
+    # The .po catalogues ship with the package; the assembly compiles them
+    # (manage.py compilemessages) once the modules are installed.
+    package_data={'individual': ['locale/*/LC_MESSAGES/*.po']},
     license='GNU AGPL v3',
     description='The openIMIS Backend individual reference module.',
     long_description=README,
