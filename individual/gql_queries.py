@@ -8,7 +8,7 @@ from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
     IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
-from core.gql import ScopedQuerysetMixin
+from core.gql import HistoryTypeEnum, ScopedQuerysetMixin
 
 
 def _have_permissions(user, permission):
@@ -56,6 +56,8 @@ class IndividualHistoryGQLType(DjangoObjectType):
 
     def resolve_user_updated(self, info):
         return self.user_updated
+
+    history_type = graphene.Field(HistoryTypeEnum, required=True)
 
     class Meta:
         model = Individual.history.model
@@ -175,6 +177,8 @@ class GroupHistoryGQLType(DjangoObjectType):
     def resolve_user_updated(self, info):
         return self.user_updated
 
+    history_type = graphene.Field(HistoryTypeEnum, required=True)
+
     class Meta:
         model = Group.history.model
         interfaces = (graphene.relay.Node,)
@@ -226,6 +230,8 @@ class GroupIndividualHistoryGQLType(DjangoObjectType):
 
     def resolve_user_updated(self, info):
         return self.user_updated
+
+    history_type = graphene.Field(HistoryTypeEnum, required=True)
 
     class Meta:
         model = GroupIndividual.history.model
