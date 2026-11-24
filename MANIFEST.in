@@ -1,3 +1,4 @@
 include LICENSE.md
 include README.md
 include individual/tests/fixtures/*
+recursive-include individual/locale *.po

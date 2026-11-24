@@ -46,7 +46,8 @@ class Individual(HistoryModel):
         return configured_perms("individual", action)
 
     @classmethod
-    def get_queryset(cls, queryset, user):
+    def get_queryset(cls, queryset, user, *, validity=None, audits=None):
+        queryset = cls.apply_row_filters(queryset, validity, audits)
         if queryset is None:
             queryset = cls.objects.all()
 
@@ -54,7 +55,7 @@ class Individual(HistoryModel):
             return queryset
 
         if user.is_anonymous:
-            return queryset.filter(id=-1)
+            return cls.no_rows(queryset)
 
         if not user.is_imis_admin:
             user_districts_match_individual = LocationManager().build_user_location_filter_query(
@@ -123,8 +124,9 @@ class IndividualDataSourceUpload(HistoryModel):
         return handled
 
     @classmethod
-    def get_queryset(cls, queryset, user):
+    def get_queryset(cls, queryset, user, *, validity=None, audits=None):
         """Uploads the user made or may review, and those that created an individual the user may see."""
+        queryset = cls.apply_row_filters(queryset, validity, audits)
         user = cls.scoping_user(user)
         if queryset is None:
             queryset = cls.objects.all()
@@ -147,8 +149,9 @@ class IndividualDataSource(HistoryModel):
     validations = models.JSONField(blank=True, default=dict)
 
     @classmethod
-    def get_queryset(cls, queryset, user):
+    def get_queryset(cls, queryset, user, *, validity=None, audits=None):
         """Imported rows follow their individual; the others, their upload's uploader and reviewers."""
+        queryset = cls.apply_row_filters(queryset, validity, audits)
         user = cls.scoping_user(user)
         if queryset is None:
             queryset = cls.objects.all()
@@ -195,7 +198,8 @@ class Group(HistoryModel):
         return configured_perms("group", action)
 
     @classmethod
-    def get_queryset(cls, queryset, user):
+    def get_queryset(cls, queryset, user, *, validity=None, audits=None):
+        queryset = cls.apply_row_filters(queryset, validity, audits)
         if queryset is None:
             queryset = Group.objects.all()
 
@@ -203,7 +207,7 @@ class Group(HistoryModel):
             return queryset
 
         if user.is_anonymous:
-            return queryset.filter(id=-1)
+            return cls.no_rows(queryset)
 
         if not user.is_imis_admin:
             return queryset.filter(
@@ -308,7 +312,8 @@ class GroupIndividual(HistoryModel):
         service.update_json_ext_for_group(self.group)
 
     @classmethod
-    def get_queryset(cls, queryset, user):
+    def get_queryset(cls, queryset, user, *, validity=None, audits=None):
+        queryset = cls.apply_row_filters(queryset, validity, audits)
         if queryset is None:
             queryset = GroupIndividual.objects.all()
 
@@ -316,7 +321,7 @@ class GroupIndividual(HistoryModel):
             return queryset
 
         if user.is_anonymous:
-            return queryset.filter(id=-1)
+            return cls.no_rows(queryset)
 
         if not user.is_imis_admin:
             return queryset.filter(

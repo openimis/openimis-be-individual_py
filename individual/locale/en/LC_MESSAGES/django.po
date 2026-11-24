@@ -194,3 +194,8 @@ msgstr "Invalid MIME type:"
 
 #~ msgid "individual.validation.validate_create_group_individuals.wrong_individual_ids"
 #~ msgstr "Invalid Individual ids %(invalid_ids)"
+
+#: individual/custom_filters.py:57
+#, python-format
+msgid "Incomplete custom filter condition: %(condition)s"
+msgstr ""
